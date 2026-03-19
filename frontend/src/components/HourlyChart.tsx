@@ -53,40 +53,48 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
+const HOUR_LABELS = [
+  "12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM",
+  "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM",
+  "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM",
+  "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM",
+];
+
+const EMPTY_POINT = {
+  solar: 0, grid_import: 0, battery_discharge: 0,
+  home: 0, ev: 0, grid_export: 0, battery_charge: 0,
+};
+
 export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
   const { chartData, yMax } = useMemo(() => {
-    const mapped = data.map((d) => {
+    // Build a map of hour index -> data point
+    const hourMap = new Map<number, typeof EMPTY_POINT>();
+
+    for (const d of data) {
+      const hour = new Date(d.hour).getHours();
       const grid = d.grid_w_avg;
       const battery = d.battery_w_avg;
 
-      // Sources (positive, above axis): where energy comes FROM
       // Tesla sign conventions:
       //   battery_w positive = discharging (source), negative = charging (consumption)
       //   grid_w positive = importing (source), negative = exporting (consumption)
       const solar = Math.max(0, Math.round(d.solar_w_avg));
       const grid_import = Math.max(0, Math.round(grid));
-      const battery_discharge = Math.max(0, Math.round(battery)); // positive = discharging
+      const battery_discharge = Math.max(0, Math.round(battery));
 
-      // Consumption (negative, below axis): where energy goes TO
-      const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg)); // home excluding EV
+      const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg));
       const ev = -Math.max(0, Math.round(d.vehicle_w_avg));
-      const grid_export = -Math.max(0, Math.round(-grid)); // negative grid = exporting
-      const battery_charge = -Math.max(0, Math.round(-battery)); // negative battery = charging
+      const grid_export = -Math.max(0, Math.round(-grid));
+      const battery_charge = -Math.max(0, Math.round(-battery));
 
-      return {
-        hour_label: new Date(d.hour).toLocaleTimeString([], {
-          hour: "numeric",
-          hour12: true,
-        }),
-        solar,
-        grid_import,
-        battery_discharge,
-        home,
-        ev,
-        grid_export,
-        battery_charge,
-      };
-    });
+      hourMap.set(hour, { solar, grid_import, battery_discharge, home, ev, grid_export, battery_charge });
+    }
+
+    // Always show all 24 hours, fill gaps with zeros
+    const mapped = HOUR_LABELS.map((label, i) => ({
+      hour_label: label,
+      ...(hourMap.get(i) || EMPTY_POINT),
+    }));
 
     // Compute symmetric Y-axis domain
     let maxPos = 0;
@@ -97,7 +105,7 @@ export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
       maxPos = Math.max(maxPos, srcTotal);
       maxNeg = Math.max(maxNeg, sinkTotal);
     }
-    const yBound = Math.max(maxPos, maxNeg) * 1.1; // 10% padding
+    const yBound = Math.max(maxPos, maxNeg) * 1.1;
 
     return { chartData: mapped, yMax: Math.ceil(yBound / 1000) * 1000 || 5000 };
   }, [data]);
