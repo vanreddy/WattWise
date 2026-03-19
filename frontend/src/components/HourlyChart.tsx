@@ -60,15 +60,18 @@ export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
       const battery = d.battery_w_avg;
 
       // Sources (positive, above axis): where energy comes FROM
+      // Tesla sign conventions:
+      //   battery_w positive = discharging (source), negative = charging (consumption)
+      //   grid_w positive = importing (source), negative = exporting (consumption)
       const solar = Math.max(0, Math.round(d.solar_w_avg));
       const grid_import = Math.max(0, Math.round(grid));
-      const battery_discharge = Math.max(0, Math.round(-battery)); // discharge = battery_w negative
+      const battery_discharge = Math.max(0, Math.round(battery)); // positive = discharging
 
       // Consumption (negative, below axis): where energy goes TO
       const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg)); // home excluding EV
       const ev = -Math.max(0, Math.round(d.vehicle_w_avg));
-      const grid_export = -Math.max(0, Math.round(-grid)); // export = grid_w negative
-      const battery_charge = -Math.max(0, Math.round(battery)); // charge = battery_w positive
+      const grid_export = -Math.max(0, Math.round(-grid)); // negative grid = exporting
+      const battery_charge = -Math.max(0, Math.round(-battery)); // negative battery = charging
 
       return {
         hour_label: new Date(d.hour).toLocaleTimeString([], {
