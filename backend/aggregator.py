@@ -12,8 +12,11 @@ Daily aggregation job — runs at 6:50am, covers the prior day.
 import json
 import logging
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import asyncpg
+
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 from backend.notifier import send_daily_report
 from backend.rates import (
@@ -36,9 +39,9 @@ ACTION_MIN_MONTHLY_SAVING = 5  # estimated saving > $5/month
 async def aggregate_day(pool: asyncpg.Pool, day: date) -> dict:
     """Aggregate tesla_intervals for a single day into a summary dict."""
 
-    # Fetch all intervals for the day (in local time)
-    start = datetime.combine(day, time.min).astimezone()
-    end = datetime.combine(day + timedelta(days=1), time.min).astimezone()
+    # Fetch all intervals for the day (in Pacific time)
+    start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
 
     rows = await pool.fetch(
         """

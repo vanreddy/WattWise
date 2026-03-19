@@ -17,6 +17,7 @@ from fastapi import APIRouter, Query, Request
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 from backend.rates import get_import_rate, get_tou_period, get_export_rate
+from backend.aggregator import aggregate_day
 
 router = APIRouter()
 
@@ -102,10 +103,16 @@ async def daily(
     start: date = Query(default=None, alias="from"),
     end: date = Query(default=None, alias="to"),
 ):
-    """Daily summaries for a date range. Default: last 30 days."""
+    """Daily summaries for a date range. Default: last 30 days.
+
+    If the range includes today, a live-computed summary for today
+    is appended (since the nightly aggregator hasn't run yet).
+    """
     pool = request.app.state.pool
+    today_local = datetime.now(LOCAL_TZ).date()
+
     if not end:
-        end = date.today() - timedelta(days=1)
+        end = today_local
     if not start:
         start = end - timedelta(days=29)
 
@@ -124,13 +131,46 @@ async def daily(
         start, end,
     )
 
-    return [
+    results = [
         {
             **{k: (v.isoformat() if isinstance(v, date) else v) for k, v in dict(row).items() if k != "actions_json"},
             "actions": json.loads(row["actions_json"]) if row["actions_json"] else [],
         }
         for row in rows
     ]
+
+    # If today is in the requested range and not already in daily_summaries,
+    # compute it live from tesla_intervals
+    if start <= today_local <= end:
+        already_has_today = any(r["day"] == today_local.isoformat() for r in results)
+        if not already_has_today:
+            live_summary = await aggregate_day(pool, today_local)
+            if live_summary:
+                results.insert(0, {
+                    "day": today_local.isoformat(),
+                    "total_import_kwh": round(live_summary.get("total_import_kwh", 0), 2),
+                    "total_export_kwh": round(live_summary.get("total_export_kwh", 0), 2),
+                    "solar_generated_kwh": round(live_summary.get("solar_generated_kwh", 0), 2),
+                    "solar_self_consumed_kwh": round(live_summary.get("solar_self_consumed_kwh", 0), 2),
+                    "peak_import_kwh": round(live_summary.get("peak_import_kwh", 0), 2),
+                    "part_peak_import_kwh": round(live_summary.get("part_peak_import_kwh", 0), 2),
+                    "off_peak_import_kwh": round(live_summary.get("off_peak_import_kwh", 0), 2),
+                    "peak_cost": round(live_summary.get("peak_cost", 0), 2),
+                    "part_peak_cost": round(live_summary.get("part_peak_cost", 0), 2),
+                    "off_peak_cost": round(live_summary.get("off_peak_cost", 0), 2),
+                    "total_cost": round(live_summary.get("total_cost", 0), 2),
+                    "export_credit": round(live_summary.get("export_credit", 0), 2),
+                    "ev_kwh": round(live_summary.get("ev_kwh", 0), 2),
+                    "ev_peak_kwh": round(live_summary.get("ev_peak_kwh", 0), 2),
+                    "ev_off_peak_kwh": round(live_summary.get("ev_off_peak_kwh", 0), 2),
+                    "ev_cost": round(live_summary.get("ev_cost", 0), 2),
+                    "battery_peak_coverage_pct": round(live_summary.get("battery_peak_coverage_pct", 0), 1),
+                    "battery_depletion_hour": live_summary.get("battery_depletion_hour"),
+                    "context_narrative": None,
+                    "actions": [],
+                })
+
+    return results
 
 
 @router.get("/hourly")
