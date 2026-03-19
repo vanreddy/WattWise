@@ -144,7 +144,7 @@ async def hourly(
     rows = await pool.fetch(
         """
         SELECT
-            time_bucket('1 hour', ts) AS hour,
+            date_trunc('hour', ts) AS hour,
             AVG(solar_w) AS solar_w_avg,
             AVG(home_w) AS home_w_avg,
             AVG(grid_w) AS grid_w_avg,

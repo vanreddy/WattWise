@@ -1,10 +1,8 @@
--- WattWise schema: Postgres + TimescaleDB
+-- WattWise schema: Postgres
 -- Run with: psql $DATABASE_URL -f schema.sql
 
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
 -- Raw 5-minute interval data from Tesla API
-CREATE TABLE tesla_intervals (
+CREATE TABLE IF NOT EXISTS tesla_intervals (
     ts          TIMESTAMPTZ NOT NULL,
     solar_w     REAL NOT NULL,        -- solar generation (watts)
     home_w      REAL NOT NULL,        -- total home load (watts)
@@ -14,13 +12,11 @@ CREATE TABLE tesla_intervals (
     vehicle_w   REAL NOT NULL DEFAULT 0  -- EV charging draw (watts)
 );
 
-SELECT create_hypertable('tesla_intervals', 'ts');
-
 -- Index for time-range queries used by aggregator
-CREATE INDEX idx_tesla_intervals_ts ON tesla_intervals (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_tesla_intervals_ts ON tesla_intervals (ts DESC);
 
 -- Daily summaries computed by aggregator each morning
-CREATE TABLE daily_summaries (
+CREATE TABLE IF NOT EXISTS daily_summaries (
     day                  DATE PRIMARY KEY,
     total_import_kwh     REAL NOT NULL,
     total_export_kwh     REAL NOT NULL,
@@ -45,7 +41,7 @@ CREATE TABLE daily_summaries (
 );
 
 -- Alert log for solar surplus and any future alerts
-CREATE TABLE alerts_log (
+CREATE TABLE IF NOT EXISTS alerts_log (
     id         BIGSERIAL PRIMARY KEY,
     fired_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     alert_type TEXT NOT NULL,          -- e.g. 'solar_surplus'
@@ -53,10 +49,10 @@ CREATE TABLE alerts_log (
     metadata   JSONB                   -- extra context (export_kw, battery_pct, etc.)
 );
 
-CREATE INDEX idx_alerts_log_type_fired ON alerts_log (alert_type, fired_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_log_type_fired ON alerts_log (alert_type, fired_at DESC);
 
 -- Report log for daily and weekly reports
-CREATE TABLE reports_log (
+CREATE TABLE IF NOT EXISTS reports_log (
     id          BIGSERIAL PRIMARY KEY,
     sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     report_type TEXT NOT NULL,          -- 'daily' or 'weekly'
@@ -67,4 +63,4 @@ CREATE TABLE reports_log (
     metadata    JSONB                   -- any extra context
 );
 
-CREATE INDEX idx_reports_log_type_sent ON reports_log (report_type, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_log_type_sent ON reports_log (report_type, sent_at DESC);
