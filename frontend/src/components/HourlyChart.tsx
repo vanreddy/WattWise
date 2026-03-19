@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -53,26 +54,50 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
-  const chartData = data.map((d) => {
-    const grid = d.grid_w_avg;
-    const battery = d.battery_w_avg;
-    return {
-      hour_label: new Date(d.hour).toLocaleTimeString([], {
-        hour: "numeric",
-        hour12: true,
-      }),
-      // Sources (positive, above axis)
-      solar: Math.max(0, Math.round(d.solar_w_avg)),
-      grid_import: Math.max(0, Math.round(grid)),
-      battery_discharge: Math.max(0, Math.round(-battery)),
+  const { chartData, yMax } = useMemo(() => {
+    const mapped = data.map((d) => {
+      const grid = d.grid_w_avg;
+      const battery = d.battery_w_avg;
 
-      // Consumption (negative, below axis)
-      home: -Math.round(d.home_w_avg),
-      ev: -Math.round(d.vehicle_w_avg),
-      grid_export: -Math.max(0, Math.round(-grid)),
-      battery_charge: -Math.max(0, Math.round(battery)),
-    };
-  });
+      // Sources (positive, above axis): where energy comes FROM
+      const solar = Math.max(0, Math.round(d.solar_w_avg));
+      const grid_import = Math.max(0, Math.round(grid));
+      const battery_discharge = Math.max(0, Math.round(-battery)); // discharge = battery_w negative
+
+      // Consumption (negative, below axis): where energy goes TO
+      const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg)); // home excluding EV
+      const ev = -Math.max(0, Math.round(d.vehicle_w_avg));
+      const grid_export = -Math.max(0, Math.round(-grid)); // export = grid_w negative
+      const battery_charge = -Math.max(0, Math.round(battery)); // charge = battery_w positive
+
+      return {
+        hour_label: new Date(d.hour).toLocaleTimeString([], {
+          hour: "numeric",
+          hour12: true,
+        }),
+        solar,
+        grid_import,
+        battery_discharge,
+        home,
+        ev,
+        grid_export,
+        battery_charge,
+      };
+    });
+
+    // Compute symmetric Y-axis domain
+    let maxPos = 0;
+    let maxNeg = 0;
+    for (const d of mapped) {
+      const srcTotal = d.solar + d.grid_import + d.battery_discharge;
+      const sinkTotal = Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.grid_export) + Math.abs(d.battery_charge);
+      maxPos = Math.max(maxPos, srcTotal);
+      maxNeg = Math.max(maxNeg, sinkTotal);
+    }
+    const yBound = Math.max(maxPos, maxNeg) * 1.1; // 10% padding
+
+    return { chartData: mapped, yMax: Math.ceil(yBound / 1000) * 1000 || 5000 };
+  }, [data]);
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
@@ -92,6 +117,7 @@ export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
           <YAxis
             stroke="#6b7280"
             fontSize={11}
+            domain={[-yMax, yMax]}
             tickFormatter={(v) => formatW(Math.abs(v))}
           />
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
