@@ -2,12 +2,10 @@
 Tesla API poller — fetches energy site live status every 5 minutes
 and writes to tesla_intervals. Checks solar surplus alert on each poll.
 
-Uses the tesla-api library (pip install tesla-api).
-Note: If Tesla auth changes break this library, TeslaPy or
-tesla-fleet-api are drop-in alternatives — only this file needs updating.
+Uses TeslaPy (pip install teslapy) which supports Tesla's current
+OAuth2 SSO authentication flow.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -15,11 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import asyncpg
-from tesla_api import TeslaApiClient
+import teslapy
 
 logger = logging.getLogger(__name__)
 
-TOKEN_PATH = Path(os.getenv("TESLA_TOKEN_PATH", ".tesla_token"))
+CACHE_PATH = Path(os.getenv("TESLA_CACHE_PATH", ".tesla_cache.json"))
 
 # Solar surplus alert thresholds
 ALERT_EXPORT_W = 3000          # 3kW export
@@ -30,37 +28,38 @@ ALERT_WINDOW_START = 9         # 9am
 ALERT_WINDOW_END = 15          # 3pm
 
 
-async def _save_token(token: str) -> None:
-    TOKEN_PATH.write_text(token)
-    logger.info("Tesla token saved")
+def _get_tesla_client() -> teslapy.Tesla:
+    """
+    Create a TeslaPy client.
 
-
-def _load_token() -> str | None:
-    if TOKEN_PATH.exists():
-        return TOKEN_PATH.read_text().strip()
-    return None
-
-
-async def create_tesla_client() -> TeslaApiClient:
+    First run requires browser-based OAuth login. After that, tokens
+    are cached in CACHE_PATH and refreshed automatically.
+    """
     email = os.environ["TESLA_EMAIL"]
-    password = os.environ["TESLA_PASSWORD"]
-    token = _load_token()
-    client = TeslaApiClient(
-        email, password, token=token, on_new_token=_save_token
-    )
-    return client
+    return teslapy.Tesla(email, cache_file=str(CACHE_PATH))
+
+
+def _fetch_live_status() -> dict:
+    """Synchronous Tesla API call — returns live energy site status."""
+    with _get_tesla_client() as tesla:
+        if not tesla.authorized:
+            # First-time setup: user must complete OAuth in browser.
+            # In production, run `python -m backend.poller --auth` once.
+            raise RuntimeError(
+                "Tesla not authorized. Run: python -m backend.poller --auth"
+            )
+
+        products = tesla.battery_list() + tesla.solar_list()
+        if not products:
+            raise RuntimeError("No energy sites found on Tesla account")
+
+        site = products[0]
+        return site.get_site_live_status()
 
 
 async def poll_once(pool: asyncpg.Pool) -> dict | None:
     """Poll Tesla API once, insert row, return the data dict."""
-    async with await create_tesla_client() as client:
-        sites = await client.list_energy_sites()
-        if not sites:
-            logger.error("No energy sites found on Tesla account")
-            return None
-
-        site = sites[0]
-        status = await site.get_energy_site_live_status()
+    status = _fetch_live_status()
 
     ts = datetime.now(timezone.utc)
     solar_w = float(status.get("solar_power", 0))
@@ -69,8 +68,7 @@ async def poll_once(pool: asyncpg.Pool) -> dict | None:
     battery_w = float(status.get("battery_power", 0))
     battery_pct = float(status.get("percentage_charged", 0))
 
-    # Tesla may report vehicle charging in grid_services_power or
-    # as a separate field — default to 0 if not available
+    # Tesla may report vehicle charging separately — default to 0
     vehicle_w = float(status.get("vehicle_power", 0))
 
     await pool.execute(
@@ -203,3 +201,33 @@ async def poll_and_check(pool: asyncpg.Pool) -> None:
             await check_solar_surplus_alert(pool, data)
     except Exception:
         logger.exception("Error during poll cycle")
+
+
+# --- CLI for first-time auth ---
+
+if __name__ == "__main__":
+    import sys
+    if "--auth" in sys.argv:
+        print("Starting Tesla OAuth login...")
+        with _get_tesla_client() as tesla:
+            if not tesla.authorized:
+                state = tesla.new_state()
+                code_verifier = tesla.new_code_verifier()
+                url = tesla.authorization_url(state=state, code_verifier=code_verifier)
+                print(f"\nOpen this URL in your browser:\n{url}\n")
+                print("After login, paste the redirect URL here:")
+                redirect_url = input("> ").strip()
+                tesla.fetch_token(
+                    authorization_response=redirect_url,
+                    code_verifier=code_verifier,
+                )
+            print(f"Authenticated as {os.environ['TESLA_EMAIL']}")
+            products = tesla.battery_list() + tesla.solar_list()
+            print(f"Found {len(products)} energy site(s)")
+            if products:
+                status = products[0].get_site_live_status()
+                print(f"Live status: solar={status.get('solar_power', 0)}W "
+                      f"grid={status.get('grid_power', 0)}W "
+                      f"battery={status.get('percentage_charged', 0)}%")
+    else:
+        print("Usage: python -m backend.poller --auth")

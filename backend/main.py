@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
@@ -62,6 +63,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="WattWise", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 app.include_router(api_router)
 
 

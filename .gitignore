@@ -14,8 +14,9 @@ frontend/.next/
 .env.local
 frontend/.env.local
 
-# Tesla token
+# Tesla token/cache
 .tesla_token
+.tesla_cache.json
 
 # IDE
 .vscode/
