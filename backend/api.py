@@ -23,6 +23,22 @@ router = APIRouter()
 
 INTERVAL_HOURS = 5 / 60  # 5-minute interval
 
+# EV charging detection heuristic
+# Tesla's energy API doesn't separate EV from home load.
+# We detect likely EV charging when home consumption exceeds a threshold.
+# Typical home baseline is 500-2000W; EV charging adds 7-11kW.
+EV_DETECT_THRESHOLD_W = 4000  # home_w above this likely includes EV
+EV_BASELINE_W = 1200          # estimated non-EV home load during charging
+
+
+def _estimate_vehicle_w(home_w: float, vehicle_w: float) -> float:
+    """Estimate EV charging power when not reported by Tesla API."""
+    if vehicle_w > 10:
+        return vehicle_w  # already reported, use as-is
+    if home_w > EV_DETECT_THRESHOLD_W:
+        return max(0, home_w - EV_BASELINE_W)
+    return 0.0
+
 
 @router.get("/summary")
 async def summary(request: Request):
@@ -74,15 +90,19 @@ async def summary(request: Request):
 
     total_cost = peak_cost + part_peak_cost + off_peak_cost
 
+    home_w = latest["home_w"] if latest else 0
+    raw_vehicle_w = latest["vehicle_w"] if latest else 0
+    vehicle_w = _estimate_vehicle_w(home_w, raw_vehicle_w)
+
     return {
         "current": {
             "ts": latest["ts"].isoformat() if latest else None,
             "solar_w": latest["solar_w"] if latest else 0,
-            "home_w": latest["home_w"] if latest else 0,
+            "home_w": home_w,
             "grid_w": latest["grid_w"] if latest else 0,
             "battery_w": latest["battery_w"] if latest else 0,
             "battery_pct": latest["battery_pct"] if latest else 0,
-            "vehicle_w": latest["vehicle_w"] if latest else 0,
+            "vehicle_w": vehicle_w,
         },
         "today": {
             "solar_generated_kwh": round(solar_generated_kwh, 2),
@@ -207,21 +227,24 @@ async def hourly(
         start, end, INTERVAL_HOURS,
     )
 
-    return [
-        {
+    results = []
+    for row in rows:
+        home_w = round(row["home_w_avg"] or 0, 0)
+        raw_vehicle_w = round(row["vehicle_w_avg"] or 0, 0)
+        vehicle_w = round(_estimate_vehicle_w(home_w, raw_vehicle_w), 0)
+        results.append({
             "hour": row["hour"].isoformat(),
             "solar_w_avg": round(row["solar_w_avg"] or 0, 0),
-            "home_w_avg": round(row["home_w_avg"] or 0, 0),
+            "home_w_avg": home_w,
             "grid_w_avg": round(row["grid_w_avg"] or 0, 0),
             "battery_w_avg": round(row["battery_w_avg"] or 0, 0),
             "battery_pct_avg": round(row["battery_pct_avg"] or 0, 1),
-            "vehicle_w_avg": round(row["vehicle_w_avg"] or 0, 0),
+            "vehicle_w_avg": vehicle_w,
             "grid_import_kwh": round(row["grid_import_kwh"] or 0, 2),
             "grid_export_kwh": round(row["grid_export_kwh"] or 0, 2),
             "solar_kwh": round(row["solar_kwh"] or 0, 2),
-        }
-        for row in rows
-    ]
+        })
+    return results
 
 
 @router.get("/alerts")

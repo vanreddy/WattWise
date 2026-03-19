@@ -31,6 +31,19 @@ logger = logging.getLogger(__name__)
 # 5-minute interval in hours for kWh conversion
 INTERVAL_HOURS = 5 / 60
 
+# EV detection heuristic (same as api.py)
+EV_DETECT_THRESHOLD_W = 4000
+EV_BASELINE_W = 1200
+
+
+def _estimate_vehicle_w(home_w: float, vehicle_w: float) -> float:
+    """Estimate EV charging power when not reported by Tesla API."""
+    if vehicle_w > 10:
+        return vehicle_w
+    if home_w > EV_DETECT_THRESHOLD_W:
+        return max(0, home_w - EV_BASELINE_W)
+    return 0.0
+
 # Action rule thresholds
 ACTION_MIN_DAYS = 3           # pattern must hold 3+ of last 7 days
 ACTION_MIN_MONTHLY_SAVING = 5  # estimated saving > $5/month
@@ -103,8 +116,8 @@ async def aggregate_day(pool: asyncpg.Pool, day: date) -> dict:
             export_kwh = abs(grid_w) * INTERVAL_HOURS / 1000
             total_export_kwh += export_kwh
 
-        # EV charging
-        vw = max(row["vehicle_w"], 0)
+        # EV charging — estimate from home_w if not reported by Tesla API
+        vw = _estimate_vehicle_w(row["home_w"], row["vehicle_w"])
         if vw > 0:
             ev_interval_kwh = vw * INTERVAL_HOURS / 1000
             ev_kwh += ev_interval_kwh
@@ -118,8 +131,9 @@ async def aggregate_day(pool: asyncpg.Pool, day: date) -> dict:
         # Powerwall peak coverage
         if is_peak_window(ts_local):
             peak_intervals_total += 1
-            # Battery discharging (negative battery_w) means covering load
-            if row["battery_w"] < -50:  # small threshold to ignore noise
+            # Battery discharging (positive battery_w) means covering load
+            # Tesla convention: battery_w > 0 = discharging, < 0 = charging
+            if row["battery_w"] > 50:  # small threshold to ignore noise
                 peak_intervals_covered += 1
             # Track when battery depleted during peak
             if (
