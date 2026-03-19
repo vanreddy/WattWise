@@ -1,12 +1,14 @@
 "use client";
 
+import { Bell } from "lucide-react";
 import type { Alert } from "@/lib/api";
 
 export default function AlertsList({ alerts }: { alerts: Alert[] }) {
   if (alerts.length === 0) {
     return (
       <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-400 mb-2">
+        <h2 className="text-sm font-semibold text-gray-400 mb-2 flex items-center gap-1.5">
+          <Bell size={14} className="text-yellow-400" />
           Recent Alerts
         </h2>
         <p className="text-sm text-gray-500">No alerts yet</p>
@@ -16,7 +18,8 @@ export default function AlertsList({ alerts }: { alerts: Alert[] }) {
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <h2 className="text-sm font-semibold text-gray-400 mb-3">
+      <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
+        <Bell size={14} className="text-yellow-400" />
         Recent Alerts
       </h2>
       <div className="space-y-3">

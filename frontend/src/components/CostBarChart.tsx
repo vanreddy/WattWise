@@ -10,14 +10,21 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { Calendar } from "lucide-react";
 import type { DailySummary } from "@/lib/api";
 
-export default function CostBarChart({ data }: { data: DailySummary[] }) {
+export default function CostBarChart({
+  data,
+  title,
+}: {
+  data: DailySummary[];
+  title?: string;
+}) {
   const chartData = [...data]
     .sort((a, b) => a.day.localeCompare(b.day))
     .map((d) => ({
-      day: new Date(d.day).toLocaleDateString([], {
-        weekday: "short",
+      day: new Date(d.day + "T12:00:00").toLocaleDateString([], {
+        weekday: data.length <= 10 ? "short" : undefined,
         month: "numeric",
         day: "numeric",
       }),
@@ -28,8 +35,9 @@ export default function CostBarChart({ data }: { data: DailySummary[] }) {
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <h2 className="text-sm font-semibold text-gray-400 mb-3">
-        7-Day Cost Breakdown
+      <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
+        <Calendar size={14} className="text-orange-400" />
+        {title || "Cost Breakdown"}
       </h2>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={chartData}>

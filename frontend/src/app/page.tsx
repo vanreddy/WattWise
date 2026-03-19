@@ -17,10 +17,21 @@ import {
 import PowerFlowCards from "@/components/PowerFlowCards";
 import HourlyChart from "@/components/HourlyChart";
 import CostBarChart from "@/components/CostBarChart";
-import BatteryGauge from "@/components/BatteryGauge";
+import CostWaterfallChart from "@/components/CostWaterfallChart";
 import AlertsList from "@/components/AlertsList";
+import DateRangePicker, { type DateRange } from "@/components/DateRangePicker";
+import SankeyChart from "@/components/SankeyChart";
+import { Radio, BarChart3, Calendar } from "lucide-react";
 
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function defaultRange(): DateRange {
+  return { label: "Today", from: todayStr(), to: todayStr(), days: 1 };
+}
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
@@ -29,37 +40,63 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>(defaultRange);
 
-  const fetchAll = useCallback(async () => {
+  // Fetch summary + alerts (always current)
+  const fetchLive = useCallback(async () => {
     try {
-      const [s, d, h, a] = await Promise.all([
+      const [s, a] = await Promise.all([
         api.getSummary(),
-        api.getDaily(),
-        api.getHourly(),
         api.getAlerts(5),
       ]);
       setSummary(s);
-      setDaily(d);
-      setHourly(h);
       setAlerts(a);
       setError(null);
-      setLastUpdated(new Date());
     } catch (e) {
-      // Fall back to mock data when API is unavailable
       setSummary(mockSummary);
-      setDaily(mockDaily);
-      setHourly(mockHourly);
       setAlerts(mockAlerts);
       setError(e instanceof Error ? e.message : "Failed to fetch data");
-      setLastUpdated(new Date());
+    }
+    setLastUpdated(new Date());
+  }, []);
+
+  // Fetch range-dependent data (hourly + daily)
+  const fetchRangeData = useCallback(async (range: DateRange) => {
+    try {
+      let h: HourlyBucket[];
+      if (range.days === 1) {
+        h = await api.getHourly(range.from);
+      } else {
+        h = await api.getHourlyRange(range.from, range.to);
+      }
+      setHourly(h);
+    } catch {
+      setHourly(mockHourly);
+    }
+
+    try {
+      const d = await api.getDaily(range.from, range.to);
+      setDaily(d);
+    } catch {
+      setDaily(mockDaily);
     }
   }, []);
 
+  // Initial load + auto-refresh for live data
   useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, REFRESH_MS);
+    fetchLive();
+    const interval = setInterval(fetchLive, REFRESH_MS);
     return () => clearInterval(interval);
-  }, [fetchAll]);
+  }, [fetchLive]);
+
+  // Fetch range data when range changes
+  useEffect(() => {
+    fetchRangeData(dateRange);
+  }, [dateRange, fetchRangeData]);
+
+  const handleRangeChange = (range: DateRange) => {
+    setDateRange(range);
+  };
 
   if (error && !summary) {
     return (
@@ -78,6 +115,8 @@ export default function Dashboard() {
     );
   }
 
+  const costTitle = `${dateRange.days}-Day Cost Breakdown`;
+
   return (
     <div className="space-y-6">
       {/* Status bar */}
@@ -90,60 +129,42 @@ export default function Dashboard() {
         {error && <span className="text-yellow-500">Refresh failed</span>}
       </div>
 
+      {/* Live Stats heading */}
+      <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
+        <Radio size={14} className="text-green-400" />
+        Live Stats
+      </h2>
+
       {/* Live power flows */}
       <PowerFlowCards current={summary.current} today={summary.today} />
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <HourlyChart data={hourly} />
-        </div>
-        <BatteryGauge
-          batteryPct={summary.current.battery_pct}
-          dailyData={daily}
-        />
+      {/* Date range selector */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
+          <BarChart3 size={14} className="text-blue-400" />
+          Charts
+        </h2>
+        <DateRangePicker value={dateRange} onChange={handleRangeChange} />
       </div>
 
-      {/* Cost + Alerts row */}
+      {/* Energy Flow chart */}
+      <HourlyChart data={hourly} days={dateRange.days} />
+
+      {/* Sankey energy flow */}
+      <SankeyChart hourlyData={hourly} dailyData={daily} days={dateRange.days} />
+
+      {/* Cost Waterfall + Alerts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <CostBarChart data={daily.slice(0, 7)} />
+          <CostWaterfallChart data={daily} days={dateRange.days} />
         </div>
         <AlertsList alerts={alerts} />
       </div>
 
-      {/* Today's cost breakdown */}
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-400 mb-3">
-          Today&apos;s Cost Breakdown
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-          <div>
-            <span className="text-gray-500">Total</span>
-            <p className="text-lg font-bold text-white">
-              ${summary.today.total_cost.toFixed(2)}
-            </p>
-          </div>
-          <div>
-            <span className="text-gray-500">Peak</span>
-            <p className="text-lg font-bold text-red-400">
-              ${summary.today.peak_cost.toFixed(2)}
-            </p>
-          </div>
-          <div>
-            <span className="text-gray-500">Part Peak</span>
-            <p className="text-lg font-bold text-yellow-400">
-              ${summary.today.part_peak_cost.toFixed(2)}
-            </p>
-          </div>
-          <div>
-            <span className="text-gray-500">Off Peak</span>
-            <p className="text-lg font-bold text-green-400">
-              ${summary.today.off_peak_cost.toFixed(2)}
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Daily Cost Breakdown */}
+      {dateRange.days > 1 && (
+        <CostBarChart data={daily} title={costTitle} />
+      )}
     </div>
   );
 }

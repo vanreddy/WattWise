@@ -100,6 +100,18 @@ export const api = {
     const qs = date ? `?date=${date}` : "";
     return fetchJSON<HourlyBucket[]>(`/hourly${qs}`);
   },
+  getHourlyRange: async (from: string, to: string): Promise<HourlyBucket[]> => {
+    // Fetch hourly data for each day in range, return combined
+    const days: string[] = [];
+    const d = new Date(from);
+    const end = new Date(to);
+    while (d <= end) {
+      days.push(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+    const results = await Promise.all(days.map((day) => fetchJSON<HourlyBucket[]>(`/hourly?date=${day}`)));
+    return results.flat();
+  },
   getAlerts: (limit = 50) => fetchJSON<Alert[]>(`/alerts?limit=${limit}`),
   getReports: (type?: string, limit = 10) => {
     const params = new URLSearchParams();

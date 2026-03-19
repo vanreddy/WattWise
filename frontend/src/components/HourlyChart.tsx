@@ -12,6 +12,7 @@ import {
   Legend,
   ReferenceLine,
 } from "recharts";
+import { Activity } from "lucide-react";
 import type { HourlyBucket } from "@/lib/api";
 
 function formatW(value: number) {
@@ -65,38 +66,100 @@ const EMPTY_POINT = {
   home: 0, ev: 0, grid_export: 0, battery_charge: 0,
 };
 
-export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
-  const { chartData, yMax } = useMemo(() => {
-    // Build a map of hour index -> data point
-    const hourMap = new Map<number, typeof EMPTY_POINT>();
+interface Props {
+  data: HourlyBucket[];
+  days?: number; // 1 = single-day (hourly view), >1 = multi-day (daily aggregated)
+}
 
-    for (const d of data) {
-      const hour = new Date(d.hour).getHours();
-      const grid = d.grid_w_avg;
-      const battery = d.battery_w_avg;
+export default function HourlyChart({ data, days = 1 }: Props) {
+  const { chartData, yMax, isMultiDay } = useMemo(() => {
+    const multiDay = days > 1;
 
-      // Tesla sign conventions:
-      //   battery_w positive = discharging (source), negative = charging (consumption)
-      //   grid_w positive = importing (source), negative = exporting (consumption)
-      const solar = Math.max(0, Math.round(d.solar_w_avg));
-      const grid_import = Math.max(0, Math.round(grid));
-      const battery_discharge = Math.max(0, Math.round(battery));
+    if (!multiDay) {
+      // === Single-day: show 24-hour buckets ===
+      const hourMap = new Map<number, typeof EMPTY_POINT>();
 
-      const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg));
-      const ev = -Math.max(0, Math.round(d.vehicle_w_avg));
-      const grid_export = -Math.max(0, Math.round(-grid));
-      const battery_charge = -Math.max(0, Math.round(-battery));
+      for (const d of data) {
+        const hour = new Date(d.hour).getHours();
+        const grid = d.grid_w_avg;
+        const battery = d.battery_w_avg;
 
-      hourMap.set(hour, { solar, grid_import, battery_discharge, home, ev, grid_export, battery_charge });
+        const solar = Math.max(0, Math.round(d.solar_w_avg));
+        const grid_import = Math.max(0, Math.round(grid));
+        const battery_discharge = Math.max(0, Math.round(battery));
+        const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg));
+        const ev = -Math.max(0, Math.round(d.vehicle_w_avg));
+        const grid_export = -Math.max(0, Math.round(-grid));
+        const battery_charge = -Math.max(0, Math.round(-battery));
+
+        hourMap.set(hour, { solar, grid_import, battery_discharge, home, ev, grid_export, battery_charge });
+      }
+
+      const mapped = HOUR_LABELS.map((label, i) => ({
+        label,
+        ...(hourMap.get(i) || EMPTY_POINT),
+      }));
+
+      let maxPos = 0;
+      let maxNeg = 0;
+      for (const d of mapped) {
+        const srcTotal = d.solar + d.grid_import + d.battery_discharge;
+        const sinkTotal = Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.grid_export) + Math.abs(d.battery_charge);
+        maxPos = Math.max(maxPos, srcTotal);
+        maxNeg = Math.max(maxNeg, sinkTotal);
+      }
+      const yBound = Math.max(maxPos, maxNeg) * 1.1;
+
+      return {
+        chartData: mapped,
+        yMax: Math.ceil(yBound / 1000) * 1000 || 5000,
+        isMultiDay: false,
+      };
     }
 
-    // Always show all 24 hours, fill gaps with zeros
-    const mapped = HOUR_LABELS.map((label, i) => ({
-      hour_label: label,
-      ...(hourMap.get(i) || EMPTY_POINT),
-    }));
+    // === Multi-day: aggregate hourly buckets into daily averages ===
+    const dayMap = new Map<string, { solar: number[]; grid: number[]; battery: number[]; home: number[]; ev: number[]; count: number }>();
 
-    // Compute symmetric Y-axis domain
+    for (const d of data) {
+      const dateStr = d.hour.slice(0, 10); // YYYY-MM-DD
+      if (!dayMap.has(dateStr)) {
+        dayMap.set(dateStr, { solar: [], grid: [], battery: [], home: [], ev: [], count: 0 });
+      }
+      const bucket = dayMap.get(dateStr)!;
+      bucket.solar.push(d.solar_w_avg);
+      bucket.grid.push(d.grid_w_avg);
+      bucket.battery.push(d.battery_w_avg);
+      bucket.home.push(d.home_w_avg);
+      bucket.ev.push(d.vehicle_w_avg);
+      bucket.count++;
+    }
+
+    const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+
+    const sorted = [...dayMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+    const mapped = sorted.map(([dateStr, bucket]) => {
+      const dt = new Date(dateStr + "T12:00:00");
+      const label = dt.toLocaleDateString([], { month: "short", day: "numeric" });
+
+      const solarAvg = avg(bucket.solar);
+      const gridAvg = avg(bucket.grid);
+      const batteryAvg = avg(bucket.battery);
+      const homeAvg = avg(bucket.home);
+      const evAvg = avg(bucket.ev);
+
+      return {
+        label,
+        solar: Math.max(0, Math.round(solarAvg)),
+        grid_import: Math.max(0, Math.round(gridAvg)),
+        battery_discharge: Math.max(0, Math.round(batteryAvg)),
+        home: -Math.max(0, Math.round(homeAvg - evAvg)),
+        ev: -Math.max(0, Math.round(evAvg)),
+        grid_export: -Math.max(0, Math.round(-gridAvg)),
+        battery_charge: -Math.max(0, Math.round(-batteryAvg)),
+      };
+    });
+
     let maxPos = 0;
     let maxNeg = 0;
     for (const d of mapped) {
@@ -107,14 +170,21 @@ export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
     }
     const yBound = Math.max(maxPos, maxNeg) * 1.1;
 
-    return { chartData: mapped, yMax: Math.ceil(yBound / 1000) * 1000 || 5000 };
-  }, [data]);
+    return {
+      chartData: mapped,
+      yMax: Math.ceil(yBound / 1000) * 1000 || 5000,
+      isMultiDay: true,
+    };
+  }, [data, days]);
+
+  const title = isMultiDay ? "Energy Flow (Daily Average)" : "24-Hour Energy Flow";
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
       <div className="flex justify-between items-center mb-3">
-        <h2 className="text-sm font-semibold text-gray-400">
-          24-Hour Energy Flow
+        <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
+          <Activity size={14} className="text-cyan-400" />
+          {title}
         </h2>
         <div className="flex gap-4 text-[10px] text-gray-500">
           <span>↑ Sources</span>
@@ -124,7 +194,7 @@ export default function HourlyChart({ data }: { data: HourlyBucket[] }) {
       <ResponsiveContainer width="100%" height={360}>
         <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis dataKey="hour_label" stroke="#6b7280" fontSize={11} />
+          <XAxis dataKey="label" stroke="#6b7280" fontSize={11} />
           <YAxis
             stroke="#6b7280"
             fontSize={11}

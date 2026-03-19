@@ -1,5 +1,6 @@
 "use client";
 
+import { Sun, Home, Zap, Battery } from "lucide-react";
 import type { CurrentPower, TodayTotals } from "@/lib/api";
 
 function formatW(w: number): string {
@@ -11,16 +12,21 @@ function FlowCard({
   label,
   value,
   color,
+  icon,
   sub,
 }: {
   label: string;
   value: string;
   color: string;
+  icon: React.ReactNode;
   sub?: string;
 }) {
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <div className="text-sm text-gray-400 mb-1">{label}</div>
+      <div className="flex items-center gap-1.5 text-sm text-gray-400 mb-1">
+        {icon}
+        {label}
+      </div>
       <div className={`text-2xl font-bold ${color}`}>{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
     </div>
@@ -43,25 +49,25 @@ export default function PowerFlowCards({
         label="Solar"
         value={formatW(current.solar_w)}
         color="text-yellow-400"
-        sub={`${today.solar_generated_kwh.toFixed(1)} kWh today`}
+        icon={<Sun size={14} className="text-yellow-400" />}
       />
       <FlowCard
         label="Home"
         value={formatW(current.home_w)}
         color="text-blue-400"
-        sub={`$${today.total_cost.toFixed(2)} today`}
+        icon={<Home size={14} className="text-blue-400" />}
       />
       <FlowCard
         label={`Grid (${gridLabel})`}
         value={formatW(Math.abs(current.grid_w))}
         color={current.grid_w > 0 ? "text-red-400" : "text-green-400"}
-        sub={`${today.total_import_kwh.toFixed(1)} kWh imported`}
+        icon={<Zap size={14} className={current.grid_w > 0 ? "text-red-400" : "text-green-400"} />}
       />
       <FlowCard
         label={`Battery (${batteryLabel})`}
         value={`${current.battery_pct.toFixed(0)}%`}
         color="text-emerald-400"
-        sub={formatW(Math.abs(current.battery_w))}
+        icon={<Battery size={14} className="text-emerald-400" />}
       />
     </div>
   );
