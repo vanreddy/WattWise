@@ -117,30 +117,27 @@ export default function HourlyChart({ data, days = 1 }: Props) {
       };
     }
 
-    // === Multi-day: aggregate hourly buckets into daily averages ===
-    const dayMap = new Map<string, { solar: number[]; grid: number[]; battery: number[]; home: number[]; ev: number[]; count: number }>();
+    // === Multi-day: average all hourly buckets by hour-of-day into a single 24h profile ===
+    const hourBuckets = new Map<number, { solar: number[]; grid: number[]; battery: number[]; home: number[]; ev: number[] }>();
 
     for (const d of data) {
-      const dateStr = d.hour.slice(0, 10); // YYYY-MM-DD
-      if (!dayMap.has(dateStr)) {
-        dayMap.set(dateStr, { solar: [], grid: [], battery: [], home: [], ev: [], count: 0 });
+      const hour = new Date(d.hour).getHours();
+      if (!hourBuckets.has(hour)) {
+        hourBuckets.set(hour, { solar: [], grid: [], battery: [], home: [], ev: [] });
       }
-      const bucket = dayMap.get(dateStr)!;
+      const bucket = hourBuckets.get(hour)!;
       bucket.solar.push(d.solar_w_avg);
       bucket.grid.push(d.grid_w_avg);
       bucket.battery.push(d.battery_w_avg);
       bucket.home.push(d.home_w_avg);
       bucket.ev.push(d.vehicle_w_avg);
-      bucket.count++;
     }
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
-    const sorted = [...dayMap.entries()].sort(([a], [b]) => a.localeCompare(b));
-
-    const mapped = sorted.map(([dateStr, bucket]) => {
-      const dt = new Date(dateStr + "T12:00:00");
-      const label = dt.toLocaleDateString([], { month: "short", day: "numeric" });
+    const mapped = HOUR_LABELS.map((label, i) => {
+      const bucket = hourBuckets.get(i);
+      if (!bucket) return { label, ...EMPTY_POINT };
 
       const solarAvg = avg(bucket.solar);
       const gridAvg = avg(bucket.grid);
@@ -177,7 +174,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
     };
   }, [data, days]);
 
-  const title = isMultiDay ? "Energy Flow (Daily Average)" : "24-Hour Energy Flow";
+  const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
