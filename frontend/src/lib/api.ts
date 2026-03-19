@@ -103,10 +103,13 @@ export const api = {
   getHourlyRange: async (from: string, to: string): Promise<HourlyBucket[]> => {
     // Fetch hourly data for each day in range, return combined
     const days: string[] = [];
-    const d = new Date(from);
-    const end = new Date(to);
+    const d = new Date(from + "T12:00:00"); // noon to avoid UTC/local date drift
+    const end = new Date(to + "T12:00:00");
     while (d <= end) {
-      days.push(d.toISOString().slice(0, 10));
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      days.push(`${yyyy}-${mm}-${dd}`);
       d.setDate(d.getDate() + 1);
     }
     const results = await Promise.all(days.map((day) => fetchJSON<HourlyBucket[]>(`/hourly?date=${day}`)));

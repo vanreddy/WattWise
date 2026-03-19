@@ -10,7 +10,8 @@ export interface DateRange {
 }
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Use local date components, not UTC — toISOString() gives UTC which drifts after 4/5pm Pacific
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function daysAgo(n: number): Date {

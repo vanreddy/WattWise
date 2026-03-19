@@ -26,7 +26,9 @@ import { Radio, BarChart3, Calendar } from "lucide-react";
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // Use local date (PST), not UTC — toISOString() would give UTC which is wrong after 4/5pm Pacific
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function defaultRange(): DateRange {
