@@ -11,7 +11,10 @@ GET /reports  — report history
 import json
 from datetime import date, datetime, time, timedelta, timezone
 
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Query, Request
+
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 from backend.rates import get_import_rate, get_tou_period, get_export_rate
 
@@ -30,8 +33,10 @@ async def summary(request: Request):
         "SELECT * FROM tesla_intervals ORDER BY ts DESC LIMIT 1"
     )
 
-    # Today's running totals
-    today_start = datetime.combine(date.today(), time.min).astimezone()
+    # Today's running totals (Pacific time)
+    today_start = datetime.combine(
+        datetime.now(LOCAL_TZ).date(), time.min, tzinfo=LOCAL_TZ
+    )
     today_rows = await pool.fetch(
         """
         SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
@@ -136,10 +141,10 @@ async def hourly(
     """Hourly aggregates from tesla_intervals for a single day."""
     pool = request.app.state.pool
     if not day:
-        day = date.today()
+        day = datetime.now(LOCAL_TZ).date()
 
-    start = datetime.combine(day, time.min).astimezone()
-    end = datetime.combine(day + timedelta(days=1), time.min).astimezone()
+    start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
 
     rows = await pool.fetch(
         """
