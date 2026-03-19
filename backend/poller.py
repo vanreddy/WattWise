@@ -4,6 +4,9 @@ and writes to tesla_intervals. Checks solar surplus alert on each poll.
 
 Uses TeslaPy (pip install teslapy) which supports Tesla's current
 OAuth2 SSO authentication flow.
+
+Token cache is persisted in the kv_store DB table so it survives
+Railway redeploys (unlike file-based caching).
 """
 
 from __future__ import annotations
@@ -20,7 +23,11 @@ import teslapy
 
 logger = logging.getLogger(__name__)
 
+# Fallback file cache (used only by --auth CLI)
 CACHE_PATH = Path(os.getenv("TESLA_CACHE_PATH", ".tesla_cache.json"))
+
+# DB key for storing Tesla token cache
+TESLA_CACHE_KEY = "tesla_token_cache"
 
 # Solar surplus alert thresholds
 ALERT_EXPORT_W = 3000          # 3kW export
@@ -30,14 +37,81 @@ ALERT_COOLDOWN_HOURS = 4       # don't re-alert within 4 hours
 ALERT_WINDOW_START = 9         # 9am
 ALERT_WINDOW_END = 15          # 3pm
 
+# In-memory copy of token cache, synced with DB
+_token_cache: dict = {}
+
+
+async def _load_cache_from_db(pool: asyncpg.Pool) -> dict:
+    """Load Tesla token cache from kv_store table."""
+    global _token_cache
+    row = await pool.fetchval(
+        "SELECT value FROM kv_store WHERE key = $1",
+        TESLA_CACHE_KEY,
+    )
+    if row:
+        _token_cache = json.loads(row) if isinstance(row, str) else row
+        logger.info("Loaded Tesla token cache from DB")
+    else:
+        # Try to seed from file cache if it exists (migration path)
+        if CACHE_PATH.exists():
+            try:
+                with open(CACHE_PATH, encoding="utf-8") as f:
+                    _token_cache = json.load(f)
+                logger.info("Seeded Tesla token cache from file: %s", CACHE_PATH)
+                await _save_cache_to_db(pool)
+            except (IOError, ValueError):
+                _token_cache = {}
+        else:
+            _token_cache = {}
+    return _token_cache
+
+
+async def _save_cache_to_db(pool: asyncpg.Pool) -> None:
+    """Persist Tesla token cache to kv_store table."""
+    await pool.execute(
+        """
+        INSERT INTO kv_store (key, value, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+        """,
+        TESLA_CACHE_KEY,
+        json.dumps(_token_cache),
+    )
+    logger.debug("Saved Tesla token cache to DB")
+
+
+def _cache_loader() -> dict:
+    """TeslaPy cache_loader callback — returns in-memory cache."""
+    return _token_cache
+
+
+def _cache_dumper(cache: dict) -> None:
+    """TeslaPy cache_dumper callback — updates in-memory cache.
+
+    The actual DB persist happens after each poll cycle in poll_once().
+    """
+    global _token_cache
+    _token_cache = cache
+    logger.debug("Token cache updated in memory")
+
 
 def _get_tesla_client() -> teslapy.Tesla:
     """
-    Create a TeslaPy client.
+    Create a TeslaPy client using in-memory/DB-backed token cache.
 
     First run requires browser-based OAuth login. After that, tokens
-    are cached in CACHE_PATH and refreshed automatically.
+    are cached and refreshed automatically.
     """
+    email = os.environ["TESLA_EMAIL"]
+    return teslapy.Tesla(
+        email,
+        cache_loader=_cache_loader,
+        cache_dumper=_cache_dumper,
+    )
+
+
+def _get_tesla_client_file() -> teslapy.Tesla:
+    """Create a TeslaPy client with file-based cache (for CLI --auth only)."""
     email = os.environ["TESLA_EMAIL"]
     return teslapy.Tesla(email, cache_file=str(CACHE_PATH))
 
@@ -46,8 +120,6 @@ def _fetch_live_status() -> dict:
     """Synchronous Tesla API call — returns live energy site status."""
     with _get_tesla_client() as tesla:
         if not tesla.authorized:
-            # First-time setup: user must complete OAuth in browser.
-            # In production, run `python -m backend.poller --auth` once.
             raise RuntimeError(
                 "Tesla not authorized. Run: python -m backend.poller --auth"
             )
@@ -62,8 +134,11 @@ def _fetch_live_status() -> dict:
 
 
 async def poll_once(pool: asyncpg.Pool) -> dict | None:
-    """Poll Tesla API once, insert row, return the data dict."""
+    """Poll Tesla API once, insert row, persist token cache, return data."""
     status = _fetch_live_status()
+
+    # Persist any token refresh that happened during the API call
+    await _save_cache_to_db(pool)
 
     ts = datetime.now(timezone.utc)
     solar_w = float(status.get("solar_power", 0))
@@ -213,7 +288,7 @@ if __name__ == "__main__":
     import sys
     if "--auth" in sys.argv:
         print("Starting Tesla OAuth login...")
-        with _get_tesla_client() as tesla:
+        with _get_tesla_client_file() as tesla:
             if not tesla.authorized:
                 state = tesla.new_state()
                 code_verifier = tesla.new_code_verifier()
@@ -234,5 +309,44 @@ if __name__ == "__main__":
                 print(f"Live status: solar={status.get('solar_power', 0)}W "
                       f"grid={status.get('grid_power', 0)}W "
                       f"battery={status.get('percentage_charged', 0)}%")
+
+            # Offer to seed DB with the file cache
+            if CACHE_PATH.exists():
+                print(f"\nToken cached at {CACHE_PATH}")
+                print("To seed the DB, run: python -m backend.poller --seed-db")
+    elif "--seed-db" in sys.argv:
+        # One-time migration: copy file cache to DB
+        import asyncio
+
+        async def seed():
+            if not CACHE_PATH.exists():
+                print(f"No cache file found at {CACHE_PATH}. Run --auth first.")
+                return
+            pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
+            # Ensure kv_store table exists
+            await pool.execute("""
+                CREATE TABLE IF NOT EXISTS kv_store (
+                    key TEXT PRIMARY KEY,
+                    value JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            with open(CACHE_PATH, encoding="utf-8") as f:
+                cache = json.load(f)
+            await pool.execute(
+                """
+                INSERT INTO kv_store (key, value, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+                """,
+                TESLA_CACHE_KEY,
+                json.dumps(cache),
+            )
+            await pool.close()
+            print(f"Tesla token cache seeded to DB from {CACHE_PATH}")
+
+        asyncio.run(seed())
     else:
-        print("Usage: python -m backend.poller --auth")
+        print("Usage:")
+        print("  python -m backend.poller --auth       # First-time Tesla OAuth login")
+        print("  python -m backend.poller --seed-db    # Copy file token cache to DB")

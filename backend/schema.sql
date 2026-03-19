@@ -64,3 +64,10 @@ CREATE TABLE IF NOT EXISTS reports_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reports_log_type_sent ON reports_log (report_type, sent_at DESC);
+
+-- Key-value store for persistent config (e.g. Tesla OAuth token cache)
+CREATE TABLE IF NOT EXISTS kv_store (
+    key   TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

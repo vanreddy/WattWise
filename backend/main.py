@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
-from backend.poller import poll_and_check
+from backend.poller import poll_and_check, _load_cache_from_db
 from backend.weekly_summary import run_weekly_summary
 
 logging.basicConfig(
@@ -33,6 +33,18 @@ async def lifespan(app: FastAPI):
     # Startup
     pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
     app.state.pool = pool
+
+    # Ensure kv_store table exists (for Tesla token persistence)
+    await pool.execute("""
+        CREATE TABLE IF NOT EXISTS kv_store (
+            key TEXT PRIMARY KEY,
+            value JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    # Load Tesla token cache from DB before poller starts
+    await _load_cache_from_db(pool)
 
     scheduler = AsyncIOScheduler()
 
