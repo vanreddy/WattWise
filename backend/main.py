@@ -98,9 +98,24 @@ async def health():
         delta = now - last_poll
         minutes_ago = round(delta.total_seconds() / 60, 1)
         stale = minutes_ago > 15  # no data in 15+ minutes = likely poller issue
+
+    # Check token cache status
+    from backend.poller import _token_cache
+    cache_status = "empty"
+    if _token_cache:
+        for email, data in _token_cache.items():
+            sso = data.get("sso", {})
+            if sso.get("refresh_token"):
+                cache_status = "ok"
+            elif sso.get("access_token"):
+                cache_status = "no_refresh_token"
+            else:
+                cache_status = "no_tokens"
+
     return {
         "status": "degraded" if stale else "ok",
         "last_poll": last_poll.isoformat() if last_poll else None,
         "minutes_since_poll": minutes_ago,
         "poller_stale": stale,
+        "token_cache": cache_status,
     }
