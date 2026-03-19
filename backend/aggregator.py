@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Daily aggregation job — runs at 6:50am, covers the prior day.
 

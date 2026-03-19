@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Weekly summary job — runs Sunday 5:50pm, covers Mon–Sun.
 

@@ -6,11 +6,14 @@ Uses TeslaPy (pip install teslapy) which supports Tesla's current
 OAuth2 SSO authentication flow.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import asyncpg
 import teslapy
@@ -54,7 +57,8 @@ def _fetch_live_status() -> dict:
             raise RuntimeError("No energy sites found on Tesla account")
 
         site = products[0]
-        return site.get_site_live_status()
+        data = site.get_site_data()
+        return data.get("response", data)
 
 
 async def poll_once(pool: asyncpg.Pool) -> dict | None:
@@ -225,7 +229,8 @@ if __name__ == "__main__":
             products = tesla.battery_list() + tesla.solar_list()
             print(f"Found {len(products)} energy site(s)")
             if products:
-                status = products[0].get_site_live_status()
+                data = products[0].get_site_data()
+                status = data.get("response", data)
                 print(f"Live status: solar={status.get('solar_power', 0)}W "
                       f"grid={status.get('grid_power', 0)}W "
                       f"battery={status.get('percentage_charged', 0)}%")
