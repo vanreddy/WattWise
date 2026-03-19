@@ -1,0 +1,110 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+async function fetchJSON<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error: ${res.status} ${path}`);
+  return res.json();
+}
+
+export interface CurrentPower {
+  ts: string | null;
+  solar_w: number;
+  home_w: number;
+  grid_w: number;
+  battery_w: number;
+  battery_pct: number;
+  vehicle_w: number;
+}
+
+export interface TodayTotals {
+  solar_generated_kwh: number;
+  total_import_kwh: number;
+  total_export_kwh: number;
+  total_cost: number;
+  peak_cost: number;
+  part_peak_cost: number;
+  off_peak_cost: number;
+  export_credit: number;
+}
+
+export interface SummaryResponse {
+  current: CurrentPower;
+  today: TodayTotals;
+}
+
+export interface DailySummary {
+  day: string;
+  total_import_kwh: number;
+  total_export_kwh: number;
+  solar_generated_kwh: number;
+  solar_self_consumed_kwh: number;
+  peak_import_kwh: number;
+  part_peak_import_kwh: number;
+  off_peak_import_kwh: number;
+  peak_cost: number;
+  part_peak_cost: number;
+  off_peak_cost: number;
+  total_cost: number;
+  export_credit: number;
+  ev_kwh: number;
+  ev_peak_kwh: number;
+  ev_off_peak_kwh: number;
+  ev_cost: number;
+  battery_peak_coverage_pct: number | null;
+  battery_depletion_hour: number | null;
+  context_narrative: string | null;
+  actions: string[];
+}
+
+export interface HourlyBucket {
+  hour: string;
+  solar_w_avg: number;
+  home_w_avg: number;
+  grid_w_avg: number;
+  battery_w_avg: number;
+  battery_pct_avg: number;
+  vehicle_w_avg: number;
+  grid_import_kwh: number;
+  grid_export_kwh: number;
+  solar_kwh: number;
+}
+
+export interface Alert {
+  id: number;
+  fired_at: string;
+  alert_type: string;
+  message: string;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface Report {
+  id: number;
+  sent_at: string;
+  report_type: string;
+  covers_from: string;
+  covers_to: string;
+  subject: string;
+  metadata: Record<string, unknown> | null;
+}
+
+export const api = {
+  getSummary: () => fetchJSON<SummaryResponse>("/summary"),
+  getDaily: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return fetchJSON<DailySummary[]>(`/daily${qs ? `?${qs}` : ""}`);
+  },
+  getHourly: (date?: string) => {
+    const qs = date ? `?date=${date}` : "";
+    return fetchJSON<HourlyBucket[]>(`/hourly${qs}`);
+  },
+  getAlerts: (limit = 50) => fetchJSON<Alert[]>(`/alerts?limit=${limit}`),
+  getReports: (type?: string, limit = 10) => {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    params.set("limit", String(limit));
+    return fetchJSON<Report[]>(`/reports?${params}`);
+  },
+};
