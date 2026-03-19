@@ -74,4 +74,21 @@ app.include_router(api_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    pool = app.state.pool
+    last_poll = await pool.fetchval(
+        "SELECT MAX(ts) FROM tesla_intervals"
+    )
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    stale = False
+    minutes_ago = None
+    if last_poll:
+        delta = now - last_poll
+        minutes_ago = round(delta.total_seconds() / 60, 1)
+        stale = minutes_ago > 15  # no data in 15+ minutes = likely poller issue
+    return {
+        "status": "degraded" if stale else "ok",
+        "last_poll": last_poll.isoformat() if last_poll else None,
+        "minutes_since_poll": minutes_ago,
+        "poller_stale": stale,
+    }
