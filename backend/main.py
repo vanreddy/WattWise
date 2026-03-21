@@ -79,6 +79,7 @@ app = FastAPI(title="WattWise", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT"],
     allow_headers=["*"],
 )
@@ -102,10 +103,10 @@ async def health():
         stale = minutes_ago > 15  # no data in 15+ minutes = likely poller issue
 
     # Check token cache status
-    from backend.poller import _token_cache
+    from backend.poller import _token_caches
     cache_status = "empty"
-    if _token_cache:
-        for email, data in _token_cache.items():
+    if _token_caches:
+        for email, data in _token_caches.items():
             sso = data.get("sso", {})
             if sso.get("refresh_token"):
                 cache_status = "ok"
