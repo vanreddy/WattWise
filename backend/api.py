@@ -8,11 +8,15 @@ GET /alerts   — alert history
 GET /reports  — report history
 """
 
+import asyncio
 import json
+import logging
 from datetime import date, datetime, time, timedelta, timezone
 
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Query, Request
+
+logger = logging.getLogger(__name__)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
@@ -237,6 +241,44 @@ async def hourly(
     return results
 
 
+def _fetch_tesla_calendar_history(end_date_iso: str) -> dict:
+    """Synchronous Tesla API call — returns calendar_history energy data."""
+    from backend.poller import _get_tesla_client
+    with _get_tesla_client() as tesla:
+        if not tesla.authorized:
+            raise RuntimeError("Tesla not authorized")
+        products = tesla.battery_list() + tesla.solar_list()
+        if not products:
+            raise RuntimeError("No energy sites found")
+        site = products[0]
+        return site.get_calendar_history_data(
+            kind="energy", period="day", end_date=end_date_iso,
+        )
+
+
+def _sum_tesla_flows(series: list[dict]) -> dict[str, float]:
+    """Sum Tesla calendar_history energy entries into Sankey flows (Wh → kWh)."""
+    totals = {
+        "solar_to_home": 0.0,
+        "solar_to_battery": 0.0,
+        "solar_to_grid": 0.0,
+        "battery_to_home": 0.0,
+        "battery_to_grid": 0.0,
+        "grid_to_home": 0.0,
+        "grid_to_battery": 0.0,
+    }
+    for entry in series:
+        totals["solar_to_home"] += entry.get("consumer_energy_imported_from_solar", 0)
+        totals["solar_to_battery"] += entry.get("battery_energy_imported_from_solar", 0)
+        totals["solar_to_grid"] += entry.get("grid_energy_exported_from_solar", 0)
+        totals["battery_to_home"] += entry.get("consumer_energy_imported_from_battery", 0)
+        totals["battery_to_grid"] += entry.get("grid_energy_exported_from_battery", 0)
+        totals["grid_to_home"] += entry.get("consumer_energy_imported_from_grid", 0)
+        totals["grid_to_battery"] += entry.get("battery_energy_imported_from_grid", 0)
+    # Convert Wh → kWh
+    return {k: v / 1000 for k, v in totals.items()}
+
+
 @router.get("/sankey")
 async def sankey(
     request: Request,
@@ -244,20 +286,50 @@ async def sankey(
     from_date: str | None = Query(default=None, alias="from"),
     to_date: str | None = Query(default=None, alias="to"),
 ):
-    """Sankey flow allocations computed from raw 5-min intervals."""
+    """Sankey flow allocations from Tesla metered energy data."""
     pool = request.app.state.pool
     today = datetime.now(LOCAL_TZ).date()
 
     if date_param:
         start_day = date.fromisoformat(date_param)
-        end_day = start_day + timedelta(days=1)
+        end_day = start_day
     elif from_date and to_date:
         start_day = date.fromisoformat(from_date)
-        end_day = date.fromisoformat(to_date) + timedelta(days=1)
+        end_day = date.fromisoformat(to_date)
     else:
         start_day = today
-        end_day = today + timedelta(days=1)
+        end_day = today
 
+    # Try Tesla calendar_history API (metered energy — most accurate)
+    try:
+        from backend.poller import _load_cache_from_db
+        await _load_cache_from_db(pool)
+
+        # Fetch each day's calendar_history and combine
+        all_series = []
+        d = start_day
+        while d <= end_day:
+            end_iso = datetime.combine(d, time(23, 59, 59), tzinfo=LOCAL_TZ).isoformat()
+            data = await asyncio.to_thread(_fetch_tesla_calendar_history, end_iso)
+            series = data.get("time_series", data.get("response", {}).get("time_series", []))
+            all_series.extend(series)
+            d += timedelta(days=1)
+
+        flows = _sum_tesla_flows(all_series)
+        logger.info("Sankey: used Tesla metered data for %s to %s", start_day, end_day)
+    except Exception:
+        logger.exception("Tesla calendar_history failed, falling back to polled data")
+        flows = await _sankey_from_polled(pool, start_day, end_day + timedelta(days=1))
+
+    return {
+        "flows": {k: round(v, 2) for k, v in flows.items()},
+        "from": str(start_day),
+        "to": str(end_day),
+    }
+
+
+async def _sankey_from_polled(pool, start_day: date, end_day: date) -> dict[str, float]:
+    """Fallback: compute Sankey flows from polled tesla_intervals data."""
     start = datetime.combine(start_day, time.min, tzinfo=LOCAL_TZ)
     end = datetime.combine(end_day, time.min, tzinfo=LOCAL_TZ)
 
@@ -289,11 +361,9 @@ async def sankey(
         bat_charge = max(0, -row["battery_w"]) * INTERVAL_HOURS / 1000
         home = max(0, row["home_w"]) * INTERVAL_HOURS / 1000
 
-        # 1) Solar → Home
         solar_to_home = min(solar, home)
         flows["solar_to_home"] += solar_to_home
 
-        # 2) Solar remainder → Battery charge, then Grid export
         solar_left = solar - solar_to_home
         solar_to_bat = min(bat_charge, solar_left)
         flows["solar_to_battery"] += solar_to_bat
@@ -301,7 +371,6 @@ async def sankey(
         solar_to_exp = min(grid_export, solar_left)
         flows["solar_to_grid"] += solar_to_exp
 
-        # 3) Battery discharge → remaining Home, then Grid export
         remain_home = max(0, home - solar_to_home)
         bat_to_home = min(bat_discharge, remain_home)
         flows["battery_to_home"] += bat_to_home
@@ -309,18 +378,13 @@ async def sankey(
         remain_exp = max(0, grid_export - solar_to_exp)
         flows["battery_to_grid"] += min(bat_left, remain_exp)
 
-        # 4) Grid import → remaining Home, then Battery charge
         remain_home2 = max(0, remain_home - bat_to_home)
         flows["grid_to_home"] += remain_home2
         grid_left = grid_import - remain_home2
         remain_bat_chg = max(0, bat_charge - solar_to_bat)
         flows["grid_to_battery"] += min(grid_left, remain_bat_chg)
 
-    return {
-        "flows": {k: round(v, 2) for k, v in flows.items()},
-        "from": str(start_day),
-        "to": str(end_day - timedelta(days=1)),
-    }
+    return flows
 
 
 @router.get("/alerts")
