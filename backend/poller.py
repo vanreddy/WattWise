@@ -33,8 +33,6 @@ TESLA_CACHE_KEY = "tesla_token_cache"
 ALERT_EXPORT_W = 3000          # 3kW export
 ALERT_SUSTAIN_MINUTES = 15     # sustained for 15 min
 ALERT_COOLDOWN_HOURS = 4       # don't re-alert within 4 hours
-ALERT_WINDOW_START = 9         # 9am
-ALERT_WINDOW_END = 17          # 5pm
 
 # In-memory copy of token cache, synced with DB
 _token_cache: dict = {}
@@ -190,15 +188,7 @@ async def check_solar_surplus_alert(
     from backend.rates import get_import_rate, get_export_rate
 
     now = data["ts"]
-    local_hour = now.astimezone().hour
-
-    # Only alert between 9am and 3pm local
-    if not (ALERT_WINDOW_START <= local_hour < ALERT_WINDOW_END):
-        _export_history.clear()
-        return False
-
     grid_w = data["grid_w"]
-    battery_pct = data["battery_pct"]
 
     # grid_w negative = exporting
     if grid_w >= 0:
