@@ -76,9 +76,12 @@ export const mockHourly: HourlyBucket[] = Array.from({ length: 24 }, (_, h) => {
     battery_w_avg: solarPeak ? 500 + Math.random() * 1000 : (h >= 17 ? -800 - Math.random() * 1200 : 0),
     battery_pct_avg: Math.min(100, 30 + (isSunny ? h * 5 : 100 - h * 3)),
     vehicle_w_avg: h >= 10 && h <= 12 ? 7000 : 0,
+    solar_kwh: isSunny ? (solarPeak ? 4 + Math.random() * 2 : 1 + Math.random() * 2) : 0,
     grid_import_kwh: isSunny ? 0 : 0.5 + Math.random(),
     grid_export_kwh: isSunny ? 1 + Math.random() * 2 : 0,
-    solar_kwh: isSunny ? (solarPeak ? 4 + Math.random() * 2 : 1 + Math.random() * 2) : 0,
+    battery_discharge_kwh: solarPeak ? 0.5 + Math.random() : (h >= 17 ? 0.8 + Math.random() : 0),
+    battery_charge_kwh: solarPeak ? 0 : (h >= 17 ? 0 : 0.3 + Math.random() * 0.5),
+    home_kwh: 0.8 + Math.random() * 1.2 + (h >= 17 && h <= 21 ? 1.5 : 0),
   };
 });
 

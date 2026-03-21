@@ -216,9 +216,13 @@ async def hourly(
             AVG(battery_w) AS battery_w_avg,
             AVG(battery_pct) AS battery_pct_avg,
             AVG(vehicle_w) AS vehicle_w_avg,
-            SUM(CASE WHEN grid_w > 0 THEN grid_w * $3 / 1000 ELSE 0 END) AS grid_import_kwh,
-            SUM(CASE WHEN grid_w < 0 THEN ABS(grid_w) * $3 / 1000 ELSE 0 END) AS grid_export_kwh,
-            SUM(GREATEST(solar_w, 0) * $3 / 1000) AS solar_kwh
+            -- Per-interval energy sums (avoids within-hour sign cancellation)
+            SUM(GREATEST(solar_w, 0) * $3 / 1000) AS solar_kwh,
+            SUM(GREATEST(grid_w, 0) * $3 / 1000) AS grid_import_kwh,
+            SUM(GREATEST(-grid_w, 0) * $3 / 1000) AS grid_export_kwh,
+            SUM(GREATEST(battery_w, 0) * $3 / 1000) AS battery_discharge_kwh,
+            SUM(GREATEST(-battery_w, 0) * $3 / 1000) AS battery_charge_kwh,
+            SUM(GREATEST(home_w, 0) * $3 / 1000) AS home_kwh
         FROM tesla_intervals
         WHERE ts >= $1 AND ts < $2
         GROUP BY hour
@@ -240,9 +244,13 @@ async def hourly(
             "battery_w_avg": round(row["battery_w_avg"] or 0, 0),
             "battery_pct_avg": round(row["battery_pct_avg"] or 0, 1),
             "vehicle_w_avg": vehicle_w,
-            "grid_import_kwh": round(row["grid_import_kwh"] or 0, 2),
-            "grid_export_kwh": round(row["grid_export_kwh"] or 0, 2),
-            "solar_kwh": round(row["solar_kwh"] or 0, 2),
+            # Per-interval energy (no sign cancellation)
+            "solar_kwh": round(row["solar_kwh"] or 0, 3),
+            "grid_import_kwh": round(row["grid_import_kwh"] or 0, 3),
+            "grid_export_kwh": round(row["grid_export_kwh"] or 0, 3),
+            "battery_discharge_kwh": round(row["battery_discharge_kwh"] or 0, 3),
+            "battery_charge_kwh": round(row["battery_charge_kwh"] or 0, 3),
+            "home_kwh": round(row["home_kwh"] or 0, 3),
         })
     return results
 

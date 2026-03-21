@@ -64,9 +64,13 @@ export interface HourlyBucket {
   battery_w_avg: number;
   battery_pct_avg: number;
   vehicle_w_avg: number;
+  // Per-interval energy sums (avoids within-hour sign cancellation)
+  solar_kwh: number;
   grid_import_kwh: number;
   grid_export_kwh: number;
-  solar_kwh: number;
+  battery_discharge_kwh: number;
+  battery_charge_kwh: number;
+  home_kwh: number;
 }
 
 export interface Alert {
