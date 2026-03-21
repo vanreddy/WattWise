@@ -11,9 +11,10 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  ReferenceDot,
 } from "recharts";
 import { Activity } from "lucide-react";
-import type { HourlyBucket } from "@/lib/api";
+import type { HourlyBucket, IntervalPoint } from "@/lib/api";
 
 function formatW(value: number) {
   if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}kW`;
@@ -66,27 +67,101 @@ const EMPTY_POINT = {
   home: 0, ev: 0, grid_export: 0, battery_charge: 0,
 };
 
-interface Props {
-  data: HourlyBucket[];
-  days?: number; // 1 = single-day (hourly view), >1 = multi-day (daily aggregated)
+type ChartPoint = {
+  label: string;
+  solar: number | null;
+  grid_import: number | null;
+  battery_discharge: number | null;
+  home: number | null;
+  ev: number | null;
+  grid_export: number | null;
+  battery_charge: number | null;
+};
+
+function formatTimeLabel(ts: string): string {
+  const d = new Date(ts);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-export default function HourlyChart({ data, days = 1 }: Props) {
-  // Compute totals from RAW data (before rounding) so sources always equals consumption
+interface Props {
+  data: HourlyBucket[];
+  days?: number;
+  intervalData?: IntervalPoint[];
+}
+
+export default function HourlyChart({ data, days = 1, intervalData }: Props) {
+  const useIntervals = !!(intervalData && intervalData.length > 0);
+
   const totalEnergy = useMemo(() => {
+    if (useIntervals) {
+      let total = 0;
+      for (const d of intervalData!) {
+        total += (Math.max(0, d.solar_w) + Math.max(0, d.grid_w) + Math.max(0, d.battery_w)) / 1000;
+      }
+      // Each interval is 5 min = 5/60 hours
+      return total * (5 / 60);
+    }
     let total = 0;
     for (const d of data) {
-      // Sum source side: solar + grid_import + battery_discharge
       total += (Math.max(0, d.solar_w_avg) + Math.max(0, d.grid_w_avg) + Math.max(0, d.battery_w_avg)) / 1000;
     }
     return total;
-  }, [data]);
+  }, [data, intervalData, useIntervals]);
 
-  const { chartData, yMax, isMultiDay } = useMemo(() => {
+  const { chartData, yMax, isMultiDay, nowIndex, nowY } = useMemo(() => {
     const multiDay = days > 1;
+    const isToday = !multiDay; // single-day mode
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    if (useIntervals) {
+      // === 5-min interval data ===
+      const mapped: ChartPoint[] = intervalData!.map((d) => {
+        const grid = d.grid_w;
+        const battery = d.battery_w;
+        return {
+          label: formatTimeLabel(d.ts),
+          solar: Math.max(0, Math.round(d.solar_w)),
+          grid_import: Math.max(0, Math.round(grid)),
+          battery_discharge: Math.max(0, Math.round(battery)),
+          home: -Math.max(0, Math.round(d.home_w - d.vehicle_w)),
+          ev: -Math.max(0, Math.round(d.vehicle_w)),
+          grid_export: -Math.max(0, Math.round(-grid)),
+          battery_charge: -Math.max(0, Math.round(-battery)),
+        };
+      });
+
+      let maxPos = 0;
+      let maxNeg = 0;
+      for (const d of mapped) {
+        const srcTotal = (d.solar || 0) + (d.grid_import || 0) + (d.battery_discharge || 0);
+        const sinkTotal = Math.abs(d.home || 0) + Math.abs(d.ev || 0) + Math.abs(d.grid_export || 0) + Math.abs(d.battery_charge || 0);
+        maxPos = Math.max(maxPos, srcTotal);
+        maxNeg = Math.max(maxNeg, sinkTotal);
+      }
+      const yBound = Math.max(maxPos, maxNeg) * 1.1;
+
+      // Now dot: last data point
+      const lastIdx = mapped.length - 1;
+      const lastPt = lastIdx >= 0 ? mapped[lastIdx] : null;
+      const dotY = lastPt ? (lastPt.solar || 0) + (lastPt.grid_import || 0) + (lastPt.battery_discharge || 0) : 0;
+
+      return {
+        chartData: mapped,
+        yMax: Math.ceil(yBound / 1000) * 1000 || 5000,
+        isMultiDay: false,
+        nowIndex: isToday && lastIdx >= 0 ? lastIdx : -1,
+        nowY: dotY,
+      };
+    }
 
     if (!multiDay) {
-      // === Single-day: show 24-hour buckets ===
+      // === Single-day hourly fallback ===
       const hourMap = new Map<number, typeof EMPTY_POINT>();
 
       for (const d of data) {
@@ -94,40 +169,52 @@ export default function HourlyChart({ data, days = 1 }: Props) {
         const grid = d.grid_w_avg;
         const battery = d.battery_w_avg;
 
-        const solar = Math.max(0, Math.round(d.solar_w_avg));
-        const grid_import = Math.max(0, Math.round(grid));
-        const battery_discharge = Math.max(0, Math.round(battery));
-        const home = -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg));
-        const ev = -Math.max(0, Math.round(d.vehicle_w_avg));
-        const grid_export = -Math.max(0, Math.round(-grid));
-        const battery_charge = -Math.max(0, Math.round(-battery));
-
-        hourMap.set(hour, { solar, grid_import, battery_discharge, home, ev, grid_export, battery_charge });
+        hourMap.set(hour, {
+          solar: Math.max(0, Math.round(d.solar_w_avg)),
+          grid_import: Math.max(0, Math.round(grid)),
+          battery_discharge: Math.max(0, Math.round(battery)),
+          home: -Math.max(0, Math.round(d.home_w_avg - d.vehicle_w_avg)),
+          ev: -Math.max(0, Math.round(d.vehicle_w_avg)),
+          grid_export: -Math.max(0, Math.round(-grid)),
+          battery_charge: -Math.max(0, Math.round(-battery)),
+        });
       }
 
-      const mapped = HOUR_LABELS.map((label, i) => ({
-        label,
-        ...(hourMap.get(i) || EMPTY_POINT),
-      }));
+      // Hide future hours: set to null for hours after current
+      const mapped: ChartPoint[] = HOUR_LABELS.map((label, i) => {
+        const hasData = hourMap.has(i);
+        if (!hasData && i > currentHour) {
+          return { label, solar: null, grid_import: null, battery_discharge: null, home: null, ev: null, grid_export: null, battery_charge: null };
+        }
+        const pt = hourMap.get(i) || EMPTY_POINT;
+        return { label, ...pt };
+      });
 
       let maxPos = 0;
       let maxNeg = 0;
       for (const d of mapped) {
-        const srcTotal = d.solar + d.grid_import + d.battery_discharge;
-        const sinkTotal = Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.grid_export) + Math.abs(d.battery_charge);
+        if (d.solar === null) continue;
+        const srcTotal = d.solar + (d.grid_import || 0) + (d.battery_discharge || 0);
+        const sinkTotal = Math.abs(d.home || 0) + Math.abs(d.ev || 0) + Math.abs(d.grid_export || 0) + Math.abs(d.battery_charge || 0);
         maxPos = Math.max(maxPos, srcTotal);
         maxNeg = Math.max(maxNeg, sinkTotal);
       }
       const yBound = Math.max(maxPos, maxNeg) * 1.1;
 
+      // Now dot at current hour
+      const nowPt = hourMap.get(currentHour);
+      const dotY = nowPt ? nowPt.solar + nowPt.grid_import + nowPt.battery_discharge : 0;
+
       return {
         chartData: mapped,
         yMax: Math.ceil(yBound / 1000) * 1000 || 5000,
         isMultiDay: false,
+        nowIndex: currentHour,
+        nowY: dotY,
       };
     }
 
-    // === Multi-day: average all hourly buckets by hour-of-day into a single 24h profile ===
+    // === Multi-day: average by hour-of-day ===
     const hourBuckets = new Map<number, { solar: number[]; grid: number[]; battery: number[]; home: number[]; ev: number[] }>();
 
     for (const d of data) {
@@ -145,7 +232,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
-    const mapped = HOUR_LABELS.map((label, i) => {
+    const mapped: ChartPoint[] = HOUR_LABELS.map((label, i) => {
       const bucket = hourBuckets.get(i);
       if (!bucket) return { label, ...EMPTY_POINT };
 
@@ -170,8 +257,8 @@ export default function HourlyChart({ data, days = 1 }: Props) {
     let maxPos = 0;
     let maxNeg = 0;
     for (const d of mapped) {
-      const srcTotal = d.solar + d.grid_import + d.battery_discharge;
-      const sinkTotal = Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.grid_export) + Math.abs(d.battery_charge);
+      const srcTotal = (d.solar || 0) + (d.grid_import || 0) + (d.battery_discharge || 0);
+      const sinkTotal = Math.abs(d.home || 0) + Math.abs(d.ev || 0) + Math.abs(d.grid_export || 0) + Math.abs(d.battery_charge || 0);
       maxPos = Math.max(maxPos, srcTotal);
       maxNeg = Math.max(maxNeg, sinkTotal);
     }
@@ -181,15 +268,26 @@ export default function HourlyChart({ data, days = 1 }: Props) {
       chartData: mapped,
       yMax: Math.ceil(yBound / 1000) * 1000 || 5000,
       isMultiDay: true,
+      nowIndex: -1,
+      nowY: 0,
     };
-  }, [data, days]);
+  }, [data, days, intervalData, useIntervals]);
 
   const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
-
   const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
+
+  // For interval data, show fewer ticks
+  const xInterval = useIntervals ? 24 : 2; // every 2hrs for both (24 intervals = 2hrs at 5-min)
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { r: 5; opacity: 1; }
+          50% { r: 9; opacity: 0.5; }
+        }
+        .now-dot { animation: pulse-dot 2s ease-in-out infinite; }
+      `}</style>
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <Activity size={14} className="text-cyan-400" />
@@ -207,7 +305,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             dataKey="label"
             stroke="#6b7280"
             fontSize={10}
-            interval={2}
+            interval={xInterval}
             tick={{ dy: 4 }}
           />
           <YAxis
@@ -230,6 +328,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#facc15"
             fill="#facc1550"
             name="Solar"
+            connectNulls={false}
           />
           <Area
             type="monotone"
@@ -238,6 +337,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#f87171"
             fill="#f8717150"
             name="Grid Import"
+            connectNulls={false}
           />
           <Area
             type="monotone"
@@ -246,6 +346,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#34d399"
             fill="#34d39950"
             name="Powerwall Discharge"
+            connectNulls={false}
           />
 
           {/* Consumption — stacked below zero */}
@@ -256,6 +357,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#60a5fa"
             fill="#60a5fa50"
             name="Home"
+            connectNulls={false}
           />
           <Area
             type="monotone"
@@ -264,6 +366,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#a78bfa"
             fill="#a78bfa50"
             name="EV"
+            connectNulls={false}
           />
           <Area
             type="monotone"
@@ -272,6 +375,7 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#fb923c"
             fill="#fb923c50"
             name="Grid Export"
+            connectNulls={false}
           />
           <Area
             type="monotone"
@@ -280,7 +384,21 @@ export default function HourlyChart({ data, days = 1 }: Props) {
             stroke="#2dd4bf"
             fill="#2dd4bf50"
             name="Battery Charge"
+            connectNulls={false}
           />
+
+          {/* Pulsing "Now" dot — single-day only */}
+          {!isMultiDay && nowIndex >= 0 && (
+            <ReferenceDot
+              x={chartData[nowIndex]?.label}
+              y={nowY}
+              r={6}
+              fill="#22d3ee"
+              stroke="#22d3ee"
+              strokeWidth={2}
+              className="now-dot"
+            />
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>

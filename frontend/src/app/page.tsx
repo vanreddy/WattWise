@@ -8,6 +8,7 @@ import {
   type HourlyBucket,
   type Alert,
   type SankeyFlows,
+  type IntervalPoint,
 } from "@/lib/api";
 import {
   mockSummary,
@@ -17,12 +18,12 @@ import {
 } from "@/lib/mock";
 import PowerFlowCards from "@/components/PowerFlowCards";
 import HourlyChart from "@/components/HourlyChart";
-import CostBarChart from "@/components/CostBarChart";
 import CostWaterfallChart from "@/components/CostWaterfallChart";
 import AlertsList from "@/components/AlertsList";
 import DateRangePicker, { type DateRange } from "@/components/DateRangePicker";
 import SankeyChart from "@/components/SankeyChart";
-import { Radio, BarChart3, Calendar } from "lucide-react";
+import SelfPoweredRing from "@/components/SelfPoweredRing";
+import { Radio, BarChart3 } from "lucide-react";
 
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [daily, setDaily] = useState<DailySummary[]>([]);
   const [hourly, setHourly] = useState<HourlyBucket[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [intervalData, setIntervalData] = useState<IntervalPoint[]>([]);
   const [sankeyFlows, setSankeyFlows] = useState<SankeyFlows | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -76,6 +78,18 @@ export default function Dashboard() {
       setHourly(h);
     } catch {
       setHourly(mockHourly);
+    }
+
+    try {
+      let iv: IntervalPoint[];
+      if (range.days === 1) {
+        iv = await api.getIntervals(range.from);
+      } else {
+        iv = await api.getIntervalsRange(range.from, range.to);
+      }
+      setIntervalData(iv);
+    } catch {
+      setIntervalData([]);
     }
 
     try {
@@ -130,8 +144,6 @@ export default function Dashboard() {
     );
   }
 
-  const costTitle = `${dateRange.days}-Day Cost Breakdown`;
-
   return (
     <div className="space-y-6">
       {/* Status bar */}
@@ -144,16 +156,14 @@ export default function Dashboard() {
         {error && <span className="text-yellow-500">Refresh failed</span>}
       </div>
 
-      {/* Live Stats heading */}
+      {/* 1. Live view */}
       <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
         <Radio size={14} className="text-green-400" />
         Live Stats
       </h2>
-
-      {/* Live power flows */}
       <PowerFlowCards current={summary.current} today={summary.today} />
 
-      {/* Date range selector */}
+      {/* 2. Date selector */}
       <div className="flex justify-between items-center">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <BarChart3 size={14} className="text-blue-400" />
@@ -162,24 +172,41 @@ export default function Dashboard() {
         <DateRangePicker value={dateRange} onChange={handleRangeChange} />
       </div>
 
-      {/* Energy Flow chart */}
-      <HourlyChart data={hourly} days={dateRange.days} />
+      {/* 3. Self-powered + 4. Cost Waterfall + Alerts */}
+      {(() => {
+        let gridImport = 0;
+        let totalConsumption = 0;
+        if (sankeyFlows) {
+          gridImport = sankeyFlows.grid_to_home + sankeyFlows.grid_to_battery;
+          totalConsumption = sankeyFlows.solar_to_home + sankeyFlows.battery_to_home + sankeyFlows.grid_to_home;
+        } else if (daily.length > 0) {
+          gridImport = daily.reduce((s, d) => s + d.total_import_kwh, 0);
+          const solar = daily.reduce((s, d) => s + d.solar_generated_kwh, 0);
+          const exp = daily.reduce((s, d) => s + d.total_export_kwh, 0);
+          totalConsumption = gridImport + solar - exp;
+        }
+        const selfPoweredPct = totalConsumption > 0
+          ? Math.max(0, (1 - gridImport / totalConsumption) * 100)
+          : 0;
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <SelfPoweredRing selfPoweredPct={selfPoweredPct} />
+            <div className="lg:col-span-2">
+              <CostWaterfallChart data={daily} days={dateRange.days} />
+            </div>
+          </div>
+        );
+      })()}
 
-      {/* Sankey energy flow */}
+      {/* 5. Sankey diagram */}
       <SankeyChart hourlyData={hourly} dailyData={daily} days={dateRange.days} sankeyFlows={sankeyFlows} />
 
-      {/* Cost Waterfall + Alerts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <CostWaterfallChart data={daily} days={dateRange.days} />
-        </div>
-        <AlertsList alerts={alerts} />
-      </div>
+      {/* 6. 24-hour energy flow */}
+      <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />
 
-      {/* Daily Cost Breakdown */}
-      {dateRange.days > 1 && (
-        <CostBarChart data={daily} title={costTitle} />
-      )}
+      {/* Alerts */}
+      <AlertsList alerts={alerts} />
+
     </div>
   );
 }

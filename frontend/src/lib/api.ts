@@ -89,6 +89,16 @@ export interface SankeyResponse {
   to: string;
 }
 
+export interface IntervalPoint {
+  ts: string;
+  solar_w: number;
+  home_w: number;
+  grid_w: number;
+  battery_w: number;
+  battery_pct: number;
+  vehicle_w: number;
+}
+
 export interface Alert {
   id: number;
   fired_at: string;
@@ -133,6 +143,24 @@ export const api = {
       d.setDate(d.getDate() + 1);
     }
     const results = await Promise.all(days.map((day) => fetchJSON<HourlyBucket[]>(`/hourly?date=${day}`)));
+    return results.flat();
+  },
+  getIntervals: (date?: string) => {
+    const qs = date ? `?date=${date}` : "";
+    return fetchJSON<IntervalPoint[]>(`/intervals${qs}`);
+  },
+  getIntervalsRange: async (from: string, to: string): Promise<IntervalPoint[]> => {
+    const days: string[] = [];
+    const d = new Date(from + "T12:00:00");
+    const end = new Date(to + "T12:00:00");
+    while (d <= end) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      days.push(`${yyyy}-${mm}-${dd}`);
+      d.setDate(d.getDate() + 1);
+    }
+    const results = await Promise.all(days.map((day) => fetchJSON<IntervalPoint[]>(`/intervals?date=${day}`)));
     return results.flat();
   },
   getSankey: (date?: string, from?: string, to?: string) => {

@@ -41,7 +41,7 @@ export default function PowerFlowCards({
   today: TodayTotals;
 }) {
   const gridLabel = current.grid_w > 0 ? "Importing" : "Exporting";
-  const batteryLabel = current.battery_w > 0 ? "Charging" : "Discharging";
+  const batteryLabel = current.battery_w > 0 ? "Discharging" : "Charging";
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

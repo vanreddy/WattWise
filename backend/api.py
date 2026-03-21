@@ -241,6 +241,43 @@ async def hourly(
     return results
 
 
+@router.get("/intervals")
+async def intervals(
+    request: Request,
+    day: date = Query(alias="date", default=None),
+):
+    """Raw 5-min interval data for a single day (no aggregation)."""
+    pool = request.app.state.pool
+    if not day:
+        day = datetime.now(LOCAL_TZ).date()
+
+    start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
+
+    rows = await pool.fetch(
+        """
+        SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
+        FROM tesla_intervals
+        WHERE ts >= $1 AND ts < $2
+        ORDER BY ts
+        """,
+        start, end,
+    )
+
+    return [
+        {
+            "ts": row["ts"].astimezone(LOCAL_TZ).isoformat(),
+            "solar_w": round(row["solar_w"] or 0, 0),
+            "home_w": round(row["home_w"] or 0, 0),
+            "grid_w": round(row["grid_w"] or 0, 0),
+            "battery_w": round(row["battery_w"] or 0, 0),
+            "battery_pct": round(row["battery_pct"] or 0, 1),
+            "vehicle_w": round(row["vehicle_w"] or 0, 0),
+        }
+        for row in rows
+    ]
+
+
 def _fetch_tesla_calendar_history(end_date_iso: str) -> dict:
     """Synchronous Tesla API call — returns calendar_history energy data."""
     from backend.poller import _get_tesla_client
