@@ -14,6 +14,8 @@ import logging
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from uuid import UUID
+
 import asyncpg
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -36,22 +38,33 @@ ACTION_MIN_DAYS = 3           # pattern must hold 3+ of last 7 days
 ACTION_MIN_MONTHLY_SAVING = 5  # estimated saving > $5/month
 
 
-async def aggregate_day(pool: asyncpg.Pool, day: date) -> dict:
+async def aggregate_day(pool: asyncpg.Pool, day: date, account_id: UUID | None = None) -> dict:
     """Aggregate tesla_intervals for a single day into a summary dict."""
 
     # Fetch all intervals for the day (in Pacific time)
     start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
     end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
 
-    rows = await pool.fetch(
-        """
-        SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
-        FROM tesla_intervals
-        WHERE ts >= $1 AND ts < $2
-        ORDER BY ts
-        """,
-        start, end,
-    )
+    if account_id:
+        rows = await pool.fetch(
+            """
+            SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
+            FROM tesla_intervals
+            WHERE account_id = $1 AND ts >= $2 AND ts < $3
+            ORDER BY ts
+            """,
+            account_id, start, end,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
+            FROM tesla_intervals
+            WHERE ts >= $1 AND ts < $2
+            ORDER BY ts
+            """,
+            start, end,
+        )
 
     if not rows:
         logger.warning("No data for %s", day)
@@ -163,7 +176,7 @@ async def aggregate_day(pool: asyncpg.Pool, day: date) -> dict:
     return summary
 
 
-async def save_summary(pool: asyncpg.Pool, summary: dict) -> None:
+async def save_summary(pool: asyncpg.Pool, summary: dict, account_id: UUID | None = None) -> None:
     """Upsert a daily summary row."""
     await pool.execute(
         """
@@ -173,11 +186,11 @@ async def save_summary(pool: asyncpg.Pool, summary: dict) -> None:
             off_peak_import_kwh, peak_cost, part_peak_cost, off_peak_cost,
             total_cost, export_credit, ev_kwh, ev_peak_kwh, ev_off_peak_kwh,
             ev_cost, battery_peak_coverage_pct, battery_depletion_hour,
-            context_narrative, actions_json
+            context_narrative, actions_json, account_id
         ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
         )
-        ON CONFLICT (day) DO UPDATE SET
+        ON CONFLICT (account_id, day) DO UPDATE SET
             total_import_kwh = EXCLUDED.total_import_kwh,
             total_export_kwh = EXCLUDED.total_export_kwh,
             solar_generated_kwh = EXCLUDED.solar_generated_kwh,
@@ -220,26 +233,36 @@ async def save_summary(pool: asyncpg.Pool, summary: dict) -> None:
         summary["battery_depletion_hour"],
         summary.get("context_narrative"),
         json.dumps(summary.get("actions", [])),
+        account_id,
     )
 
 
 # --- Action rules ---
 
 
-async def evaluate_actions(pool: asyncpg.Pool, target_day: date) -> list[str]:
+async def evaluate_actions(pool: asyncpg.Pool, target_day: date, account_id: UUID | None = None) -> list[str]:
     """
     Evaluate action rules against the last 7 days of summaries.
     Returns list of action strings to include in the report.
     """
-    rows = await pool.fetch(
-        """
-        SELECT * FROM daily_summaries
-        WHERE day > $1 AND day <= $2
-        ORDER BY day
-        """,
-        target_day - timedelta(days=7),
-        target_day,
-    )
+    if account_id:
+        rows = await pool.fetch(
+            """
+            SELECT * FROM daily_summaries
+            WHERE account_id = $1 AND day > $2 AND day <= $3
+            ORDER BY day
+            """,
+            account_id, target_day - timedelta(days=7), target_day,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT * FROM daily_summaries
+            WHERE day > $1 AND day <= $2
+            ORDER BY day
+            """,
+            target_day - timedelta(days=7), target_day,
+        )
 
     if len(rows) < 3:
         return []
@@ -367,14 +390,20 @@ def pick_context_narrative(summary: dict) -> str:
 # --- Month-to-date ---
 
 
-async def get_mtd(pool: asyncpg.Pool, target_day: date) -> dict:
+async def get_mtd(pool: asyncpg.Pool, target_day: date, account_id: UUID | None = None) -> dict:
     """Get month-to-date cost and comparison to prior month same day."""
     first_of_month = target_day.replace(day=1)
 
-    mtd = await pool.fetchrow(
-        "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE day >= $1 AND day <= $2",
-        first_of_month, target_day,
-    )
+    if account_id:
+        mtd = await pool.fetchrow(
+            "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE account_id = $1 AND day >= $2 AND day <= $3",
+            account_id, first_of_month, target_day,
+        )
+    else:
+        mtd = await pool.fetchrow(
+            "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE day >= $1 AND day <= $2",
+            first_of_month, target_day,
+        )
 
     # Prior month same period
     if first_of_month.month == 1:
@@ -384,10 +413,16 @@ async def get_mtd(pool: asyncpg.Pool, target_day: date) -> dict:
     prior_day = min(target_day.day, 28)  # safe for all months
     prior_end = prior_first.replace(day=prior_day)
 
-    prior_mtd = await pool.fetchrow(
-        "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE day >= $1 AND day <= $2",
-        prior_first, prior_end,
-    )
+    if account_id:
+        prior_mtd = await pool.fetchrow(
+            "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE account_id = $1 AND day >= $2 AND day <= $3",
+            account_id, prior_first, prior_end,
+        )
+    else:
+        prior_mtd = await pool.fetchrow(
+            "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE day >= $1 AND day <= $2",
+            prior_first, prior_end,
+        )
 
     mtd_cost = float(mtd["cost"])
     prior_cost = float(prior_mtd["cost"])
@@ -404,24 +439,21 @@ async def get_mtd(pool: asyncpg.Pool, target_day: date) -> dict:
 # --- Main job entry point ---
 
 
-async def run_daily_aggregation(pool: asyncpg.Pool) -> None:
-    """Full daily job: aggregate, evaluate, report."""
-    yesterday = date.today() - timedelta(days=1)
-    logger.info("Running daily aggregation for %s", yesterday)
-
-    summary = await aggregate_day(pool, yesterday)
+async def _run_daily_for_account(pool: asyncpg.Pool, yesterday: date, account_id: UUID | None = None) -> None:
+    """Run daily aggregation for a single account."""
+    summary = await aggregate_day(pool, yesterday, account_id=account_id)
     if not summary:
-        logger.warning("No data to aggregate for %s", yesterday)
+        logger.warning("No data to aggregate for %s (account=%s)", yesterday, account_id)
         return
 
-    actions = await evaluate_actions(pool, yesterday)
+    actions = await evaluate_actions(pool, yesterday, account_id=account_id)
     summary["actions"] = actions
     summary["context_narrative"] = pick_context_narrative(summary)
 
-    await save_summary(pool, summary)
+    await save_summary(pool, summary, account_id=account_id)
 
     # Build report data
-    mtd = await get_mtd(pool, yesterday)
+    mtd = await get_mtd(pool, yesterday, account_id=account_id)
     report_data = {
         "date": yesterday.isoformat(),
         "actions": actions if actions else None,
@@ -444,18 +476,36 @@ async def run_daily_aggregation(pool: asyncpg.Pool) -> None:
         **mtd,
     }
 
-    await send_daily_report(report_data)
+    await send_daily_report(report_data, pool=pool, account_id=account_id)
 
     # Log the report
     await pool.execute(
         """
-        INSERT INTO reports_log (report_type, covers_from, covers_to, subject, body_html, metadata)
-        VALUES ('daily', $1, $1, $2, $3, $4)
+        INSERT INTO reports_log (report_type, covers_from, covers_to, subject, body_html, metadata, account_id)
+        VALUES ('daily', $1, $1, $2, $3, $4, $5)
         """,
         yesterday,
         f"WattWise Daily — {yesterday.isoformat()}",
-        "(see email)",
+        "(see Telegram)",
         json.dumps({"total_cost": summary["total_cost"]}),
+        account_id,
     )
 
-    logger.info("Daily report sent for %s — cost=$%.2f", yesterday, summary["total_cost"])
+    logger.info("Daily report sent for %s (account=%s) — cost=$%.2f", yesterday, account_id, summary["total_cost"])
+
+
+async def run_daily_aggregation(pool: asyncpg.Pool) -> None:
+    """Full daily job: aggregate, evaluate, report for all accounts."""
+    yesterday = date.today() - timedelta(days=1)
+    logger.info("Running daily aggregation for %s", yesterday)
+
+    accounts = await pool.fetch("SELECT id FROM accounts")
+    if accounts:
+        for acct in accounts:
+            try:
+                await _run_daily_for_account(pool, yesterday, acct["id"])
+            except Exception:
+                logger.exception("Error in daily aggregation for account %s", acct["id"])
+    else:
+        # Legacy single-tenant fallback
+        await _run_daily_for_account(pool, yesterday)

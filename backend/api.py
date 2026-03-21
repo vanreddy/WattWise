@@ -12,9 +12,14 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Optional
 
 from zoneinfo import ZoneInfo
-from fastapi import APIRouter, Query, Request
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, Request
+
+from backend.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +34,15 @@ INTERVAL_HOURS = 5 / 60  # 5-minute interval
 
 
 @router.get("/summary")
-async def summary(request: Request):
+async def summary(request: Request, user: dict = Depends(get_current_user)):
     """Real-time snapshot: latest readings + today's running totals."""
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
 
     # Latest interval
     latest = await pool.fetchrow(
-        "SELECT * FROM tesla_intervals ORDER BY ts DESC LIMIT 1"
+        "SELECT * FROM tesla_intervals WHERE account_id = $1 ORDER BY ts DESC LIMIT 1",
+        account_id,
     )
 
     # Today's running totals (Pacific time)
@@ -45,9 +52,9 @@ async def summary(request: Request):
     today_rows = await pool.fetch(
         """
         SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
-        FROM tesla_intervals WHERE ts >= $1 ORDER BY ts
+        FROM tesla_intervals WHERE account_id = $1 AND ts >= $2 ORDER BY ts
         """,
-        today_start,
+        account_id, today_start,
     )
 
     total_import_kwh = 0.0
@@ -109,6 +116,7 @@ async def daily(
     request: Request,
     start: date = Query(default=None, alias="from"),
     end: date = Query(default=None, alias="to"),
+    user: dict = Depends(get_current_user),
 ):
     """Daily summaries for a date range. Default: last 30 days.
 
@@ -116,6 +124,7 @@ async def daily(
     is appended (since the nightly aggregator hasn't run yet).
     """
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
     today_local = datetime.now(LOCAL_TZ).date()
 
     if not end:
@@ -132,10 +141,10 @@ async def daily(
                ev_cost, battery_peak_coverage_pct, battery_depletion_hour,
                context_narrative, actions_json
         FROM daily_summaries
-        WHERE day >= $1 AND day <= $2
+        WHERE account_id = $1 AND day >= $2 AND day <= $3
         ORDER BY day DESC
         """,
-        start, end,
+        account_id, start, end,
     )
 
     results = [
@@ -151,7 +160,7 @@ async def daily(
     if start <= today_local <= end:
         already_has_today = any(r["day"] == today_local.isoformat() for r in results)
         if not already_has_today:
-            live_summary = await aggregate_day(pool, today_local)
+            live_summary = await aggregate_day(pool, today_local, account_id=account_id)
             if live_summary:
                 results.insert(0, {
                     "day": today_local.isoformat(),
@@ -184,9 +193,11 @@ async def daily(
 async def hourly(
     request: Request,
     day: date = Query(alias="date", default=None),
+    user: dict = Depends(get_current_user),
 ):
     """Hourly aggregates from tesla_intervals for a single day."""
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
     if not day:
         day = datetime.now(LOCAL_TZ).date()
 
@@ -203,19 +214,18 @@ async def hourly(
             AVG(battery_w) AS battery_w_avg,
             AVG(battery_pct) AS battery_pct_avg,
             AVG(vehicle_w) AS vehicle_w_avg,
-            -- Per-interval energy sums (avoids within-hour sign cancellation)
-            SUM(GREATEST(solar_w, 0) * $3 / 1000) AS solar_kwh,
-            SUM(GREATEST(grid_w, 0) * $3 / 1000) AS grid_import_kwh,
-            SUM(GREATEST(-grid_w, 0) * $3 / 1000) AS grid_export_kwh,
-            SUM(GREATEST(battery_w, 0) * $3 / 1000) AS battery_discharge_kwh,
-            SUM(GREATEST(-battery_w, 0) * $3 / 1000) AS battery_charge_kwh,
-            SUM(GREATEST(home_w, 0) * $3 / 1000) AS home_kwh
+            SUM(GREATEST(solar_w, 0) * $4 / 1000) AS solar_kwh,
+            SUM(GREATEST(grid_w, 0) * $4 / 1000) AS grid_import_kwh,
+            SUM(GREATEST(-grid_w, 0) * $4 / 1000) AS grid_export_kwh,
+            SUM(GREATEST(battery_w, 0) * $4 / 1000) AS battery_discharge_kwh,
+            SUM(GREATEST(-battery_w, 0) * $4 / 1000) AS battery_charge_kwh,
+            SUM(GREATEST(home_w, 0) * $4 / 1000) AS home_kwh
         FROM tesla_intervals
-        WHERE ts >= $1 AND ts < $2
+        WHERE account_id = $1 AND ts >= $2 AND ts < $3
         GROUP BY hour
         ORDER BY hour
         """,
-        start, end, INTERVAL_HOURS,
+        account_id, start, end, INTERVAL_HOURS,
     )
 
     results = []
@@ -245,9 +255,11 @@ async def hourly(
 async def intervals(
     request: Request,
     day: date = Query(alias="date", default=None),
+    user: dict = Depends(get_current_user),
 ):
     """Raw 5-min interval data for a single day (no aggregation)."""
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
     if not day:
         day = datetime.now(LOCAL_TZ).date()
 
@@ -258,10 +270,10 @@ async def intervals(
         """
         SELECT ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w
         FROM tesla_intervals
-        WHERE ts >= $1 AND ts < $2
+        WHERE account_id = $1 AND ts >= $2 AND ts < $3
         ORDER BY ts
         """,
-        start, end,
+        account_id, start, end,
     )
 
     return [
@@ -319,12 +331,14 @@ def _sum_tesla_flows(series: list[dict]) -> dict[str, float]:
 @router.get("/sankey")
 async def sankey(
     request: Request,
-    date_param: str | None = Query(default=None, alias="date"),
-    from_date: str | None = Query(default=None, alias="from"),
-    to_date: str | None = Query(default=None, alias="to"),
+    date_param: Optional[str] = Query(default=None, alias="date"),
+    from_date: Optional[str] = Query(default=None, alias="from"),
+    to_date: Optional[str] = Query(default=None, alias="to"),
+    user: dict = Depends(get_current_user),
 ):
     """Sankey flow allocations from Tesla metered energy data."""
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
     today = datetime.now(LOCAL_TZ).date()
 
     if date_param:
@@ -356,7 +370,7 @@ async def sankey(
         logger.info("Sankey: used Tesla metered data for %s to %s", start_day, end_day)
     except Exception:
         logger.exception("Tesla calendar_history failed, falling back to polled data")
-        flows = await _sankey_from_polled(pool, start_day, end_day + timedelta(days=1))
+        flows = await _sankey_from_polled(pool, start_day, end_day + timedelta(days=1), account_id)
 
     return {
         "flows": {k: round(v, 2) for k, v in flows.items()},
@@ -365,20 +379,31 @@ async def sankey(
     }
 
 
-async def _sankey_from_polled(pool, start_day: date, end_day: date) -> dict[str, float]:
+async def _sankey_from_polled(pool, start_day: date, end_day: date, account_id: Optional[UUID] = None) -> dict:
     """Fallback: compute Sankey flows from polled tesla_intervals data."""
     start = datetime.combine(start_day, time.min, tzinfo=LOCAL_TZ)
     end = datetime.combine(end_day, time.min, tzinfo=LOCAL_TZ)
 
-    rows = await pool.fetch(
-        """
-        SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
-        FROM tesla_intervals
-        WHERE ts >= $1 AND ts < $2
-        ORDER BY ts
-        """,
-        start, end,
-    )
+    if account_id:
+        rows = await pool.fetch(
+            """
+            SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
+            FROM tesla_intervals
+            WHERE account_id = $1 AND ts >= $2 AND ts < $3
+            ORDER BY ts
+            """,
+            account_id, start, end,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
+            FROM tesla_intervals
+            WHERE ts >= $1 AND ts < $2
+            ORDER BY ts
+            """,
+            start, end,
+        )
 
     flows = {
         "solar_to_home": 0.0,
@@ -428,29 +453,32 @@ async def _sankey_from_polled(pool, start_day: date, end_day: date) -> dict[str,
 async def alerts(
     request: Request,
     limit: int = Query(default=50, le=200),
-    alert_type: str | None = Query(default=None, alias="type"),
+    alert_type: Optional[str] = Query(default=None, alias="type"),
+    user: dict = Depends(get_current_user),
 ):
     """Alert history, newest first."""
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
 
     if alert_type:
         rows = await pool.fetch(
             """
             SELECT id, fired_at, alert_type, message, metadata
             FROM alerts_log
-            WHERE alert_type = $1
-            ORDER BY fired_at DESC LIMIT $2
+            WHERE account_id = $1 AND alert_type = $2
+            ORDER BY fired_at DESC LIMIT $3
             """,
-            alert_type, limit,
+            account_id, alert_type, limit,
         )
     else:
         rows = await pool.fetch(
             """
             SELECT id, fired_at, alert_type, message, metadata
             FROM alerts_log
-            ORDER BY fired_at DESC LIMIT $1
+            WHERE account_id = $1
+            ORDER BY fired_at DESC LIMIT $2
             """,
-            limit,
+            account_id, limit,
         )
 
     return [
@@ -468,30 +496,33 @@ async def alerts(
 @router.get("/reports")
 async def reports(
     request: Request,
-    report_type: str | None = Query(default=None, alias="type"),
+    report_type: Optional[str] = Query(default=None, alias="type"),
     limit: int = Query(default=10, le=50),
+    user: dict = Depends(get_current_user),
 ):
     """Report history."""
     pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
 
     if report_type:
         rows = await pool.fetch(
             """
             SELECT id, sent_at, report_type, covers_from, covers_to, subject, metadata
             FROM reports_log
-            WHERE report_type = $1
-            ORDER BY sent_at DESC LIMIT $2
+            WHERE account_id = $1 AND report_type = $2
+            ORDER BY sent_at DESC LIMIT $3
             """,
-            report_type, limit,
+            account_id, report_type, limit,
         )
     else:
         rows = await pool.fetch(
             """
             SELECT id, sent_at, report_type, covers_from, covers_to, subject, metadata
             FROM reports_log
-            ORDER BY sent_at DESC LIMIT $1
+            WHERE account_id = $1
+            ORDER BY sent_at DESC LIMIT $2
             """,
-            limit,
+            account_id, limit,
         )
 
     return [

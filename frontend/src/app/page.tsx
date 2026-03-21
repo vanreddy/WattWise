@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import {
   api,
   type SummaryResponse,
@@ -38,6 +39,7 @@ function defaultRange(): DateRange {
 }
 
 export default function Dashboard() {
+  const { user, isLoading: authLoading } = useAuth();
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [daily, setDaily] = useState<DailySummary[]>([]);
   const [hourly, setHourly] = useState<HourlyBucket[]>([]);
@@ -126,6 +128,20 @@ export default function Dashboard() {
   const handleRangeChange = (range: DateRange) => {
     setDateRange(range);
   };
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      window.location.href = "/login";
+    }
+  }, [authLoading, user]);
+
+  if (authLoading || !user) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-gray-400">Loading...</p>
+      </div>
+    );
+  }
 
   if (error && !summary) {
     return (

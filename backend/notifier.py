@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 """
-Email notifications via Resend.
+Telegram notifications via Bot API.
+
+Multi-tenant: sends to all users on an account who have linked their Telegram.
+Global bot token (@watt_wise_bot), per-user chat IDs from `users` table.
 
 Three message types:
   - Real-time solar surplus alert
@@ -11,188 +14,120 @@ Three message types:
 
 import logging
 import os
+from uuid import UUID
 
-import resend
+import httpx
 
 logger = logging.getLogger(__name__)
 
-
-def _init():
-    resend.api_key = os.environ["RESEND_API_KEY"]
+TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 
 
-def _send(subject: str, html: str) -> None:
-    _init()
-    params = {
-        "from": os.environ["RESEND_FROM_EMAIL"],
-        "to": [os.environ["REPORT_RECIPIENT_EMAIL"]],
-        "subject": subject,
-        "html": html,
-    }
-    resp = resend.Emails.send(params)
-    logger.info("Email sent: subject=%r id=%s", subject, resp.get("id"))
+async def _get_account_chat_ids(pool, account_id: UUID) -> list[str]:
+    """Get all Telegram chat IDs for users on this account."""
+    rows = await pool.fetch(
+        "SELECT telegram_chat_id FROM users WHERE account_id = $1 AND telegram_chat_id IS NOT NULL",
+        account_id,
+    )
+    return [row["telegram_chat_id"] for row in rows]
 
 
-# --- Templates ---
+def _send_to_chat(text: str, chat_id: str) -> None:
+    """Send a message to a single Telegram chat ID."""
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    url = TELEGRAM_API.format(token=token)
+    resp = httpx.post(
+        url,
+        json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        logger.error("Telegram send failed (chat_id=%s): %s %s", chat_id, resp.status_code, resp.text)
+    else:
+        logger.info("Telegram message sent to %s: %s chars", chat_id, len(text))
 
-ALERT_TEMPLATE = """\
-<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #f59e0b; color: white; padding: 16px 24px; border-radius: 8px 8px 0 0;">
-    <h2 style="margin: 0;">⚡ WattWise Alert</h2>
-  </div>
-  <div style="background: #fffbeb; padding: 24px; border: 1px solid #f59e0b; border-top: none; border-radius: 0 0 8px 8px;">
-    <p style="font-size: 16px; line-height: 1.6; margin: 0;">{message}</p>
-  </div>
-</div>
-"""
 
-DAILY_TEMPLATE = """\
-<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #2563eb; color: white; padding: 16px 24px; border-radius: 8px 8px 0 0;">
-    <h2 style="margin: 0;">📊 Daily Energy Report — {date}</h2>
-  </div>
-  <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
-    {actions_section}
-    <div style="margin-bottom: 20px;">
-      <h3 style="color: #334155; margin: 0 0 8px;">Context</h3>
-      <p style="font-size: 15px; line-height: 1.6; color: #475569; margin: 0;">{context}</p>
-    </div>
-    <div>
-      <h3 style="color: #334155; margin: 0 0 12px;">Numbers</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Grid Import</td>
-          <td style="padding: 8px 0; text-align: right; font-weight: 600;">{total_import_kwh:.1f} kWh — ${total_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">  Peak</td>
-          <td style="padding: 8px 0; text-align: right;">{peak_kwh:.1f} kWh — ${peak_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">  Part Peak</td>
-          <td style="padding: 8px 0; text-align: right;">{part_peak_kwh:.1f} kWh — ${part_peak_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">  Off Peak</td>
-          <td style="padding: 8px 0; text-align: right;">{off_peak_kwh:.1f} kWh — ${off_peak_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">EV Charging</td>
-          <td style="padding: 8px 0; text-align: right;">{ev_kwh:.1f} kWh — ${ev_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Powerwall Peak Coverage</td>
-          <td style="padding: 8px 0; text-align: right;">{battery_coverage:.0f}%</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Solar Generated</td>
-          <td style="padding: 8px 0; text-align: right;">{solar_generated_kwh:.1f} kWh</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Solar Self-Consumed</td>
-          <td style="padding: 8px 0; text-align: right;">{solar_self_consumed_kwh:.1f} kWh</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Solar Exported</td>
-          <td style="padding: 8px 0; text-align: right;">{solar_exported_kwh:.1f} kWh — ${export_credit:.2f} credit</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0; color: #64748b;">Month-to-Date</td>
-          <td style="padding: 8px 0; text-align: right; font-weight: 600;">${mtd_cost:.2f} {mtd_vs_prior}</td>
-        </tr>
-      </table>
-    </div>
-  </div>
-</div>
-"""
+async def _send(text: str, pool=None, account_id: UUID | None = None) -> None:
+    """Send message to all linked Telegram users for an account."""
+    if pool and account_id:
+        chat_ids = await _get_account_chat_ids(pool, account_id)
+        if not chat_ids:
+            logger.warning("No Telegram chat IDs for account %s", account_id)
+            return
+        for cid in chat_ids:
+            _send_to_chat(text, cid)
+    else:
+        # Legacy fallback: use env var
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+        if chat_id:
+            _send_to_chat(text, chat_id)
+        else:
+            logger.warning("No TELEGRAM_CHAT_ID configured and no account context")
 
-WEEKLY_TEMPLATE = """\
-<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #7c3aed; color: white; padding: 16px 24px; border-radius: 8px 8px 0 0;">
-    <h2 style="margin: 0;">📈 Weekly Energy Report — {week_label}</h2>
-  </div>
-  <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
-    {actions_section}
-    <div style="margin-bottom: 20px;">
-      <h3 style="color: #334155; margin: 0 0 8px;">This Week</h3>
-      <p style="font-size: 15px; line-height: 1.6; color: #475569; margin: 0;">{ai_narrative}</p>
-    </div>
-    <div>
-      <h3 style="color: #334155; margin: 0 0 12px;">Numbers</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Grid Import</td>
-          <td style="padding: 8px 0; text-align: right; font-weight: 600;">{total_import_kwh:.1f} kWh — ${total_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">  Peak</td>
-          <td style="padding: 8px 0; text-align: right;">{peak_kwh:.1f} kWh — ${peak_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">  Off Peak</td>
-          <td style="padding: 8px 0; text-align: right;">{off_peak_kwh:.1f} kWh — ${off_peak_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">EV Charging</td>
-          <td style="padding: 8px 0; text-align: right;">{ev_kwh:.1f} kWh — ${ev_cost:.2f}</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Powerwall Peak Coverage</td>
-          <td style="padding: 8px 0; text-align: right;">{battery_coverage:.0f}%</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Solar Generated</td>
-          <td style="padding: 8px 0; text-align: right;">{solar_generated_kwh:.1f} kWh</td>
-        </tr>
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 8px 0; color: #64748b;">Solar Self-Consumed / Exported</td>
-          <td style="padding: 8px 0; text-align: right;">{solar_self_consumed_kwh:.1f} / {solar_exported_kwh:.1f} kWh</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0; color: #64748b;">Week-over-Week</td>
-          <td style="padding: 8px 0; text-align: right; font-weight: 600;">${total_cost:.2f} {wow_change}</td>
-        </tr>
-      </table>
-    </div>
-  </div>
-</div>
-"""
+
+# --- Formatters ---
 
 
 def _format_actions(actions: list[str] | None) -> str:
     if not actions:
         return ""
-    items = "".join(
-        f'<li style="margin-bottom: 6px; color: #b91c1c;">{a}</li>'
-        for a in actions
-    )
-    return (
-        '<div style="margin-bottom: 20px;">'
-        '<h3 style="color: #dc2626; margin: 0 0 8px;">🔴 Actions</h3>'
-        f'<ul style="margin: 0; padding-left: 20px;">{items}</ul>'
-        "</div>"
-    )
+    items = "\n".join(f"  • {a}" for a in actions)
+    return f"\n🔴 <b>Actions</b>\n{items}\n"
 
 
 # --- Public API ---
 
 
-async def send_alert(subject: str, message: str) -> None:
-    html = ALERT_TEMPLATE.format(message=message)
-    _send(subject, html)
+async def send_alert(subject: str, message: str, pool=None, account_id: UUID | None = None) -> None:
+    text = f"⚡ <b>WattWise Alert</b>\n\n{message}"
+    await _send(text, pool=pool, account_id=account_id)
 
 
-async def send_daily_report(data: dict) -> None:
-    data["actions_section"] = _format_actions(data.get("actions"))
+async def send_daily_report(data: dict, pool=None, account_id: UUID | None = None) -> None:
     data.setdefault("mtd_vs_prior", "")
-    html = DAILY_TEMPLATE.format(**data)
-    subject = f"WattWise Daily — {data['date']}"
-    _send(subject, html)
+    actions = _format_actions(data.get("actions"))
+
+    text = (
+        f"📊 <b>Daily Energy Report — {data['date']}</b>\n"
+        f"{actions}\n"
+        f"<b>Context</b>\n"
+        f"{data['context']}\n\n"
+        f"<b>Numbers</b>\n"
+        f"<pre>"
+        f"Grid Import     {data['total_import_kwh']:5.1f} kWh  ${data['total_cost']:.2f}\n"
+        f"  Peak          {data['peak_kwh']:5.1f} kWh  ${data['peak_cost']:.2f}\n"
+        f"  Part Peak     {data['part_peak_kwh']:5.1f} kWh  ${data['part_peak_cost']:.2f}\n"
+        f"  Off Peak      {data['off_peak_kwh']:5.1f} kWh  ${data['off_peak_cost']:.2f}\n"
+        f"EV Charging     {data['ev_kwh']:5.1f} kWh  ${data['ev_cost']:.2f}\n"
+        f"PW Coverage     {data['battery_coverage']:4.0f}%\n"
+        f"Solar Gen       {data['solar_generated_kwh']:5.1f} kWh\n"
+        f"Solar Self-Use  {data['solar_self_consumed_kwh']:5.1f} kWh\n"
+        f"Solar Export    {data['solar_exported_kwh']:5.1f} kWh  ${data['export_credit']:.2f} cr\n"
+        f"Month-to-Date          ${data['mtd_cost']:.2f} {data['mtd_vs_prior']}"
+        f"</pre>"
+    )
+    await _send(text, pool=pool, account_id=account_id)
 
 
-async def send_weekly_report(data: dict) -> None:
-    data["actions_section"] = _format_actions(data.get("actions"))
+async def send_weekly_report(data: dict, pool=None, account_id: UUID | None = None) -> None:
     data.setdefault("wow_change", "")
-    html = WEEKLY_TEMPLATE.format(**data)
-    subject = f"WattWise Weekly — {data['week_label']}"
-    _send(subject, html)
+    actions = _format_actions(data.get("actions"))
+
+    text = (
+        f"📈 <b>Weekly Energy Report — {data['week_label']}</b>\n"
+        f"{actions}\n"
+        f"<b>This Week</b>\n"
+        f"{data['ai_narrative']}\n\n"
+        f"<b>Numbers</b>\n"
+        f"<pre>"
+        f"Grid Import     {data['total_import_kwh']:5.1f} kWh  ${data['total_cost']:.2f}\n"
+        f"  Peak          {data['peak_kwh']:5.1f} kWh  ${data['peak_cost']:.2f}\n"
+        f"  Off Peak      {data['off_peak_kwh']:5.1f} kWh  ${data['off_peak_cost']:.2f}\n"
+        f"EV Charging     {data['ev_kwh']:5.1f} kWh  ${data['ev_cost']:.2f}\n"
+        f"PW Coverage     {data['battery_coverage']:4.0f}%\n"
+        f"Solar Gen       {data['solar_generated_kwh']:5.1f} kWh\n"
+        f"Solar Self/Exp  {data['solar_self_consumed_kwh']:5.1f} / {data['solar_exported_kwh']:.1f} kWh\n"
+        f"Week-over-Week         ${data['total_cost']:.2f} {data['wow_change']}"
+        f"</pre>"
+    )
+    await _send(text, pool=pool, account_id=account_id)

@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
+from backend.auth_api import router as auth_router
 from backend.poller import poll_and_check, _load_cache_from_db
 from backend.weekly_summary import run_weekly_summary
 
@@ -78,10 +79,11 @@ app = FastAPI(title="WattWise", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "PUT"],
     allow_headers=["*"],
 )
 app.include_router(api_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")
