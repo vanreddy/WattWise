@@ -7,6 +7,7 @@ import {
   type DailySummary,
   type HourlyBucket,
   type Alert,
+  type SankeyFlows,
 } from "@/lib/api";
 import {
   mockSummary,
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const [daily, setDaily] = useState<DailySummary[]>([]);
   const [hourly, setHourly] = useState<HourlyBucket[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [sankeyFlows, setSankeyFlows] = useState<SankeyFlows | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>(defaultRange);
@@ -81,6 +83,17 @@ export default function Dashboard() {
       setDaily(d);
     } catch {
       setDaily(mockDaily);
+    }
+
+    try {
+      const sankey = await api.getSankey(
+        range.days === 1 ? range.from : undefined,
+        range.days > 1 ? range.from : undefined,
+        range.days > 1 ? range.to : undefined,
+      );
+      setSankeyFlows(sankey.flows);
+    } catch {
+      setSankeyFlows(null);
     }
   }, []);
 
@@ -153,7 +166,7 @@ export default function Dashboard() {
       <HourlyChart data={hourly} days={dateRange.days} />
 
       {/* Sankey energy flow */}
-      <SankeyChart hourlyData={hourly} dailyData={daily} days={dateRange.days} />
+      <SankeyChart hourlyData={hourly} dailyData={daily} days={dateRange.days} sankeyFlows={sankeyFlows} />
 
       {/* Cost Waterfall + Alerts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

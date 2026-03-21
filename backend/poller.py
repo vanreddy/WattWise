@@ -144,8 +144,9 @@ async def poll_once(pool: asyncpg.Pool) -> dict | None:
     battery_w = float(status.get("battery_power", 0))
     battery_pct = float(status.get("percentage_charged", 0))
 
-    # Tesla may report vehicle charging separately — default to 0
-    vehicle_w = float(status.get("vehicle_power", 0))
+    # Read EV charging power from Wall Connector hardware (works for non-Tesla EVs)
+    wc_list = status.get("wall_connectors", [])
+    vehicle_w = sum(float(wc.get("wall_connector_power", 0)) for wc in wc_list)
 
     await pool.execute(
         """

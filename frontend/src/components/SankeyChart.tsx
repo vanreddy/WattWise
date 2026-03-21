@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { GitBranch } from "lucide-react";
-import type { HourlyBucket, DailySummary } from "@/lib/api";
+import type { HourlyBucket, DailySummary, SankeyFlows } from "@/lib/api";
 
 interface Flow {
   from: string;
@@ -156,6 +156,21 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
   addFlow("Grid Import", "EV", gridToEv, "#f87171");
 
   return flows;
+}
+
+function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
+  const mapping: [keyof SankeyFlows, string, string, string][] = [
+    ["solar_to_home", "Solar", "Home", "#facc15"],
+    ["solar_to_battery", "Solar", "Battery", "#facc15"],
+    ["solar_to_grid", "Solar", "Grid Export", "#facc15"],
+    ["battery_to_home", "Powerwall", "Home", "#34d399"],
+    ["battery_to_grid", "Powerwall", "Grid Export", "#34d399"],
+    ["grid_to_home", "Grid Import", "Home", "#f87171"],
+    ["grid_to_battery", "Grid Import", "Battery", "#f87171"],
+  ];
+  return mapping
+    .filter(([key]) => sf[key] >= 0.01)
+    .map(([key, from, to, color]) => ({ from, to, value: sf[key], color }));
 }
 
 function renderSankey(flows: Flow[]) {
@@ -313,9 +328,10 @@ interface Props {
   hourlyData: HourlyBucket[];
   dailyData: DailySummary[];
   days: number;
+  sankeyFlows?: SankeyFlows | null;
 }
 
-export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
+export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }: Props) {
   // Compute total energy from RAW data (same formula as HourlyChart) so numbers match
   const totalEnergy = useMemo(() => {
     if (hourlyData.length > 0) {
@@ -332,7 +348,11 @@ export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
   }, [hourlyData, dailyData]);
 
   const flows = useMemo(() => {
-    // Use hourly data for accuracy when available, fall back to daily
+    // Prefer server-computed 5-min interval flows (most accurate)
+    if (sankeyFlows) {
+      return convertSankeyFlowsToFlows(sankeyFlows);
+    }
+    // Fallback: client-side computation from hourly or daily data
     if (hourlyData.length > 0) {
       return computeFlowsFromHourly(hourlyData);
     }
@@ -340,7 +360,7 @@ export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
       return computeFlowsFromDaily(dailyData);
     }
     return [];
-  }, [hourlyData, dailyData]);
+  }, [sankeyFlows, hourlyData, dailyData]);
 
   const title = days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
 
