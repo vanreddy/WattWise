@@ -72,6 +72,16 @@ interface Props {
 }
 
 export default function HourlyChart({ data, days = 1 }: Props) {
+  // Compute totals from RAW data (before rounding) so sources always equals consumption
+  const totalEnergy = useMemo(() => {
+    let total = 0;
+    for (const d of data) {
+      // Sum source side: solar + grid_import + battery_discharge
+      total += (Math.max(0, d.solar_w_avg) + Math.max(0, d.grid_w_avg) + Math.max(0, d.battery_w_avg)) / 1000;
+    }
+    return total;
+  }, [data]);
+
   const { chartData, yMax, isMultiDay } = useMemo(() => {
     const multiDay = days > 1;
 
@@ -176,6 +186,8 @@ export default function HourlyChart({ data, days = 1 }: Props) {
 
   const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
 
+  const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
+
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
       <div className="flex justify-between items-center mb-3">
@@ -183,15 +195,21 @@ export default function HourlyChart({ data, days = 1 }: Props) {
           <Activity size={14} className="text-cyan-400" />
           {title}
         </h2>
-        <div className="flex gap-4 text-[10px] text-gray-500">
-          <span>↑ Sources</span>
-          <span>↓ Consumption</span>
+        <div className="flex gap-4 text-[10px]">
+          <span className="text-emerald-400">↑ Sources: {fmtKwh(totalEnergy)}</span>
+          <span className="text-blue-400">↓ Consumption: {fmtKwh(totalEnergy)}</span>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={360}>
-        <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 30, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis dataKey="label" stroke="#6b7280" fontSize={11} />
+          <XAxis
+            dataKey="label"
+            stroke="#6b7280"
+            fontSize={10}
+            interval={2}
+            tick={{ dy: 4 }}
+          />
           <YAxis
             stroke="#6b7280"
             fontSize={11}

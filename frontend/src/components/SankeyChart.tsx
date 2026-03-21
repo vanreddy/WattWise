@@ -81,20 +81,36 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
 
   if (totalSources === 0) return [];
 
-  // Estimate flow allocations proportionally
-  // Solar feeds: home, ev, battery charge, grid export
-  const solarToHome = totalSinks > 0 ? solar * (home / totalSinks) : 0;
-  const solarToEv = totalSinks > 0 ? solar * (ev / totalSinks) : 0;
-  const solarToBattery = Math.min(batChg, solar * (batChg / totalSinks));
-  const solarToGrid = Math.min(exp, solar * (exp / totalSinks));
+  // Allocate flows using a priority model:
+  // 1. Solar self-consumption → home + EV first, then battery charge, then grid export
+  // 2. Battery discharge → home + EV first, then grid export
+  // 3. Grid import → home + EV (covers remaining deficit)
+  const homePlusEv = home + ev;
+  const homeRatio = homePlusEv > 0 ? home / homePlusEv : 0.5;
+  const evRatio = 1 - homeRatio;
 
-  // Grid import feeds: home, ev
-  const gridToHome = totalSinks > 0 ? imp * (home / (home + ev || 1)) : 0;
-  const gridToEv = imp - gridToHome;
+  // Solar allocation: first to home+EV, then battery, then grid
+  const solarToHomePlusEv = Math.min(solar, homePlusEv);
+  const solarToHome = solarToHomePlusEv * homeRatio;
+  const solarToEv = solarToHomePlusEv * evRatio;
+  const solarRemaining = solar - solarToHomePlusEv;
+  const solarToBattery = Math.min(batChg, solarRemaining);
+  const solarToGrid = Math.min(exp, solarRemaining - solarToBattery);
 
-  // Battery discharge feeds: home, ev
-  const batToHome = totalSinks > 0 ? batDis * (home / (home + ev || 1)) : 0;
-  const batToEv = batDis - batToHome;
+  // Battery discharge: feeds remaining home+EV demand, then grid export
+  const remainingHomeDemand = Math.max(0, home - solarToHome);
+  const remainingEvDemand = Math.max(0, ev - solarToEv);
+  const remainingDemand = remainingHomeDemand + remainingEvDemand;
+  const batToHomePlusEv = Math.min(batDis, remainingDemand);
+  const batToHome = remainingDemand > 0 ? batToHomePlusEv * (remainingHomeDemand / remainingDemand) : 0;
+  const batToEv = batToHomePlusEv - batToHome;
+  // Remaining battery discharge goes to grid export
+  const remainingExport = Math.max(0, exp - solarToGrid);
+  const batToGrid = Math.min(batDis - batToHomePlusEv, remainingExport);
+
+  // Grid import: covers whatever is left
+  const gridToHome = Math.max(0, home - solarToHome - batToHome);
+  const gridToEv = Math.max(0, ev - solarToEv - batToEv);
 
   const flows: Flow[] = [];
   const addFlow = (from: string, to: string, value: number, color: string) => {
@@ -109,6 +125,7 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
   addFlow("Grid Import", "EV", gridToEv, "#f87171");
   addFlow("Powerwall", "Home", batToHome, "#34d399");
   addFlow("Powerwall", "EV", batToEv, "#34d399");
+  addFlow("Powerwall", "Grid Export", batToGrid, "#34d399");
 
   return flows;
 }
@@ -311,6 +328,21 @@ interface Props {
 }
 
 export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
+  // Compute total energy from RAW data (same formula as HourlyChart) so numbers match
+  const totalEnergy = useMemo(() => {
+    if (hourlyData.length > 0) {
+      let total = 0;
+      for (const d of hourlyData) {
+        total += (Math.max(0, d.solar_w_avg) + Math.max(0, d.grid_w_avg) + Math.max(0, d.battery_w_avg)) / 1000;
+      }
+      return total;
+    }
+    if (dailyData.length > 0) {
+      return dailyData.reduce((s, d) => s + d.solar_generated_kwh + d.total_import_kwh, 0);
+    }
+    return 0;
+  }, [hourlyData, dailyData]);
+
   const flows = useMemo(() => {
     // Use hourly data for accuracy when available, fall back to daily
     if (hourlyData.length > 0) {
@@ -326,10 +358,18 @@ export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
-        <GitBranch size={14} className="text-purple-400" />
-        {title}
-      </h2>
+      <div className="flex justify-between items-center mb-3">
+        <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
+          <GitBranch size={14} className="text-purple-400" />
+          {title}
+        </h2>
+        {flows.length > 0 && (
+          <div className="flex gap-4 text-[10px]">
+            <span className="text-emerald-400">Sources: {formatKwh(totalEnergy)}</span>
+            <span className="text-blue-400">Consumption: {formatKwh(totalEnergy)}</span>
+          </div>
+        )}
+      </div>
       {renderSankey(flows)}
     </div>
   );
