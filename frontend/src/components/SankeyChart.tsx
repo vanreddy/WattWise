@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { GitBranch } from "lucide-react";
-import type { HourlyBucket, DailySummary, SankeyFlows } from "@/lib/api";
+import type { HourlyBucket, DailySummary } from "@/lib/api";
 
 interface Flow {
   from: string;
@@ -309,58 +309,15 @@ function renderSankey(flows: Flow[]) {
   );
 }
 
-function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
-  const colorMap: Record<string, string> = {
-    Solar: "#facc15",
-    "Grid Import": "#f87171",
-    Powerwall: "#34d399",
-  };
-
-  const mapping: [string, string, keyof SankeyFlows][] = [
-    ["Solar", "Home", "solar_to_home"],
-    ["Solar", "Battery", "solar_to_battery"],
-    ["Solar", "Grid Export", "solar_to_grid"],
-    ["Powerwall", "Home", "battery_to_home"],
-    ["Powerwall", "Grid Export", "battery_to_grid"],
-    ["Grid Import", "Home", "grid_to_home"],
-    ["Grid Import", "Battery", "grid_to_battery"],
-  ];
-
-  const flows: Flow[] = [];
-  for (const [from, to, key] of mapping) {
-    const value = sf[key];
-    if (value >= 0.01) {
-      flows.push({
-        from,
-        to,
-        value: Math.round(value * 100) / 100,
-        color: colorMap[from] || "#6b7280",
-      });
-    }
-  }
-  return flows;
-}
-
 interface Props {
   hourlyData: HourlyBucket[];
   dailyData: DailySummary[];
   days: number;
-  sankeyFlows: SankeyFlows | null;
 }
 
-export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }: Props) {
+export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
+  // Compute total energy from RAW data (same formula as HourlyChart) so numbers match
   const totalEnergy = useMemo(() => {
-    // When server flows are available, sum sources from them
-    if (sankeyFlows) {
-      return (
-        sankeyFlows.solar_to_home +
-        sankeyFlows.solar_to_battery + sankeyFlows.solar_to_grid +
-        sankeyFlows.battery_to_home +
-        sankeyFlows.battery_to_grid +
-        sankeyFlows.grid_to_home +
-        sankeyFlows.grid_to_battery
-      );
-    }
     if (hourlyData.length > 0) {
       let total = 0;
       for (const d of hourlyData) {
@@ -372,14 +329,10 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }
       return dailyData.reduce((s, d) => s + d.solar_generated_kwh + d.total_import_kwh, 0);
     }
     return 0;
-  }, [sankeyFlows, hourlyData, dailyData]);
+  }, [hourlyData, dailyData]);
 
   const flows = useMemo(() => {
-    // Prefer server-computed 5-min interval flows (eliminates cross-flows)
-    if (sankeyFlows) {
-      return convertSankeyFlowsToFlows(sankeyFlows);
-    }
-    // Fallback to client-side computation
+    // Use hourly data for accuracy when available, fall back to daily
     if (hourlyData.length > 0) {
       return computeFlowsFromHourly(hourlyData);
     }
@@ -387,7 +340,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }
       return computeFlowsFromDaily(dailyData);
     }
     return [];
-  }, [sankeyFlows, hourlyData, dailyData]);
+  }, [hourlyData, dailyData]);
 
   const title = days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
 

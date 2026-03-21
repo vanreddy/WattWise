@@ -23,9 +23,21 @@ router = APIRouter()
 
 INTERVAL_HOURS = 5 / 60  # 5-minute interval
 
-# EV charging: Tesla's energy API doesn't report vehicle_w separately,
-# so we pass through whatever Tesla gives us (typically 0).
-# No heuristic estimation — all home load is reported as "Home".
+# EV charging detection heuristic
+# Tesla's energy API doesn't separate EV from home load.
+# We detect likely EV charging when home consumption exceeds a threshold.
+# Typical home baseline is 500-2000W; EV charging adds 7-11kW.
+EV_DETECT_THRESHOLD_W = 4000  # home_w above this likely includes EV
+EV_BASELINE_W = 1200          # estimated non-EV home load during charging
+
+
+def _estimate_vehicle_w(home_w: float, vehicle_w: float) -> float:
+    """Estimate EV charging power when not reported by Tesla API."""
+    if vehicle_w > 10:
+        return vehicle_w  # already reported, use as-is
+    if home_w > EV_DETECT_THRESHOLD_W:
+        return max(0, home_w - EV_BASELINE_W)
+    return 0.0
 
 
 @router.get("/summary")
@@ -79,7 +91,8 @@ async def summary(request: Request):
     total_cost = peak_cost + part_peak_cost + off_peak_cost
 
     home_w = latest["home_w"] if latest else 0
-    vehicle_w = latest["vehicle_w"] if latest else 0
+    raw_vehicle_w = latest["vehicle_w"] if latest else 0
+    vehicle_w = _estimate_vehicle_w(home_w, raw_vehicle_w)
 
     return {
         "current": {
@@ -221,7 +234,8 @@ async def hourly(
     results = []
     for row in rows:
         home_w = round(row["home_w_avg"] or 0, 0)
-        vehicle_w = round(row["vehicle_w_avg"] or 0, 0)
+        raw_vehicle_w = round(row["vehicle_w_avg"] or 0, 0)
+        vehicle_w = round(_estimate_vehicle_w(home_w, raw_vehicle_w), 0)
         results.append({
             "hour": row["hour"].isoformat(),
             "solar_w_avg": round(row["solar_w_avg"] or 0, 0),
@@ -239,100 +253,6 @@ async def hourly(
             "home_kwh": round(row["home_kwh"] or 0, 3),
         })
     return results
-
-
-def _compute_sankey_flows(rows) -> dict:
-    """Compute Sankey flow allocations from raw 5-minute intervals.
-
-    Each interval has a clear single direction for grid and battery,
-    eliminating the false cross-flows caused by hourly averaging.
-    """
-    flows = {
-        "solar_to_home": 0.0,
-        "solar_to_battery": 0.0,
-        "solar_to_grid": 0.0,
-        "battery_to_home": 0.0,
-        "battery_to_grid": 0.0,
-        "grid_to_home": 0.0,
-        "grid_to_battery": 0.0,
-    }
-
-    for row in rows:
-        # Convert watts to kWh for this 5-min interval
-        solar = max(0, row["solar_w"]) * INTERVAL_HOURS / 1000
-        grid_import = max(0, row["grid_w"]) * INTERVAL_HOURS / 1000
-        grid_export = max(0, -row["grid_w"]) * INTERVAL_HOURS / 1000
-        bat_discharge = max(0, row["battery_w"]) * INTERVAL_HOURS / 1000
-        bat_charge = max(0, -row["battery_w"]) * INTERVAL_HOURS / 1000
-        home = max(0, row["home_w"]) * INTERVAL_HOURS / 1000
-
-        # 1) Solar → Home first
-        solar_to_home = min(solar, home)
-        flows["solar_to_home"] += solar_to_home
-
-        # 2) Solar remainder → Battery charge, then Grid export
-        solar_left = solar - solar_to_home
-        solar_to_bat = min(bat_charge, solar_left)
-        flows["solar_to_battery"] += solar_to_bat
-        solar_left -= solar_to_bat
-        solar_to_exp = min(grid_export, solar_left)
-        flows["solar_to_grid"] += solar_to_exp
-
-        # 3) Battery discharge → remaining Home, then Grid export
-        remain_home = max(0, home - solar_to_home)
-        bat_to_home = min(bat_discharge, remain_home)
-        flows["battery_to_home"] += bat_to_home
-        bat_left = bat_discharge - bat_to_home
-        remain_exp = max(0, grid_export - solar_to_exp)
-        flows["battery_to_grid"] += min(bat_left, remain_exp)
-
-        # 4) Grid import → remaining Home, then Battery charge
-        remain_home2 = max(0, remain_home - bat_to_home)
-        flows["grid_to_home"] += remain_home2
-        grid_left = grid_import - remain_home2
-        remain_bat_chg = max(0, bat_charge - solar_to_bat)
-        flows["grid_to_battery"] += min(grid_left, remain_bat_chg)
-
-    return {k: round(v, 3) for k, v in flows.items()}
-
-
-@router.get("/sankey")
-async def sankey(
-    request: Request,
-    day: date = Query(alias="date", default=None),
-    start: date = Query(default=None, alias="from"),
-    end: date = Query(default=None, alias="to"),
-):
-    """Sankey flow allocations computed at 5-minute interval granularity."""
-    pool = request.app.state.pool
-
-    if start and end:
-        range_start, range_end = start, end
-    elif day:
-        range_start = range_end = day
-    else:
-        range_start = range_end = datetime.now(LOCAL_TZ).date()
-
-    dt_start = datetime.combine(range_start, time.min, tzinfo=LOCAL_TZ)
-    dt_end = datetime.combine(range_end + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
-
-    rows = await pool.fetch(
-        """
-        SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
-        FROM tesla_intervals
-        WHERE ts >= $1 AND ts < $2
-        ORDER BY ts
-        """,
-        dt_start, dt_end,
-    )
-
-    flows = _compute_sankey_flows(rows)
-
-    return {
-        "flows": flows,
-        "from": range_start.isoformat(),
-        "to": range_end.isoformat(),
-    }
 
 
 @router.get("/alerts")

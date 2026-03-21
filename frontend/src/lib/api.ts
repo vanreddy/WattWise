@@ -73,22 +73,6 @@ export interface HourlyBucket {
   home_kwh: number;
 }
 
-export interface SankeyFlows {
-  solar_to_home: number;
-  solar_to_battery: number;
-  solar_to_grid: number;
-  battery_to_home: number;
-  battery_to_grid: number;
-  grid_to_home: number;
-  grid_to_battery: number;
-}
-
-export interface SankeyResponse {
-  flows: SankeyFlows;
-  from: string;
-  to: string;
-}
-
 export interface Alert {
   id: number;
   fired_at: string;
@@ -135,12 +119,6 @@ export const api = {
     const results = await Promise.all(days.map((day) => fetchJSON<HourlyBucket[]>(`/hourly?date=${day}`)));
     return results.flat();
   },
-  getSankey: (from: string, to: string) => {
-    const params = new URLSearchParams({ from, to });
-    return fetchJSON<SankeyResponse>(`/sankey?${params}`);
-  },
-  getSankeyDay: (date: string) =>
-    fetchJSON<SankeyResponse>(`/sankey?date=${date}`),
   getAlerts: (limit = 50) => fetchJSON<Alert[]>(`/alerts?limit=${limit}`),
   getReports: (type?: string, limit = 10) => {
     const params = new URLSearchParams();
