@@ -44,88 +44,76 @@ function formatKwh(v: number): string {
  *   vehicle_w > 0 = consuming (subset of home)
  */
 function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
-  let solarTotal = 0;
-  let gridImport = 0;
-  let gridExport = 0;
-  let batteryCharge = 0;
-  let batteryDischarge = 0;
-  let homeTotal = 0;
-  let evTotal = 0;
-
-  for (const d of data) {
-    solarTotal += Math.max(0, d.solar_w_avg);
-    gridImport += Math.max(0, d.grid_w_avg);
-    gridExport += Math.max(0, -d.grid_w_avg);
-    batteryDischarge += Math.max(0, d.battery_w_avg);
-    batteryCharge += Math.max(0, -d.battery_w_avg);
-    homeTotal += Math.max(0, d.home_w_avg - d.vehicle_w_avg);
-    evTotal += Math.max(0, d.vehicle_w_avg);
-  }
-
-  // Convert to kWh (avg watts * interval_hours / 1000)
-  // Each hourly bucket represents 1 hour of data
-  const toKwh = (w: number) => w / 1000;
-
-  const solar = toKwh(solarTotal);
-  const imp = toKwh(gridImport);
-  const exp = toKwh(gridExport);
-  const batChg = toKwh(batteryCharge);
-  const batDis = toKwh(batteryDischarge);
-  const home = toKwh(homeTotal);
-  const ev = toKwh(evTotal);
-
-  // Total sources = solar + grid import + battery discharge
-  const totalSources = solar + imp + batDis;
-  // Total sinks = home + ev + grid export + battery charge
-  const totalSinks = home + ev + exp + batChg;
-
-  if (totalSources === 0) return [];
-
-  // Allocate flows using a priority model:
-  // 1. Solar self-consumption → home + EV first, then battery charge, then grid export
-  // 2. Battery discharge → home + EV first, then grid export
-  // 3. Grid import → home + EV (covers remaining deficit)
-  const homePlusEv = home + ev;
-  const homeRatio = homePlusEv > 0 ? home / homePlusEv : 0.5;
-  const evRatio = 1 - homeRatio;
-
-  // Solar allocation: first to home+EV, then battery, then grid
-  const solarToHomePlusEv = Math.min(solar, homePlusEv);
-  const solarToHome = solarToHomePlusEv * homeRatio;
-  const solarToEv = solarToHomePlusEv * evRatio;
-  const solarRemaining = solar - solarToHomePlusEv;
-  const solarToBattery = Math.min(batChg, solarRemaining);
-  const solarToGrid = Math.min(exp, solarRemaining - solarToBattery);
-
-  // Battery discharge: feeds remaining home+EV demand, then grid export
-  const remainingHomeDemand = Math.max(0, home - solarToHome);
-  const remainingEvDemand = Math.max(0, ev - solarToEv);
-  const remainingDemand = remainingHomeDemand + remainingEvDemand;
-  const batToHomePlusEv = Math.min(batDis, remainingDemand);
-  const batToHome = remainingDemand > 0 ? batToHomePlusEv * (remainingHomeDemand / remainingDemand) : 0;
-  const batToEv = batToHomePlusEv - batToHome;
-  // Remaining battery discharge goes to grid export
-  const remainingExport = Math.max(0, exp - solarToGrid);
-  const batToGrid = Math.min(batDis - batToHomePlusEv, remainingExport);
-
-  // Grid import: covers whatever is left
-  const gridToHome = Math.max(0, home - solarToHome - batToHome);
-  const gridToEv = Math.max(0, ev - solarToEv - batToEv);
-
-  const flows: Flow[] = [];
-  const addFlow = (from: string, to: string, value: number, color: string) => {
-    if (value > 0.01) flows.push({ from, to, value: Math.round(value * 100) / 100, color });
+  // Allocate flows PER-HOUR then sum — this avoids the problem of
+  // mixed time periods (e.g. grid charges battery at night, battery
+  // exports to grid in the evening) producing impossible aggregates.
+  const flowTotals = new Map<string, number>();
+  const addTo = (key: string, val: number) => {
+    if (val > 0) flowTotals.set(key, (flowTotals.get(key) || 0) + val);
   };
 
-  addFlow("Solar", "Home", solarToHome, "#facc15");
-  addFlow("Solar", "EV", solarToEv, "#facc15");
-  addFlow("Solar", "Battery", solarToBattery, "#facc15");
-  addFlow("Solar", "Grid Export", solarToGrid, "#facc15");
-  addFlow("Grid Import", "Home", gridToHome, "#f87171");
-  addFlow("Grid Import", "EV", gridToEv, "#f87171");
-  addFlow("Powerwall", "Home", batToHome, "#34d399");
-  addFlow("Powerwall", "EV", batToEv, "#34d399");
-  addFlow("Powerwall", "Grid Export", batToGrid, "#34d399");
+  for (const d of data) {
+    const solar = Math.max(0, d.solar_w_avg) / 1000;
+    const imp = Math.max(0, d.grid_w_avg) / 1000;
+    const exp = Math.max(0, -d.grid_w_avg) / 1000;
+    const batDis = Math.max(0, d.battery_w_avg) / 1000;
+    const batChg = Math.max(0, -d.battery_w_avg) / 1000;
+    const home = Math.max(0, (d.home_w_avg - d.vehicle_w_avg)) / 1000;
+    const ev = Math.max(0, d.vehicle_w_avg) / 1000;
+
+    // Sources for this hour
+    const totalSrc = solar + imp + batDis;
+    if (totalSrc === 0) continue;
+
+    // Solar allocation: home+EV first, then battery charge, then grid export
+    const homePlusEv = home + ev;
+    const solarToLoad = Math.min(solar, homePlusEv);
+    const homeRatio = homePlusEv > 0 ? home / homePlusEv : 0;
+    addTo("Solar→Home", solarToLoad * homeRatio);
+    addTo("Solar→EV", solarToLoad * (1 - homeRatio));
+
+    let solarLeft = solar - solarToLoad;
+    const solarToBat = Math.min(batChg, solarLeft);
+    addTo("Solar→Battery", solarToBat);
+    solarLeft -= solarToBat;
+    addTo("Solar→Grid Export", Math.min(exp, solarLeft));
+    const solarToExp = Math.min(exp, solarLeft);
+
+    // Battery discharge: home+EV demand remaining, then grid export
+    const remainHome = Math.max(0, home - solarToLoad * homeRatio);
+    const remainEv = Math.max(0, ev - solarToLoad * (1 - homeRatio));
+    const remainDemand = remainHome + remainEv;
+    const batToLoad = Math.min(batDis, remainDemand);
+    const demandRatio = remainDemand > 0 ? remainHome / remainDemand : 0;
+    addTo("Powerwall→Home", batToLoad * demandRatio);
+    addTo("Powerwall→EV", batToLoad * (1 - demandRatio));
+    const batLeft = batDis - batToLoad;
+    const remainExp = Math.max(0, exp - solarToExp);
+    addTo("Powerwall→Grid Export", Math.min(batLeft, remainExp));
+
+    // Grid import: home+EV remaining, then battery charge
+    const remainHome2 = Math.max(0, remainHome - batToLoad * demandRatio);
+    const remainEv2 = Math.max(0, remainEv - batToLoad * (1 - demandRatio));
+    addTo("Grid Import→Home", remainHome2);
+    addTo("Grid Import→EV", remainEv2);
+    const gridToLoad = remainHome2 + remainEv2;
+    const gridLeft = imp - gridToLoad;
+    const remainBatChg = Math.max(0, batChg - solarToBat);
+    addTo("Grid Import→Battery", Math.min(gridLeft, remainBatChg));
+  }
+
+  const flows: Flow[] = [];
+  const colorMap: Record<string, string> = {
+    "Solar": "#facc15",
+    "Grid Import": "#f87171",
+    "Powerwall": "#34d399",
+  };
+
+  for (const [key, value] of flowTotals) {
+    if (value < 0.01) continue;
+    const [from, to] = key.split("→");
+    flows.push({ from, to, value: Math.round(value * 100) / 100, color: colorMap[from] || "#6b7280" });
+  }
 
   return flows;
 }
