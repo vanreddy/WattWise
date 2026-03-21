@@ -54,7 +54,7 @@ function computeWaterfall(data: DailySummary[]): WaterfallBar[] {
   // Net cost = what you actually pay
   const netCost = totalCost - exportCredit;
 
-  const fmt = (v: number) => `$${Math.abs(v).toFixed(2)}`;
+  const fmt = (v: number) => `$${Math.round(Math.abs(v))}`;
 
   // Build waterfall bars
   const bars: WaterfallBar[] = [];
@@ -123,7 +123,7 @@ function CustomTooltip({ active, payload }: any) {
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs">
       <div className="text-gray-400 mb-1">{bar.name.replace("\n", " ")}</div>
       <div className="text-gray-200 font-semibold text-sm">
-        {sign}${displayValue.toFixed(2)}
+        {sign}${Math.round(displayValue)}
       </div>
     </div>
   );

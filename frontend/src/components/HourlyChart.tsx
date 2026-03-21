@@ -120,12 +120,41 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
     const currentMinute = now.getMinutes();
 
     if (useIntervals) {
-      // === 5-min interval data ===
-      const mapped: ChartPoint[] = intervalData!.map((d) => {
+      // === Downsample to 15-min slots, full 24h x-axis ===
+      const SLOTS = 96; // 24h × 4 slots/hour
+
+      // Index interval data by 15-min slot (take first point per slot)
+      const slotMap = new Map<number, IntervalPoint>();
+      for (const d of intervalData!) {
+        const dt = new Date(d.ts);
+        const idx = dt.getHours() * 4 + Math.floor(dt.getMinutes() / 15);
+        if (!slotMap.has(idx)) slotMap.set(idx, d);
+      }
+
+      const nowSlot = isToday ? currentHour * 4 + Math.floor(currentMinute / 15) : SLOTS;
+      let lastDataIdx = -1;
+
+      const mapped: ChartPoint[] = Array.from({ length: SLOTS }, (_, i) => {
+        const h = Math.floor(i / 4);
+        const m = (i % 4) * 15;
+        const ampm = h >= 12 ? "PM" : "AM";
+        const h12 = h % 12 || 12;
+        const label = m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")}`;
+
+        const d = slotMap.get(i);
+        if (!d) {
+          // Future slot or no data
+          if (isToday && i > nowSlot) {
+            return { label, solar: null, grid_import: null, battery_discharge: null, home: null, ev: null, grid_export: null, battery_charge: null };
+          }
+          return { label, ...EMPTY_POINT };
+        }
+
+        lastDataIdx = i;
         const grid = d.grid_w;
         const battery = d.battery_w;
         return {
-          label: formatTimeLabel(d.ts),
+          label,
           solar: Math.max(0, Math.round(d.solar_w)),
           grid_import: Math.max(0, Math.round(grid)),
           battery_discharge: Math.max(0, Math.round(battery)),
@@ -139,6 +168,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
       let maxPos = 0;
       let maxNeg = 0;
       for (const d of mapped) {
+        if (d.solar === null) continue;
         const srcTotal = (d.solar || 0) + (d.grid_import || 0) + (d.battery_discharge || 0);
         const sinkTotal = Math.abs(d.home || 0) + Math.abs(d.ev || 0) + Math.abs(d.grid_export || 0) + Math.abs(d.battery_charge || 0);
         maxPos = Math.max(maxPos, srcTotal);
@@ -147,15 +177,14 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
       const yBound = Math.max(maxPos, maxNeg) * 1.1;
 
       // Now dot: last data point
-      const lastIdx = mapped.length - 1;
-      const lastPt = lastIdx >= 0 ? mapped[lastIdx] : null;
+      const lastPt = lastDataIdx >= 0 ? mapped[lastDataIdx] : null;
       const dotY = lastPt ? (lastPt.solar || 0) + (lastPt.grid_import || 0) + (lastPt.battery_discharge || 0) : 0;
 
       return {
         chartData: mapped,
         yMax: Math.ceil(yBound / 1000) * 1000 || 5000,
         isMultiDay: false,
-        nowIndex: isToday && lastIdx >= 0 ? lastIdx : -1,
+        nowIndex: isToday && lastDataIdx >= 0 ? lastDataIdx : -1,
         nowY: dotY,
       };
     }
@@ -276,8 +305,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
   const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
 
-  // For interval data, show fewer ticks
-  const xInterval = useIntervals ? 24 : 2; // every 2hrs for both (24 intervals = 2hrs at 5-min)
+  // XAxis tick interval: for 96 slots show every 2h (8 slots), for 24 hourly show every 2h
+  const xInterval = useIntervals ? 7 : 2;
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
