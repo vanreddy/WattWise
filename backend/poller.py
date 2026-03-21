@@ -31,11 +31,10 @@ TESLA_CACHE_KEY = "tesla_token_cache"
 
 # Solar surplus alert thresholds
 ALERT_EXPORT_W = 3000          # 3kW export
-ALERT_BATTERY_MIN_PCT = 95     # battery > 95%
-ALERT_SUSTAIN_MINUTES = 30     # sustained for 30 min
+ALERT_SUSTAIN_MINUTES = 15     # sustained for 15 min
 ALERT_COOLDOWN_HOURS = 4       # don't re-alert within 4 hours
 ALERT_WINDOW_START = 9         # 9am
-ALERT_WINDOW_END = 15          # 3pm
+ALERT_WINDOW_END = 17          # 5pm
 
 # In-memory copy of token cache, synced with DB
 _token_cache: dict = {}
@@ -177,7 +176,7 @@ async def poll_once(pool: asyncpg.Pool) -> dict | None:
 # --- Solar surplus alert tracking ---
 
 # In-memory buffer of recent export readings for sustained check
-_export_history: list[tuple[datetime, float, float]] = []  # (ts, grid_w, battery_pct)
+_export_history: list[tuple[datetime, float]] = []  # (ts, export_w)
 
 
 async def check_solar_surplus_alert(
@@ -208,12 +207,12 @@ async def check_solar_surplus_alert(
         return False
 
     export_w = abs(grid_w)
-    _export_history.append((now, export_w, battery_pct))
+    _export_history.append((now, export_w))
 
     # Prune readings older than sustain window
     cutoff = now.timestamp() - (ALERT_SUSTAIN_MINUTES * 60)
     _export_history[:] = [
-        (t, w, pct) for t, w, pct in _export_history
+        (t, w) for t, w in _export_history
         if t.timestamp() >= cutoff
     ]
 
@@ -221,9 +220,8 @@ async def check_solar_surplus_alert(
     if len(_export_history) < (ALERT_SUSTAIN_MINUTES // 5):
         return False
 
-    # Check all readings meet thresholds
-    if not all(w >= ALERT_EXPORT_W and pct >= ALERT_BATTERY_MIN_PCT
-               for _, w, pct in _export_history):
+    # Check all readings meet export threshold
+    if not all(w >= ALERT_EXPORT_W for _, w in _export_history):
         return False
 
     # Check cooldown — no alert in last N hours
@@ -240,7 +238,7 @@ async def check_solar_surplus_alert(
             return False
 
     # Fire alert
-    avg_export_kw = sum(w for _, w, _ in _export_history) / len(_export_history) / 1000
+    avg_export_kw = sum(w for _, w in _export_history) / len(_export_history) / 1000
     current_rate = get_import_rate(now.astimezone())
     export_rate = get_export_rate()
     multiplier = current_rate / export_rate
