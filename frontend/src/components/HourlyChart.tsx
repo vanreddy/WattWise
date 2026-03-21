@@ -76,8 +76,8 @@ export default function HourlyChart({ data, days = 1 }: Props) {
   const totalEnergy = useMemo(() => {
     let total = 0;
     for (const d of data) {
-      // Use per-interval kWh fields (avoids within-hour sign cancellation)
-      total += d.solar_kwh + d.grid_import_kwh + d.battery_discharge_kwh;
+      // Sum source side: solar + grid_import + battery_discharge
+      total += (Math.max(0, d.solar_w_avg) + Math.max(0, d.grid_w_avg) + Math.max(0, d.battery_w_avg)) / 1000;
     }
     return total;
   }, [data]);

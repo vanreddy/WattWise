@@ -53,17 +53,13 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
   };
 
   for (const d of data) {
-    // Use per-interval kWh fields (avoids within-hour sign cancellation)
-    const solar = d.solar_kwh;
-    const imp = d.grid_import_kwh;
-    const exp = d.grid_export_kwh;
-    const batDis = d.battery_discharge_kwh;
-    const batChg = d.battery_charge_kwh;
-    // home_kwh includes EV — estimate EV portion from avg watts ratio
-    const totalHomeKwh = d.home_kwh;
-    const evRatio = d.home_w_avg > 0 ? Math.max(0, d.vehicle_w_avg) / d.home_w_avg : 0;
-    const ev = totalHomeKwh * evRatio;
-    const home = totalHomeKwh - ev;
+    const solar = Math.max(0, d.solar_w_avg) / 1000;
+    const imp = Math.max(0, d.grid_w_avg) / 1000;
+    const exp = Math.max(0, -d.grid_w_avg) / 1000;
+    const batDis = Math.max(0, d.battery_w_avg) / 1000;
+    const batChg = Math.max(0, -d.battery_w_avg) / 1000;
+    const home = Math.max(0, (d.home_w_avg - d.vehicle_w_avg)) / 1000;
+    const ev = Math.max(0, d.vehicle_w_avg) / 1000;
 
     // Sources for this hour
     const totalSrc = solar + imp + batDis;
@@ -325,8 +321,7 @@ export default function SankeyChart({ hourlyData, dailyData, days }: Props) {
     if (hourlyData.length > 0) {
       let total = 0;
       for (const d of hourlyData) {
-        // Use per-interval kWh fields for accuracy
-        total += d.solar_kwh + d.grid_import_kwh + d.battery_discharge_kwh;
+        total += (Math.max(0, d.solar_w_avg) + Math.max(0, d.grid_w_avg) + Math.max(0, d.battery_w_avg)) / 1000;
       }
       return total;
     }
