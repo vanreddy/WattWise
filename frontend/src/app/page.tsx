@@ -7,6 +7,7 @@ import {
   type DailySummary,
   type HourlyBucket,
   type Alert,
+  type SankeyFlows,
 } from "@/lib/api";
 import {
   mockSummary,
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>(defaultRange);
+  const [sankeyFlows, setSankeyFlows] = useState<SankeyFlows | null>(null);
 
   // Fetch summary + alerts (always current)
   const fetchLive = useCallback(async () => {
@@ -81,6 +83,15 @@ export default function Dashboard() {
       setDaily(d);
     } catch {
       setDaily(mockDaily);
+    }
+
+    try {
+      const s = range.days === 1
+        ? await api.getSankeyDay(range.from)
+        : await api.getSankey(range.from, range.to);
+      setSankeyFlows(s.flows);
+    } catch {
+      setSankeyFlows(null);
     }
   }, []);
 
@@ -153,7 +164,7 @@ export default function Dashboard() {
       <HourlyChart data={hourly} days={dateRange.days} />
 
       {/* Sankey energy flow */}
-      <SankeyChart hourlyData={hourly} dailyData={daily} days={dateRange.days} />
+      <SankeyChart hourlyData={hourly} dailyData={daily} days={dateRange.days} sankeyFlows={sankeyFlows} />
 
       {/* Cost Waterfall + Alerts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
