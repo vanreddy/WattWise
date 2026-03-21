@@ -309,7 +309,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   const xInterval = useIntervals ? 7 : 2;
 
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
       <style>{`
         @keyframes pulse-dot {
           0%, 100% { r: 5; opacity: 1; }
@@ -317,18 +317,18 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
         }
         .now-dot { animation: pulse-dot 2s ease-in-out infinite; }
       `}</style>
-      <div className="flex justify-between items-center mb-3">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 mb-3">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <Activity size={14} className="text-cyan-400" />
           {title}
         </h2>
-        <div className="flex gap-4 text-[10px]">
+        <div className="flex gap-3 sm:gap-4 text-[10px]">
           <span className="text-emerald-400">↑ Sources: {fmtKwh(totalEnergy)}</span>
           <span className="text-blue-400">↓ Consumption: {fmtKwh(totalEnergy)}</span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={360}>
-        <AreaChart data={chartData} margin={{ top: 10, right: 30, bottom: 0, left: 0 }}>
+      <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
+        <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
           <XAxis
             dataKey="label"

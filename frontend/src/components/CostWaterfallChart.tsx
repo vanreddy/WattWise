@@ -161,12 +161,12 @@ export default function CostWaterfallChart({ data, days }: Props) {
 
   if (bars.length === 0) {
     return (
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
         <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
           <DollarSign size={14} className="text-green-400" />
           Cost Waterfall
         </h2>
-        <div className="flex items-center justify-center h-[260px] text-gray-500 text-sm">
+        <div className="flex items-center justify-center h-[200px] sm:h-[260px] text-gray-500 text-sm">
           No cost data for this period
         </div>
       </div>
@@ -179,12 +179,12 @@ export default function CostWaterfallChart({ data, days }: Props) {
   const maxVal = Math.max(...bars.map((b) => b.base + b.value)) * 1.2;
 
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
       <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
         <DollarSign size={14} className="text-green-400" />
         {title}
       </h2>
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={200} className="sm:!h-[260px]">
         <BarChart data={bars} margin={{ top: 28, right: 10, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis

@@ -22,12 +22,12 @@ function FlowCard({
   sub?: string;
 }) {
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
       <div className="flex items-center gap-1.5 text-sm text-gray-400 mb-1">
         {icon}
         {label}
       </div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className={`text-xl sm:text-2xl font-bold ${color}`}>{value}</div>
       {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
     </div>
   );
@@ -44,7 +44,7 @@ export default function PowerFlowCards({
   const batteryLabel = current.battery_w > 0 ? "Discharging" : "Charging";
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
       <FlowCard
         label="Solar"
         value={formatW(current.solar_w)}

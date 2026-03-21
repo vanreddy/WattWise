@@ -80,7 +80,7 @@ export default function DateRangePicker({
   };
 
   return (
-    <div className="flex items-center gap-2 relative">
+    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 relative">
       {PRESETS.map((p) => (
         <button
           key={p.label}
@@ -89,7 +89,7 @@ export default function DateRangePicker({
             onChange({ label: p.label, from, to, days });
             setShowCustom(false);
           }}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+          className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors ${
             value.label === p.label
               ? "bg-blue-600 text-white"
               : "bg-gray-800 text-gray-400 hover:bg-gray-700"
@@ -106,7 +106,7 @@ export default function DateRangePicker({
           setCustomTo(value.to);
           setShowCustom(!showCustom);
         }}
-        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors ${
           value.label === "Custom"
             ? "bg-blue-600 text-white"
             : "bg-gray-800 text-gray-400 hover:bg-gray-700"

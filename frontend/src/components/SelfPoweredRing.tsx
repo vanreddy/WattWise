@@ -35,9 +35,9 @@ export default function SelfPoweredRing({ selfPoweredPct }: Props) {
   // Arc goes from 9 o'clock (180°) to 3 o'clock (0°) — i.e. the top half
   // We rotate the group so the arc starts at bottom-left and sweeps to bottom-right
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex flex-col items-center justify-center">
+    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center">
       <h2 className="text-sm font-semibold text-gray-400 mb-1">Self-Powered</h2>
-      <div className="relative w-72 h-44">
+      <div className="relative w-56 h-36 sm:w-72 sm:h-44">
         <svg viewBox="0 0 260 150" className="w-full h-full">
           {/* Background track — semi-circle arc */}
           <path
@@ -61,8 +61,8 @@ export default function SelfPoweredRing({ selfPoweredPct }: Props) {
         </svg>
         {/* Centered number */}
         <div className="absolute inset-0 flex flex-col items-center justify-end pb-3">
-          <span className="text-6xl font-bold text-white">{Math.round(pct)}%</span>
-          <span className="text-sm text-gray-500">solar + battery</span>
+          <span className="text-4xl sm:text-6xl font-bold text-white">{Math.round(pct)}%</span>
+          <span className="text-xs sm:text-sm text-gray-500">solar + battery</span>
         </div>
       </div>
     </div>

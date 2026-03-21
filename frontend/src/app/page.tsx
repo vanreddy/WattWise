@@ -145,7 +145,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Status bar */}
       <div className="flex justify-between items-center text-xs text-gray-500">
         <span>
@@ -164,7 +164,7 @@ export default function Dashboard() {
       <PowerFlowCards current={summary.current} today={summary.today} />
 
       {/* 2. Date selector */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <BarChart3 size={14} className="text-blue-400" />
           Charts

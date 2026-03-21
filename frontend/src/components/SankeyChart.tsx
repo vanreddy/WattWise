@@ -176,7 +176,7 @@ function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
 function renderSankey(flows: Flow[]) {
   if (flows.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[380px] text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-[280px] sm:h-[380px] text-gray-500 text-sm">
         No energy flow data for this period
       </div>
     );
@@ -316,7 +316,7 @@ function renderSankey(flows: Flow[]) {
     ));
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[380px]">
+    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[280px] sm:h-[380px]">
       {flowPaths}
       {renderNodes(leftInfo, LEFT_X)}
       {renderNodes(rightInfo, RIGHT_X)}
@@ -365,14 +365,14 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }
   const title = days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
 
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <div className="flex justify-between items-center mb-3">
+    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 mb-3">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <GitBranch size={14} className="text-purple-400" />
           {title}
         </h2>
         {flows.length > 0 && (
-          <div className="flex gap-4 text-[10px]">
+          <div className="flex gap-3 sm:gap-4 text-[10px]">
             <span className="text-emerald-400">Sources: {formatKwh(totalEnergy)}</span>
             <span className="text-blue-400">Consumption: {formatKwh(totalEnergy)}</span>
           </div>
