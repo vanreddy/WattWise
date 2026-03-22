@@ -153,6 +153,23 @@ export async function unlinkTelegram(): Promise<void> {
   }
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/me/password`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to change password" }));
+    throw new Error(err.detail || "Failed to change password");
+  }
+}
+
 export async function disconnectTesla(): Promise<void> {
   const token = getAccessToken();
   const res = await fetch(`${API_BASE}/auth/account/tesla`, {

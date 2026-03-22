@@ -41,6 +41,10 @@ class RefreshRequest(BaseModel):
 class InviteRequest(BaseModel):
     email: EmailStr
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 class TelegramUpdate(BaseModel):
     chat_id: str
 
@@ -282,6 +286,31 @@ async def invite(body: InviteRequest, request: Request, user: dict = Depends(get
     )
 
     return {"invite_id": str(invite_row["id"])}
+
+
+@router.put("/me/password")
+async def change_password(body: ChangePasswordRequest, request: Request, user: dict = Depends(get_current_user)):
+    """Change the current user's password."""
+    pool = request.app.state.pool
+
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    row = await pool.fetchrow(
+        "SELECT password_hash FROM users WHERE id = $1",
+        UUID(user["user_id"]),
+    )
+    if not row or not verify_password(body.current_password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    new_hash = hash_password(body.new_password)
+    await pool.execute(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        new_hash, UUID(user["user_id"]),
+    )
+
+    logger.info("Password changed: user=%s", user["user_id"])
+    return {"status": "ok"}
 
 
 @router.put("/me/telegram")

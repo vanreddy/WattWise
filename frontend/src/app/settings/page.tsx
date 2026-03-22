@@ -7,6 +7,7 @@ import {
   linkTelegram,
   unlinkTelegram,
   disconnectTesla,
+  changePassword,
 } from "@/lib/auth";
 
 /* ─── Toggle switch ─── */
@@ -108,6 +109,16 @@ export default function SettingsPage() {
   const [teslaError, setTeslaError] = useState<string | null>(null);
   const [teslaLoading, setTeslaLoading] = useState(false);
 
+  // Password state
+  const [showPassword, setShowPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+  const [pwLoading, setPwLoading] = useState(false);
+
   // Confirmation modals
   const [confirmTesla, setConfirmTesla] = useState(false);
   const [confirmTelegram, setConfirmTelegram] = useState(false);
@@ -188,6 +199,36 @@ export default function SettingsPage() {
       setTgError(err instanceof Error ? err.message : "Failed to link Telegram");
     } finally {
       setTgLoading(false);
+    }
+  }
+
+  // ─── Password handler ───
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(null);
+
+    if (newPw.length < 6) {
+      setPwError("New password must be at least 6 characters");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwError("Passwords do not match");
+      return;
+    }
+
+    setPwLoading(true);
+    try {
+      await changePassword(currentPw, newPw);
+      setPwSuccess("Password changed successfully.");
+      setCurrentPw("");
+      setNewPw("");
+      setConfirmPw("");
+      setChangingPassword(false);
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setPwLoading(false);
     }
   }
 
@@ -300,6 +341,22 @@ export default function SettingsPage() {
               <span className="capitalize">{user.role}</span>
             </div>
 
+            {/* Password row */}
+            <div className="flex justify-between items-center">
+              <span className="text-gray-500">Password</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-gray-400">
+                  {showPassword ? user.email && "••••••••" : "••••••••"}
+                </span>
+                <button
+                  onClick={() => setChangingPassword(!changingPassword)}
+                  className="text-yellow-500 hover:text-yellow-400 text-xs"
+                >
+                  {changingPassword ? "Cancel" : "Change"}
+                </button>
+              </div>
+            </div>
+
             {/* Telegram row with toggle */}
             <div className="flex justify-between items-center">
               <div>
@@ -317,6 +374,56 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+
+          {/* Password change form */}
+          {changingPassword && (
+            <form onSubmit={handleChangePassword} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+              <div className="space-y-2">
+                <input
+                  type="password"
+                  required
+                  placeholder="Current password"
+                  value={currentPw}
+                  onChange={(e) => setCurrentPw(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+                />
+                <input
+                  type="password"
+                  required
+                  placeholder="New password"
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+                />
+                <input
+                  type="password"
+                  required
+                  placeholder="Confirm new password"
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={pwLoading}
+                className="bg-yellow-500 text-gray-950 font-semibold rounded px-4 py-2 text-sm hover:bg-yellow-400 disabled:opacity-50"
+              >
+                {pwLoading ? "Saving..." : "Update Password"}
+              </button>
+            </form>
+          )}
+
+          {pwError && (
+            <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+              {pwError}
+            </div>
+          )}
+          {pwSuccess && (
+            <div className="bg-green-900/30 border border-green-800 text-green-300 text-sm rounded px-3 py-2">
+              {pwSuccess}
+            </div>
+          )}
 
           {/* Telegram linking form (shown when not connected) */}
           {!isTelegramConnected && (
