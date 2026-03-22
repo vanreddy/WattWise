@@ -7,12 +7,14 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   logout: () => void;
+  refreshUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoading: true,
   logout: () => {},
+  refreshUser: () => {},
 });
 
 export function useAuth() {
@@ -34,8 +36,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     doLogout();
   }, []);
 
+  const refreshUser = useCallback(() => {
+    fetchMe().then((u) => setUser(u));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

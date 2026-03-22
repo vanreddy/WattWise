@@ -5,7 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { createInvite, linkTelegram, unlinkTelegram } from "@/lib/auth";
 
 export default function SettingsPage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, refreshUser } = useAuth();
 
   // Invite state
   const [inviteEmail, setInviteEmail] = useState("");
@@ -18,7 +18,6 @@ export default function SettingsPage() {
   const [tgError, setTgError] = useState<string | null>(null);
   const [tgSuccess, setTgSuccess] = useState<string | null>(null);
   const [tgLoading, setTgLoading] = useState(false);
-  const [tgLinked, setTgLinked] = useState<boolean | null>(null); // null = use user data
 
   if (isLoading) {
     return (
@@ -33,7 +32,7 @@ export default function SettingsPage() {
     return null;
   }
 
-  const isTelegramConnected = tgLinked ?? !!user.telegram_chat_id;
+  const isTelegramConnected = !!user.telegram_chat_id;
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -64,9 +63,9 @@ export default function SettingsPage() {
     setTgLoading(true);
     try {
       await linkTelegram(tgCode);
-      setTgLinked(true);
       setTgSuccess("Telegram connected! You will now receive notifications.");
       setTgCode("");
+      refreshUser?.();
     } catch (err) {
       setTgError(err instanceof Error ? err.message : "Failed to link Telegram");
     } finally {
@@ -80,8 +79,8 @@ export default function SettingsPage() {
     setTgLoading(true);
     try {
       await unlinkTelegram();
-      setTgLinked(false);
       setTgSuccess("Telegram disconnected.");
+      refreshUser?.();
     } catch (err) {
       setTgError(err instanceof Error ? err.message : "Failed to disconnect");
     } finally {
@@ -90,21 +89,41 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-8 space-y-8">
-      <h2 className="text-xl font-bold">Account Settings</h2>
+    <div className="max-w-lg mx-auto px-4 py-8 space-y-10">
+      <h2 className="text-xl font-bold">Settings</h2>
 
-      {/* Account info */}
+      {/* ─── Section 1: Account ─── */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-          Your Profile
+          Account
         </h3>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2 text-sm">
-          {user.site_name && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Site</span>
-              <span>{user.site_name}</span>
-            </div>
-          )}
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-500">Account Name</span>
+            <span>{user.site_name || "—"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Energy Site ID</span>
+            <span className="font-mono text-xs text-gray-300">
+              {user.energy_site_id || "—"}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500">Tesla Connection</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-400" />
+              <span className="text-green-400 text-xs">Connected</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Section 2: User Profile & Telegram ─── */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+          User
+        </h3>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Email</span>
             <span>{user.email}</span>
@@ -113,40 +132,38 @@ export default function SettingsPage() {
             <span className="text-gray-500">Role</span>
             <span className="capitalize">{user.role}</span>
           </div>
-          <div className="flex justify-between">
+
+          {/* Telegram row */}
+          <div className="flex justify-between items-center">
             <span className="text-gray-500">Telegram</span>
-            <span className={isTelegramConnected ? "text-green-400" : "text-gray-600"}>
-              {isTelegramConnected ? "Connected" : "Not connected"}
-            </span>
+            {isTelegramConnected ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-green-400" />
+                <span className="text-green-400 text-xs">Connected</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-gray-600" />
+                <span className="text-gray-500 text-xs">Not connected</span>
+              </span>
+            )}
           </div>
         </div>
-      </section>
 
-      {/* Telegram linking */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-          Telegram Notifications
-        </h3>
-
+        {/* Telegram connect / disconnect */}
         {isTelegramConnected ? (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-500">
-              Your Telegram is connected. You receive daily reports, weekly
-              summaries, and real-time solar surplus alerts.
-            </p>
-            <button
-              onClick={handleUnlinkTelegram}
-              disabled={tgLoading}
-              className="text-red-400 hover:text-red-300 text-sm border border-red-800 rounded px-3 py-2 disabled:opacity-50"
-            >
-              {tgLoading ? "Disconnecting..." : "Disconnect Telegram"}
-            </button>
-          </div>
+          <button
+            onClick={handleUnlinkTelegram}
+            disabled={tgLoading}
+            className="text-red-400 hover:text-red-300 text-sm border border-red-800 rounded px-3 py-2 disabled:opacity-50"
+          >
+            {tgLoading ? "Disconnecting..." : "Disconnect Telegram"}
+          </button>
         ) : (
           <div className="space-y-3">
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
               <p className="text-sm text-gray-400">
-                To receive notifications, connect your Telegram:
+                Connect Telegram to receive daily reports and real-time alerts:
               </p>
               <ol className="text-sm text-gray-500 list-decimal list-inside space-y-1">
                 <li>
@@ -203,15 +220,15 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Invite secondary user — primary only */}
+      {/* ─── Section 3: Invite (primary only) ─── */}
       {user.role === "primary" && (
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
             Invite a User
           </h3>
           <p className="text-sm text-gray-500">
-            Invite one additional user to view your energy dashboard. They will
-            create their own login and also receive Telegram notifications.
+            Invite one additional user to view your energy dashboard and receive
+            Telegram notifications. They will create their own login.
           </p>
 
           <form onSubmit={handleInvite} className="flex gap-2">
