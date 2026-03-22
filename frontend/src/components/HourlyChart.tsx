@@ -305,8 +305,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
   const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
 
-  // XAxis tick interval: for 96 slots show every 2h (8 slots), for 24 hourly show every 2h
-  const xInterval = useIntervals ? 7 : 2;
+  // YAxis tick interval: for 96 slots show every 2h (8 slots), for 24 hourly show every 2h
+  const yInterval = useIntervals ? 7 : 2;
 
   return (
     <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
@@ -323,33 +323,41 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
           {title}
         </h2>
         <div className="flex gap-3 sm:gap-4 text-[10px]">
-          <span className="text-emerald-400">↑ Sources: {fmtKwh(totalEnergy)}</span>
-          <span className="text-blue-400">↓ Consumption: {fmtKwh(totalEnergy)}</span>
+          <span className="text-emerald-400">← Sources: {fmtKwh(totalEnergy)}</span>
+          <span className="text-blue-400">→ Consumption: {fmtKwh(totalEnergy)}</span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
-        <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+      <ResponsiveContainer width="100%" height={520} className="sm:!h-[640px]">
+        <AreaChart
+          data={chartData}
+          layout="vertical"
+          margin={{ top: 10, right: 10, bottom: 0, left: 0 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis
+          <YAxis
             dataKey="label"
+            type="category"
             stroke="#6b7280"
             fontSize={10}
-            interval={xInterval}
-            tick={{ dy: 4 }}
+            interval={yInterval}
+            width={48}
+            reversed
           />
-          <YAxis
+          <XAxis
+            type="number"
             stroke="#6b7280"
             fontSize={11}
             domain={[-yMax, yMax]}
             tickFormatter={(v) => formatW(Math.abs(v))}
+            orientation="top"
           />
-          <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
+          <ReferenceLine x={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip content={<CustomTooltip />} />
           <Legend
             formatter={(value) => <span className="text-xs text-gray-400">{value}</span>}
           />
 
-          {/* Sources — stacked above zero */}
+          {/* Sources — stacked to the right (positive) */}
           <Area
             type="monotone"
             dataKey="solar"
@@ -378,7 +386,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
             connectNulls={false}
           />
 
-          {/* Consumption — stacked below zero */}
+          {/* Consumption — stacked to the left (negative) */}
           <Area
             type="monotone"
             dataKey="home"
@@ -419,8 +427,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
           {/* Pulsing "Now" dot — single-day only */}
           {!isMultiDay && nowIndex >= 0 && (
             <ReferenceDot
-              x={chartData[nowIndex]?.label}
-              y={nowY}
+              y={chartData[nowIndex]?.label}
+              x={nowY}
               r={6}
               fill="#22d3ee"
               stroke="#22d3ee"
