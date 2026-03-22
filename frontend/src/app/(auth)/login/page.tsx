@@ -26,11 +26,13 @@ export default function LoginPage() {
   return (
     <div className="flex items-center justify-center min-h-[70vh]">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5">
-        <div className="text-center">
+        <div className="flex flex-col items-center gap-2">
+          <img src="/icon.svg" alt="WattWise" className="h-14 w-14 rounded-lg" />
           <h2 className="text-2xl font-bold">
-            <span className="text-yellow-400">⚡</span> WattWise
+            <span className="text-white">Watt</span>
+            <span className="text-green-400">Wise</span>
           </h2>
-          <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
+          <p className="text-gray-500 text-sm">Sign in to your account</p>
         </div>
 
         {error && (

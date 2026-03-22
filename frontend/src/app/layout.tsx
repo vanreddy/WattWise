@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "WattWise",
   description: "Home energy monitoring dashboard",
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({

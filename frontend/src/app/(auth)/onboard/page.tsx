@@ -42,14 +42,8 @@ function SplashStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
       {/* Logo */}
-      <div className="space-y-3">
-        <div className="text-5xl font-extrabold">
-          <span className="text-yellow-400">Watt</span>
-          <span className="text-green-400">Wise</span>
-        </div>
-        <p className="text-gray-500 text-sm tracking-widest uppercase">
-          Solar Energy Optimizer
-        </p>
+      <div className="space-y-4">
+        <img src="/logo.svg" alt="WattWise" className="h-20 mx-auto rounded-xl" />
       </div>
 
       <div className="max-w-xs space-y-3 text-gray-400 text-sm">

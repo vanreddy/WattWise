@@ -8,8 +8,12 @@ export default function AppHeader() {
   return (
     <header className="border-b border-gray-800 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <a href="/" className="text-lg sm:text-xl font-bold tracking-tight hover:opacity-80">
-          <span className="text-yellow-400">⚡</span> WattWise
+        <a href="/" className="hover:opacity-80 flex items-center">
+          <img src="/icon.svg" alt="WattWise" className="h-8 w-8 rounded" />
+          <span className="ml-2 text-lg sm:text-xl font-bold tracking-tight">
+            <span className="text-white">Watt</span>
+            <span className="text-green-400">Wise</span>
+          </span>
         </a>
         {user?.site_name && (
           <span className="text-gray-500 text-sm hidden sm:inline">

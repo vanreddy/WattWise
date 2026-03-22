@@ -92,33 +92,20 @@ export default function SetupPage() {
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-md space-y-8 text-center">
         {/* Logo */}
-        <div className="space-y-2">
-          <div className="text-3xl font-extrabold">
-            <span className="text-yellow-400">Watt</span>
-            <span className="text-green-400">Wise</span>
-          </div>
+        <div className="space-y-4">
+          <img
+            src="/icon.svg"
+            alt="WattWise"
+            className="h-20 w-20 mx-auto rounded-xl"
+            style={{
+              animation: redirecting
+                ? "none"
+                : "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+            }}
+          />
           <h2 className="text-lg font-semibold text-gray-300">
-            Setting up your account
+            {redirecting ? "You\u2019re all set!" : "Setting up your account"}
           </h2>
-        </div>
-
-        {/* Animated energy icon */}
-        <div className="flex justify-center">
-          <div className="relative">
-            {/* Pulsing ring */}
-            <div className="w-24 h-24 rounded-full border-4 border-yellow-500/20 flex items-center justify-center">
-              <div
-                className="w-20 h-20 rounded-full border-4 border-yellow-500/40 flex items-center justify-center"
-                style={{
-                  animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                }}
-              >
-                <span className="text-3xl">
-                  {redirecting ? "\u2705" : "\u26a1"}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Progress bar */}
