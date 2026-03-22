@@ -8,6 +8,8 @@ export interface AuthUser {
   role: "primary" | "secondary";
   account_id: string;
   telegram_chat_id: string | null;
+  site_name: string | null;
+  energy_site_id: string | null;
 }
 
 export function getAccessToken(): string | null {

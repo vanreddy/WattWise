@@ -7,9 +7,16 @@ export default function AppHeader() {
 
   return (
     <header className="border-b border-gray-800 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-      <h1 className="text-lg sm:text-xl font-bold tracking-tight">
-        <span className="text-yellow-400">⚡</span> WattWise
-      </h1>
+      <div className="flex items-center gap-2">
+        <a href="/" className="text-lg sm:text-xl font-bold tracking-tight hover:opacity-80">
+          <span className="text-yellow-400">⚡</span> WattWise
+        </a>
+        {user?.site_name && (
+          <span className="text-gray-500 text-sm hidden sm:inline">
+            — {user.site_name}
+          </span>
+        )}
+      </div>
       {user && (
         <div className="flex items-center gap-3 text-sm">
           <span className="text-gray-500 hidden sm:inline">{user.email}</span>

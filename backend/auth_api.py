@@ -218,8 +218,11 @@ async def refresh(body: RefreshRequest, request: Request):
 async def me(request: Request, user: dict = Depends(get_current_user)):
     pool = request.app.state.pool
     row = await pool.fetchrow(
-        """SELECT id, email, role, account_id, telegram_chat_id, created_at
-           FROM users WHERE id = $1""",
+        """SELECT u.id, u.email, u.role, u.account_id, u.telegram_chat_id, u.created_at,
+                  a.site_name, a.energy_site_id
+           FROM users u
+           JOIN accounts a ON a.id = u.account_id
+           WHERE u.id = $1""",
         UUID(user["user_id"]),
     )
     if not row:
@@ -232,6 +235,8 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
         "account_id": str(row["account_id"]),
         "telegram_chat_id": row["telegram_chat_id"],
         "created_at": row["created_at"].isoformat(),
+        "site_name": row["site_name"],
+        "energy_site_id": row["energy_site_id"],
     }
 
 

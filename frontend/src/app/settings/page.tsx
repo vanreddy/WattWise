@@ -99,6 +99,12 @@ export default function SettingsPage() {
           Your Profile
         </h3>
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2 text-sm">
+          {user.site_name && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Site</span>
+              <span>{user.site_name}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-500">Email</span>
             <span>{user.email}</span>

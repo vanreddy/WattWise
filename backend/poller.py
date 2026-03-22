@@ -143,8 +143,11 @@ def _get_tesla_client_file() -> teslapy.Tesla:
     return teslapy.Tesla(email, cache_file=str(CACHE_PATH))
 
 
-def _fetch_live_status(email: str | None = None, account_id: UUID | None = None) -> dict:
-    """Synchronous Tesla API call — returns live energy site status."""
+def _fetch_live_status(email: str | None = None, account_id: UUID | None = None) -> tuple[dict, dict]:
+    """Synchronous Tesla API call — returns (live_status, site_info).
+
+    site_info contains site_name and energy_site_id for account metadata.
+    """
     with _get_tesla_client(email, account_id) as tesla:
         if not tesla.authorized:
             raise RuntimeError(
@@ -156,16 +159,28 @@ def _fetch_live_status(email: str | None = None, account_id: UUID | None = None)
             raise RuntimeError("No energy sites found on Tesla account")
 
         site = products[0]
+        site_info = {
+            "site_name": site.get("site_name", ""),
+            "energy_site_id": str(site.get("energy_site_id", "")),
+        }
         data = site.get_site_data()
-        return data.get("response", data)
+        return data.get("response", data), site_info
 
 
 async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_email: str | None = None) -> dict | None:
     """Poll Tesla API once, insert row, persist token cache, return data."""
-    status = _fetch_live_status(tesla_email, account_id)
+    status, site_info = _fetch_live_status(tesla_email, account_id)
 
     # Persist any token refresh that happened during the API call
     await _save_cache_to_db(pool, account_id)
+
+    # Update account with site metadata (if available and account exists)
+    if account_id and site_info.get("site_name"):
+        await pool.execute(
+            """UPDATE accounts SET site_name = $1, energy_site_id = $2
+               WHERE id = $3 AND (site_name IS NULL OR site_name != $1)""",
+            site_info["site_name"], site_info["energy_site_id"], account_id,
+        )
 
     ts = datetime.now(timezone.utc)
     solar_w = float(status.get("solar_power", 0))
@@ -340,7 +355,10 @@ if __name__ == "__main__":
             products = tesla.battery_list() + tesla.solar_list()
             print(f"Found {len(products)} energy site(s)")
             if products:
-                data = products[0].get_site_data()
+                site = products[0]
+                print(f"Site name: {site.get('site_name', 'N/A')}")
+                print(f"Energy site ID: {site.get('energy_site_id', 'N/A')}")
+                data = site.get_site_data()
                 status = data.get("response", data)
                 print(f"Live status: solar={status.get('solar_power', 0)}W "
                       f"grid={status.get('grid_power', 0)}W "
