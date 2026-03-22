@@ -228,6 +228,12 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check if Tesla token cache exists for this account
+    tesla_cache = await pool.fetchval(
+        "SELECT 1 FROM kv_store WHERE key = 'tesla_token_cache' AND account_id = $1",
+        row["account_id"],
+    )
+
     return {
         "id": str(row["id"]),
         "email": row["email"],
@@ -237,6 +243,7 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
         "created_at": row["created_at"].isoformat(),
         "site_name": row["site_name"],
         "energy_site_id": row["energy_site_id"],
+        "tesla_connected": tesla_cache is not None,
     }
 
 
@@ -319,4 +326,33 @@ async def unlink_telegram(request: Request, user: dict = Depends(get_current_use
         "UPDATE users SET telegram_chat_id = NULL WHERE id = $1",
         UUID(user["user_id"]),
     )
+    return {"status": "ok"}
+
+
+@router.delete("/account/tesla")
+async def disconnect_tesla(request: Request, user: dict = Depends(get_current_user)):
+    """Disconnect Tesla account — clears cached OAuth tokens so polling stops. Primary only."""
+    pool = request.app.state.pool
+
+    role = await pool.fetchval(
+        "SELECT role FROM users WHERE id = $1", UUID(user["user_id"]),
+    )
+    if role != "primary":
+        raise HTTPException(status_code=403, detail="Only the primary user can disconnect Tesla")
+
+    account_id = UUID(user["account_id"])
+
+    # Remove cached Tesla tokens
+    await pool.execute(
+        "DELETE FROM kv_store WHERE key = 'tesla_token_cache' AND account_id = $1",
+        account_id,
+    )
+
+    # Clear site metadata
+    await pool.execute(
+        "UPDATE accounts SET site_name = NULL, energy_site_id = NULL WHERE id = $1",
+        account_id,
+    )
+
+    logger.info("Tesla disconnected: account=%s by user=%s", user["account_id"], user["user_id"])
     return {"status": "ok"}

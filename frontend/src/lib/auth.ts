@@ -10,6 +10,7 @@ export interface AuthUser {
   telegram_chat_id: string | null;
   site_name: string | null;
   energy_site_id: string | null;
+  tesla_connected: boolean;
 }
 
 export function getAccessToken(): string | null {
@@ -149,6 +150,19 @@ export async function unlinkTelegram(): Promise<void> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Failed to unlink Telegram" }));
     throw new Error(err.detail || "Failed to unlink Telegram");
+  }
+}
+
+export async function disconnectTesla(): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/account/tesla`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to disconnect Tesla" }));
+    throw new Error(err.detail || "Failed to disconnect Tesla");
   }
 }
 
