@@ -43,30 +43,34 @@ export default function CostTiles({ data, days }: Props) {
   const label = days === 1 ? "Today" : `${days} Days`;
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <>
       {/* Solar Savings */}
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex flex-col items-center justify-center text-center">
-        <Sun size={20} className="text-yellow-400 mb-2" />
-        <p className="text-[11px] text-gray-500 mb-1">Solar Savings ({label})</p>
-        <p className="text-2xl sm:text-3xl font-bold text-yellow-400">
-          {fmt(solarSavings)}
-        </p>
-        <p className="text-[10px] text-gray-600 mt-1">
-          Solar + battery + export credits
-        </p>
+      <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center text-center">
+        <h2 className="text-sm font-semibold text-gray-400 mb-1">Solar Savings</h2>
+        <div className="flex-1 flex flex-col items-center justify-center py-4 sm:py-6">
+          <Sun size={24} className="text-yellow-400 mb-3" />
+          <p className="text-4xl sm:text-6xl font-bold text-yellow-400">
+            {fmt(solarSavings)}
+          </p>
+          <span className="text-xs sm:text-sm text-gray-500 mt-1">
+            solar + battery + export credits
+          </span>
+        </div>
       </div>
 
       {/* Grid Costs */}
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex flex-col items-center justify-center text-center">
-        <Zap size={20} className="text-red-400 mb-2" />
-        <p className="text-[11px] text-gray-500 mb-1">Grid Costs ({label})</p>
-        <p className="text-2xl sm:text-3xl font-bold text-red-400">
-          {fmt(gridCosts)}
-        </p>
-        <p className="text-[10px] text-gray-600 mt-1">
-          Total grid import costs
-        </p>
+      <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center text-center">
+        <h2 className="text-sm font-semibold text-gray-400 mb-1">Grid Costs</h2>
+        <div className="flex-1 flex flex-col items-center justify-center py-4 sm:py-6">
+          <Zap size={24} className="text-red-400 mb-3" />
+          <p className="text-4xl sm:text-6xl font-bold text-red-400">
+            {fmt(gridCosts)}
+          </p>
+          <span className="text-xs sm:text-sm text-gray-500 mt-1">
+            total grid import costs
+          </span>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
