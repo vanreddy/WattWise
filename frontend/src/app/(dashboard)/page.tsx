@@ -19,7 +19,7 @@ import {
 } from "@/lib/mock";
 import PowerFlowCards from "@/components/PowerFlowCards";
 import HourlyChart from "@/components/HourlyChart";
-import CostWaterfallChart from "@/components/CostWaterfallChart";
+import CostTiles from "@/components/CostTiles";
 import AlertsList from "@/components/AlertsList";
 import DateRangePicker, { type DateRange } from "@/components/DateRangePicker";
 import SankeyChart from "@/components/SankeyChart";
@@ -259,7 +259,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <SelfPoweredRing selfPoweredPct={selfPoweredPct} />
             <div className="lg:col-span-2">
-              <CostWaterfallChart data={daily} days={dateRange.days} />
+              <CostTiles data={daily} days={dateRange.days} />
             </div>
           </div>
         );
