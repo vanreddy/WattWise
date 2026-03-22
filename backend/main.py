@@ -20,6 +20,7 @@ from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
 from backend.auth_api import router as auth_router
 from backend.poller import poll_and_check, _load_cache_from_db
+from backend.telegram_bot import run_bot_polling
 from backend.weekly_summary import run_weekly_summary
 
 logging.basicConfig(
@@ -66,11 +67,21 @@ async def lifespan(app: FastAPI):
     )
 
     scheduler.start()
-    logger.info("WattWise started — poller, daily, and weekly jobs scheduled")
+
+    # Telegram bot listener (long-polling for /start commands)
+    import asyncio
+    bot_task = asyncio.create_task(run_bot_polling(pool))
+
+    logger.info("WattWise started — poller, daily, weekly jobs + Telegram bot listener")
 
     yield
 
     # Shutdown
+    bot_task.cancel()
+    try:
+        await bot_task
+    except asyncio.CancelledError:
+        pass
     scheduler.shutdown()
     await pool.close()
 
@@ -80,7 +91,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 app.include_router(api_router)

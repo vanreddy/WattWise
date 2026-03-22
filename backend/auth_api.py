@@ -44,6 +44,9 @@ class InviteRequest(BaseModel):
 class TelegramUpdate(BaseModel):
     chat_id: str
 
+class TelegramLinkRequest(BaseModel):
+    code: str
+
 
 # --------------- helpers ---------------
 
@@ -277,3 +280,38 @@ async def update_telegram(body: TelegramUpdate, request: Request, user: dict = D
         body.chat_id, UUID(user["user_id"]),
     )
     return {"status": "ok", "telegram_chat_id": body.chat_id}
+
+
+@router.post("/me/telegram/link")
+async def link_telegram(body: TelegramLinkRequest, request: Request, user: dict = Depends(get_current_user)):
+    """Verify a 6-digit code from @watt_wise_bot and link the user's Telegram."""
+    pool = request.app.state.pool
+
+    row = await pool.fetchrow(
+        """DELETE FROM telegram_link_codes
+           WHERE code = $1 AND expires_at > NOW()
+           RETURNING chat_id""",
+        body.code.strip(),
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    chat_id = row["chat_id"]
+    await pool.execute(
+        "UPDATE users SET telegram_chat_id = $1 WHERE id = $2",
+        chat_id, UUID(user["user_id"]),
+    )
+
+    logger.info("Telegram linked: user=%s chat_id=%s", user["user_id"], chat_id)
+    return {"status": "ok", "telegram_chat_id": chat_id}
+
+
+@router.delete("/me/telegram")
+async def unlink_telegram(request: Request, user: dict = Depends(get_current_user)):
+    """Disconnect Telegram notifications for the current user."""
+    pool = request.app.state.pool
+    await pool.execute(
+        "UPDATE users SET telegram_chat_id = NULL WHERE id = $1",
+        UUID(user["user_id"]),
+    )
+    return {"status": "ok"}

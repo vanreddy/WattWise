@@ -118,6 +118,38 @@ export async function createInvite(email: string): Promise<{ invite_id: string }
   return res.json();
 }
 
+export async function linkTelegram(code: string): Promise<{ telegram_chat_id: string }> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/me/telegram/link`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to link Telegram" }));
+    throw new Error(err.detail || "Failed to link Telegram");
+  }
+
+  return res.json();
+}
+
+export async function unlinkTelegram(): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/me/telegram`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to unlink Telegram" }));
+    throw new Error(err.detail || "Failed to unlink Telegram");
+  }
+}
+
 export async function register(
   email: string,
   password: string,
