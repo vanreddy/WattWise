@@ -65,6 +65,13 @@ export default function LoginPage() {
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
+
+        <p className="text-center text-gray-600 text-xs">
+          New to WattWise?{" "}
+          <a href="/onboard" className="text-yellow-500 hover:text-yellow-400">
+            Get started
+          </a>
+        </p>
       </form>
     </div>
   );

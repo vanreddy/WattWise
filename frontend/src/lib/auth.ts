@@ -203,3 +203,72 @@ export async function register(
   setTokens(data.access_token, data.refresh_token);
   return { user: data.user };
 }
+
+// --------------- primary onboarding helpers ---------------
+
+export async function registerPrimary(
+  email: string,
+  password: string,
+  teslaEmail?: string,
+): Promise<{ user: AuthUser }> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, tesla_email: teslaEmail || null }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Registration failed" }));
+    throw new Error(err.detail || "Registration failed");
+  }
+
+  const data = await res.json();
+  setTokens(data.access_token, data.refresh_token);
+  return { user: data.user };
+}
+
+export async function startTeslaAuth(): Promise<{
+  authorization_url: string;
+  state: string;
+  code_verifier: string;
+} | { status: string; message: string }> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/tesla/start`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to start Tesla auth" }));
+    throw new Error(err.detail || "Failed to start Tesla auth");
+  }
+
+  return res.json();
+}
+
+export async function completeTeslaAuth(
+  redirectUrl: string,
+  state: string,
+  codeVerifier: string,
+): Promise<{ status: string; site_name: string | null; energy_site_id: string | null }> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/tesla/complete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      redirect_url: redirectUrl,
+      state,
+      code_verifier: codeVerifier,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Tesla authentication failed" }));
+    throw new Error(err.detail || "Tesla authentication failed");
+  }
+
+  return res.json();
+}

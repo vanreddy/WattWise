@@ -1,0 +1,460 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import {
+  registerPrimary,
+  startTeslaAuth,
+  completeTeslaAuth,
+  linkTelegram,
+} from "@/lib/auth";
+
+/* ─── Step indicators ─── */
+const STEPS = ["Welcome", "Account", "Tesla", "Telegram"] as const;
+
+function StepBar({ current }: { current: number }) {
+  return (
+    <div className="flex items-center justify-center gap-2 mb-8">
+      {STEPS.map((label, i) => (
+        <div key={label} className="flex items-center gap-2">
+          <div
+            className={`
+              h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold
+              ${i < current ? "bg-green-500 text-white" : ""}
+              ${i === current ? "bg-yellow-500 text-gray-950" : ""}
+              ${i > current ? "bg-gray-800 text-gray-500" : ""}
+            `}
+          >
+            {i < current ? "\u2713" : i + 1}
+          </div>
+          {i < STEPS.length - 1 && (
+            <div
+              className={`w-8 h-0.5 ${i < current ? "bg-green-500" : "bg-gray-800"}`}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Step 0: Splash ─── */
+function SplashStep({ onNext }: { onNext: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
+      {/* Logo */}
+      <div className="space-y-3">
+        <div className="text-5xl font-extrabold">
+          <span className="text-yellow-400">Watt</span>
+          <span className="text-green-400">Wise</span>
+        </div>
+        <p className="text-gray-500 text-sm tracking-widest uppercase">
+          Solar Energy Optimizer
+        </p>
+      </div>
+
+      <div className="max-w-xs space-y-3 text-gray-400 text-sm">
+        <p>Monitor your solar production, battery, and grid usage in real time.</p>
+        <p>Get intelligent alerts and daily reports via Telegram.</p>
+      </div>
+
+      <button
+        onClick={onNext}
+        className="bg-yellow-500 text-gray-950 font-bold rounded-lg px-8 py-3 text-base hover:bg-yellow-400 transition-colors"
+      >
+        Get Started
+      </button>
+
+      <a href="/login" className="text-gray-600 hover:text-gray-400 text-xs">
+        Already have an account? Sign in
+      </a>
+    </div>
+  );
+}
+
+/* ─── Step 1: Create Account ─── */
+function AccountStep({
+  onNext,
+}: {
+  onNext: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [teslaEmail, setTeslaEmail] = useState("");
+  const [sameEmail, setSameEmail] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    const tEmail = sameEmail ? email : teslaEmail;
+    if (!tEmail) {
+      setError("Tesla email is required");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await registerPrimary(email, password, tEmail);
+      onNext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="w-full max-w-sm mx-auto space-y-5">
+      <div className="text-center space-y-1">
+        <h2 className="text-xl font-bold">Create Your Account</h2>
+        <p className="text-gray-500 text-sm">
+          Set up your WattWise login credentials
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <input
+          type="email"
+          placeholder="Email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
+        />
+        <input
+          type="password"
+          placeholder="Confirm password"
+          required
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
+        />
+
+        <div className="border-t border-gray-800 pt-3 space-y-3">
+          <p className="text-xs text-gray-500">Tesla Account Email</p>
+          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sameEmail}
+              onChange={(e) => setSameEmail(e.target.checked)}
+              className="accent-yellow-500"
+            />
+            Same as login email
+          </label>
+          {!sameEmail && (
+            <input
+              type="email"
+              placeholder="Tesla account email"
+              required
+              value={teslaEmail}
+              onChange={(e) => setTeslaEmail(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
+            />
+          )}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+      >
+        {loading ? "Creating account..." : "Continue"}
+      </button>
+    </form>
+  );
+}
+
+/* ─── Step 2: Connect Tesla ─── */
+function TeslaStep({ onNext }: { onNext: () => void }) {
+  const [phase, setPhase] = useState<"init" | "waiting" | "completing">("init");
+  const [authUrl, setAuthUrl] = useState("");
+  const [state, setState] = useState("");
+  const [codeVerifier, setCodeVerifier] = useState("");
+  const [redirectUrl, setRedirectUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [siteName, setSiteName] = useState<string | null>(null);
+
+  async function handleStartAuth() {
+    setError(null);
+    setLoading(true);
+    try {
+      const data = await startTeslaAuth();
+      if ("status" in data && data.status === "already_connected") {
+        onNext();
+        return;
+      }
+      if ("authorization_url" in data) {
+        setAuthUrl(data.authorization_url);
+        setState(data.state);
+        setCodeVerifier(data.code_verifier);
+        // Open Tesla auth in new tab
+        window.open(data.authorization_url, "_blank");
+        setPhase("waiting");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start Tesla auth");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleComplete(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    setPhase("completing");
+    try {
+      const result = await completeTeslaAuth(redirectUrl, state, codeVerifier);
+      setSiteName(result.site_name);
+      // Brief success display before advancing
+      setTimeout(() => onNext(), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tesla authentication failed");
+      setPhase("waiting");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="w-full max-w-sm mx-auto space-y-5">
+      <div className="text-center space-y-1">
+        <h2 className="text-xl font-bold">Connect Tesla</h2>
+        <p className="text-gray-500 text-sm">
+          Link your Tesla account to start monitoring energy data
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {siteName && (
+        <div className="bg-green-900/30 border border-green-800 text-green-300 text-sm rounded px-3 py-2 text-center">
+          Connected to &ldquo;{siteName}&rdquo;
+        </div>
+      )}
+
+      {phase === "init" && (
+        <div className="space-y-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+            <p className="text-sm text-gray-400">
+              This will open Tesla&rsquo;s login page in a new tab. After signing in:
+            </p>
+            <ol className="text-sm text-gray-500 list-decimal list-inside space-y-1">
+              <li>Sign in with your Tesla credentials</li>
+              <li>Authorize WattWise to access your energy data</li>
+              <li>Copy the redirect URL from your browser</li>
+              <li>Paste it back here</li>
+            </ol>
+          </div>
+
+          <button
+            onClick={handleStartAuth}
+            disabled={loading}
+            className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+          >
+            {loading ? "Starting..." : "Connect Tesla Account"}
+          </button>
+        </div>
+      )}
+
+      {phase === "waiting" && (
+        <form onSubmit={handleComplete} className="space-y-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2">
+            <p className="text-sm text-gray-400">
+              After signing into Tesla, copy the full URL from your browser&rsquo;s
+              address bar and paste it below.
+            </p>
+            <p className="text-xs text-gray-600">
+              It will look like: https://auth.tesla.com/void/callback?code=...
+            </p>
+          </div>
+
+          <textarea
+            required
+            placeholder="Paste the redirect URL here..."
+            value={redirectUrl}
+            onChange={(e) => setRedirectUrl(e.target.value)}
+            rows={3}
+            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm font-mono text-xs focus:outline-none focus:border-yellow-500 resize-none"
+          />
+
+          <button
+            type="submit"
+            disabled={loading || !redirectUrl.trim()}
+            className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+          >
+            {loading ? "Connecting..." : "Complete Connection"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.open(authUrl, "_blank")}
+            className="w-full text-gray-500 hover:text-gray-300 text-xs py-1"
+          >
+            Open Tesla login again
+          </button>
+        </form>
+      )}
+
+      {phase === "completing" && !siteName && (
+        <div className="text-center text-gray-500 text-sm py-4">
+          Connecting to Tesla...
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Step 3: Connect Telegram ─── */
+function TelegramStep({ onFinish }: { onFinish: () => void }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await linkTelegram(code);
+      setSuccess(true);
+      setTimeout(() => onFinish(), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to link Telegram");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="w-full max-w-sm mx-auto space-y-5">
+      <div className="text-center space-y-1">
+        <h2 className="text-xl font-bold">Connect Telegram</h2>
+        <p className="text-gray-500 text-sm">
+          Get daily reports and real-time alerts via Telegram
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {success ? (
+        <div className="bg-green-900/30 border border-green-800 text-green-300 text-sm rounded px-3 py-2 text-center">
+          Telegram connected! Redirecting to dashboard...
+        </div>
+      ) : (
+        <>
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+            <ol className="text-sm text-gray-500 list-decimal list-inside space-y-2">
+              <li>
+                Open{" "}
+                <a
+                  href="https://t.me/watt_wise_bot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-yellow-500 hover:text-yellow-400"
+                >
+                  @watt_wise_bot
+                </a>{" "}
+                in Telegram
+              </li>
+              <li>
+                Send{" "}
+                <code className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">
+                  /start
+                </code>
+              </li>
+              <li>Enter the 6-digit code below</li>
+            </ol>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="text"
+              required
+              inputMode="numeric"
+              pattern="\d{6}"
+              maxLength={6}
+              placeholder="6-digit code"
+              value={code}
+              onChange={(e) =>
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm text-center tracking-[0.3em] text-lg font-mono focus:outline-none focus:border-yellow-500"
+            />
+            <button
+              type="submit"
+              disabled={loading || code.length !== 6}
+              className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+            >
+              {loading ? "Verifying..." : "Connect Telegram"}
+            </button>
+          </form>
+
+          <button
+            onClick={onFinish}
+            className="w-full text-gray-600 hover:text-gray-400 text-xs py-1"
+          >
+            Skip for now — you can connect later in Settings
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Main onboarding page ─── */
+export default function OnboardPage() {
+  const [step, setStep] = useState(0);
+
+  function handleFinish() {
+    window.location.href = "/";
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-gray-100 px-4 py-8">
+      {step > 0 && <StepBar current={step} />}
+
+      {step === 0 && <SplashStep onNext={() => setStep(1)} />}
+      {step === 1 && <AccountStep onNext={() => setStep(2)} />}
+      {step === 2 && <TeslaStep onNext={() => setStep(3)} />}
+      {step === 3 && <TelegramStep onFinish={handleFinish} />}
+    </div>
+  );
+}

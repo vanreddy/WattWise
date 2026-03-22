@@ -1,10 +1,12 @@
-"""WattWise auth endpoints: login, register, refresh, me, invite, telegram."""
+"""WattWise auth endpoints: login, register, refresh, me, invite, telegram, tesla-oauth."""
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
+import teslapy
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
@@ -17,6 +19,7 @@ from backend.auth import (
     verify_password,
     REFRESH_EXPIRE_DAYS,
 )
+from backend.poller import _make_cache_callbacks, _token_caches, _save_cache_to_db, TESLA_CACHE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,11 @@ class TelegramUpdate(BaseModel):
 
 class TelegramLinkRequest(BaseModel):
     code: str
+
+class TeslaCompleteRequest(BaseModel):
+    redirect_url: str
+    state: str
+    code_verifier: str
 
 
 # --------------- helpers ---------------
@@ -146,18 +154,13 @@ async def register(body: RegisterRequest, request: Request):
 
     else:
         # --- Primary user: create new account ---
-        if not body.tesla_email:
-            raise HTTPException(
-                status_code=400,
-                detail="tesla_email is required when creating a new account",
+        # tesla_email is optional — can be linked later via Tesla OAuth onboarding
+        if body.tesla_email:
+            existing_acct = await pool.fetchval(
+                "SELECT id FROM accounts WHERE tesla_email = $1", body.tesla_email,
             )
-
-        # Check if Tesla email is already linked
-        existing_acct = await pool.fetchval(
-            "SELECT id FROM accounts WHERE tesla_email = $1", body.tesla_email,
-        )
-        if existing_acct:
-            raise HTTPException(status_code=409, detail="Tesla account already linked")
+            if existing_acct:
+                raise HTTPException(status_code=409, detail="Tesla account already linked")
 
         pw_hash = hash_password(body.password)
 
@@ -165,7 +168,7 @@ async def register(body: RegisterRequest, request: Request):
             async with conn.transaction():
                 acct = await conn.fetchrow(
                     "INSERT INTO accounts (tesla_email) VALUES ($1) RETURNING id",
-                    body.tesla_email,
+                    body.tesla_email,  # can be NULL
                 )
                 user = await conn.fetchrow(
                     """INSERT INTO users (account_id, email, password_hash, role)
@@ -385,3 +388,92 @@ async def disconnect_tesla(request: Request, user: dict = Depends(get_current_us
 
     logger.info("Tesla disconnected: account=%s by user=%s", user["account_id"], user["user_id"])
     return {"status": "ok"}
+
+
+# --------------- Tesla OAuth web flow ---------------
+
+@router.post("/tesla/start")
+async def tesla_oauth_start(request: Request, user: dict = Depends(get_current_user)):
+    """Generate a Tesla OAuth authorization URL for the user to open in their browser."""
+    pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
+
+    # Only primary user can connect Tesla
+    role = await pool.fetchval("SELECT role FROM users WHERE id = $1", UUID(user["user_id"]))
+    if role != "primary":
+        raise HTTPException(status_code=403, detail="Only the primary user can connect Tesla")
+
+    # Get tesla_email from accounts (may be null if not set yet)
+    tesla_email = await pool.fetchval("SELECT tesla_email FROM accounts WHERE id = $1", account_id)
+    if not tesla_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Set your Tesla email first (included during registration)",
+        )
+
+    # Create TeslaPy client and generate auth URL
+    loader, dumper = _make_cache_callbacks(account_id)
+    with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
+        if tesla.authorized:
+            return {"status": "already_connected", "message": "Tesla is already connected"}
+
+        state = tesla.new_state()
+        code_verifier = tesla.new_code_verifier()
+        url = tesla.authorization_url(state=state, code_verifier=code_verifier)
+
+    return {
+        "authorization_url": url,
+        "state": state,
+        "code_verifier": code_verifier,
+    }
+
+
+@router.post("/tesla/complete")
+async def tesla_oauth_complete(body: TeslaCompleteRequest, request: Request, user: dict = Depends(get_current_user)):
+    """Complete Tesla OAuth — exchange the redirect URL for tokens and fetch site info."""
+    pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
+
+    role = await pool.fetchval("SELECT role FROM users WHERE id = $1", UUID(user["user_id"]))
+    if role != "primary":
+        raise HTTPException(status_code=403, detail="Only the primary user can connect Tesla")
+
+    tesla_email = await pool.fetchval("SELECT tesla_email FROM accounts WHERE id = $1", account_id)
+    if not tesla_email:
+        raise HTTPException(status_code=400, detail="Tesla email not set on account")
+
+    loader, dumper = _make_cache_callbacks(account_id)
+    try:
+        with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
+            tesla.fetch_token(
+                authorization_response=body.redirect_url,
+                code_verifier=body.code_verifier,
+            )
+
+            # Fetch site info
+            site_name = None
+            energy_site_id = None
+            products = tesla.battery_list() + tesla.solar_list()
+            if products:
+                site = products[0]
+                site_name = site.get("site_name")
+                energy_site_id = str(site.get("energy_site_id", ""))
+    except Exception as exc:
+        logger.exception("Tesla OAuth exchange failed: %s", exc)
+        raise HTTPException(status_code=400, detail=f"Tesla authentication failed: {exc}")
+
+    # Save token cache to DB
+    await _save_cache_to_db(pool, account_id)
+
+    # Update account with site metadata
+    await pool.execute(
+        "UPDATE accounts SET site_name = $1, energy_site_id = $2 WHERE id = $3",
+        site_name, energy_site_id, account_id,
+    )
+
+    logger.info("Tesla connected: account=%s site=%s", account_id, site_name)
+    return {
+        "status": "ok",
+        "site_name": site_name,
+        "energy_site_id": energy_site_id,
+    }
