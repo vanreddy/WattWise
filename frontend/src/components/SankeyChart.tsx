@@ -14,19 +14,19 @@ interface Flow {
 interface NodeInfo {
   label: string;
   total: number;
-  y: number;
-  height: number;
+  x: number;
+  width: number;
   color: string;
-  side: "left" | "right";
+  side: "top" | "bottom";
 }
 
 const CHART_W = 700;
-const CHART_H = 380;
-const NODE_W = 14;
-const LEFT_X = 50;
-const RIGHT_X = CHART_W - 50;
-const NODE_GAP = 8;
-const MIN_NODE_H = 18;
+const CHART_H = 420;
+const NODE_H = 14;
+const TOP_Y = 50;
+const BOT_Y = CHART_H - 50;
+const NODE_GAP = 10;
+const MIN_NODE_W = 30;
 
 function formatKwh(v: number): string {
   if (v >= 100) return `${Math.round(v)} kWh`;
@@ -36,17 +36,8 @@ function formatKwh(v: number): string {
 
 /**
  * Compute energy flow totals from hourly data.
- * Uses the sign conventions:
- *   solar_w > 0 = generating
- *   grid_w > 0 = importing, < 0 = exporting
- *   battery_w > 0 = discharging, < 0 = charging
- *   home_w > 0 = consuming
- *   vehicle_w > 0 = consuming (subset of home)
  */
 function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
-  // Allocate flows PER-HOUR then sum — this avoids the problem of
-  // mixed time periods (e.g. grid charges battery at night, battery
-  // exports to grid in the evening) producing impossible aggregates.
   const flowTotals = new Map<string, number>();
   const addTo = (key: string, val: number) => {
     if (val > 0) flowTotals.set(key, (flowTotals.get(key) || 0) + val);
@@ -61,45 +52,41 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
     const home = Math.max(0, (d.home_w_avg - d.vehicle_w_avg)) / 1000;
     const ev = Math.max(0, d.vehicle_w_avg) / 1000;
 
-    // Sources for this hour
     const totalSrc = solar + imp + batDis;
     if (totalSrc === 0) continue;
 
-    // Solar allocation: home+EV first, then battery charge, then grid export
     const homePlusEv = home + ev;
     const solarToLoad = Math.min(solar, homePlusEv);
     const homeRatio = homePlusEv > 0 ? home / homePlusEv : 0;
-    addTo("Solar→Home", solarToLoad * homeRatio);
-    addTo("Solar→EV", solarToLoad * (1 - homeRatio));
+    addTo("Solar\u2192Home", solarToLoad * homeRatio);
+    addTo("Solar\u2192EV", solarToLoad * (1 - homeRatio));
 
     let solarLeft = solar - solarToLoad;
     const solarToBat = Math.min(batChg, solarLeft);
-    addTo("Solar→Battery", solarToBat);
+    addTo("Solar\u2192Battery", solarToBat);
     solarLeft -= solarToBat;
-    addTo("Solar→Grid Export", Math.min(exp, solarLeft));
+    addTo("Solar\u2192Grid Export", Math.min(exp, solarLeft));
     const solarToExp = Math.min(exp, solarLeft);
 
-    // Battery discharge: home+EV demand remaining, then grid export
     const remainHome = Math.max(0, home - solarToLoad * homeRatio);
     const remainEv = Math.max(0, ev - solarToLoad * (1 - homeRatio));
     const remainDemand = remainHome + remainEv;
     const batToLoad = Math.min(batDis, remainDemand);
     const demandRatio = remainDemand > 0 ? remainHome / remainDemand : 0;
-    addTo("Powerwall→Home", batToLoad * demandRatio);
-    addTo("Powerwall→EV", batToLoad * (1 - demandRatio));
+    addTo("Powerwall\u2192Home", batToLoad * demandRatio);
+    addTo("Powerwall\u2192EV", batToLoad * (1 - demandRatio));
     const batLeft = batDis - batToLoad;
     const remainExp = Math.max(0, exp - solarToExp);
-    addTo("Powerwall→Grid Export", Math.min(batLeft, remainExp));
+    addTo("Powerwall\u2192Grid Export", Math.min(batLeft, remainExp));
 
-    // Grid import: home+EV remaining, then battery charge
     const remainHome2 = Math.max(0, remainHome - batToLoad * demandRatio);
     const remainEv2 = Math.max(0, remainEv - batToLoad * (1 - demandRatio));
-    addTo("Grid Import→Home", remainHome2);
-    addTo("Grid Import→EV", remainEv2);
+    addTo("Grid Import\u2192Home", remainHome2);
+    addTo("Grid Import\u2192EV", remainEv2);
     const gridToLoad = remainHome2 + remainEv2;
     const gridLeft = imp - gridToLoad;
     const remainBatChg = Math.max(0, batChg - solarToBat);
-    addTo("Grid Import→Battery", Math.min(gridLeft, remainBatChg));
+    addTo("Grid Import\u2192Battery", Math.min(gridLeft, remainBatChg));
   }
 
   const flows: Flow[] = [];
@@ -111,7 +98,7 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
 
   for (const [key, value] of flowTotals) {
     if (value < 0.01) continue;
-    const [from, to] = key.split("→");
+    const [from, to] = key.split("\u2192");
     flows.push({ from, to, value: Math.round(value * 100) / 100, color: colorMap[from] || "#6b7280" });
   }
 
@@ -131,16 +118,13 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
     evTotal += d.ev_kwh;
   }
 
-  // Home consumption = solar self-consumed + import - export (approximate)
   const selfConsumed = data.reduce((s, d) => s + d.solar_self_consumed_kwh, 0);
-  const homeTotal = selfConsumed + importTotal - evTotal;
 
   const flows: Flow[] = [];
   const addFlow = (from: string, to: string, value: number, color: string) => {
     if (value > 0.01) flows.push({ from, to, value: Math.round(value * 100) / 100, color });
   };
 
-  // Solar → destinations
   const solarToExport = exportTotal;
   const solarToHome = Math.max(0, selfConsumed - evTotal);
   const solarToEv = Math.min(evTotal, selfConsumed);
@@ -149,7 +133,6 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
   addFlow("Solar", "EV", solarToEv, "#facc15");
   addFlow("Solar", "Grid Export", solarToExport, "#facc15");
 
-  // Grid import → destinations
   const gridToEv = Math.max(0, evTotal - solarToEv);
   const gridToHome = Math.max(0, importTotal - gridToEv);
   addFlow("Grid Import", "Home", gridToHome, "#f87171");
@@ -176,22 +159,21 @@ function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
 function renderSankey(flows: Flow[]) {
   if (flows.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[280px] sm:h-[380px] text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-[320px] sm:h-[420px] text-gray-500 text-sm">
         No energy flow data for this period
       </div>
     );
   }
 
   // Compute node totals
-  const leftNodes = new Map<string, number>();
-  const rightNodes = new Map<string, number>();
+  const topNodes = new Map<string, number>();
+  const botNodes = new Map<string, number>();
 
   for (const f of flows) {
-    leftNodes.set(f.from, (leftNodes.get(f.from) || 0) + f.value);
-    rightNodes.set(f.to, (rightNodes.get(f.to) || 0) + f.value);
+    topNodes.set(f.from, (topNodes.get(f.from) || 0) + f.value);
+    botNodes.set(f.to, (botNodes.get(f.to) || 0) + f.value);
   }
 
-  // Color map
   const nodeColors: Record<string, string> = {
     Solar: "#facc15",
     "Grid Import": "#f87171",
@@ -202,67 +184,67 @@ function renderSankey(flows: Flow[]) {
     "Grid Export": "#fb923c",
   };
 
-  // Layout nodes vertically
+  // Layout nodes horizontally
   const layoutNodes = (
     nodeMap: Map<string, number>,
-    x: number,
-    side: "left" | "right"
+    y: number,
+    side: "top" | "bottom"
   ): Map<string, NodeInfo> => {
     const entries = [...nodeMap.entries()].sort(([, a], [, b]) => b - a);
     const totalValue = entries.reduce((s, [, v]) => s + v, 0);
     const totalGap = (entries.length - 1) * NODE_GAP;
-    const availH = CHART_H - 60 - totalGap;
+    const availW = CHART_W - 100 - totalGap;
     const result = new Map<string, NodeInfo>();
 
-    let y = 30;
+    let x = 50;
     for (const [label, total] of entries) {
-      const height = Math.max(MIN_NODE_H, (total / totalValue) * availH);
+      const width = Math.max(MIN_NODE_W, (total / totalValue) * availW);
       result.set(label, {
         label,
         total,
-        y,
-        height,
+        x,
+        width,
         color: nodeColors[label] || "#6b7280",
         side,
       });
-      y += height + NODE_GAP;
+      x += width + NODE_GAP;
     }
 
     return result;
   };
 
-  const leftInfo = layoutNodes(leftNodes, LEFT_X, "left");
-  const rightInfo = layoutNodes(rightNodes, RIGHT_X, "right");
+  const topInfo = layoutNodes(topNodes, TOP_Y, "top");
+  const botInfo = layoutNodes(botNodes, BOT_Y, "bottom");
 
   // Track cumulative offsets for stacking flows within each node
-  const leftOffsets = new Map<string, number>();
-  const rightOffsets = new Map<string, number>();
-  for (const [k, v] of leftInfo) leftOffsets.set(k, v.y);
-  for (const [k, v] of rightInfo) rightOffsets.set(k, v.y);
+  const topOffsets = new Map<string, number>();
+  const botOffsets = new Map<string, number>();
+  for (const [k, v] of topInfo) topOffsets.set(k, v.x);
+  for (const [k, v] of botInfo) botOffsets.set(k, v.x);
 
-  // Build flow paths
+  // Build flow paths (vertical: top → bottom)
   const flowPaths = flows.map((f, i) => {
-    const left = leftInfo.get(f.from)!;
-    const right = rightInfo.get(f.to)!;
+    const top = topInfo.get(f.from)!;
+    const bot = botInfo.get(f.to)!;
 
-    const leftY = leftOffsets.get(f.from)!;
-    const rightY = rightOffsets.get(f.to)!;
+    const topX = topOffsets.get(f.from)!;
+    const botX = botOffsets.get(f.to)!;
 
-    const leftH = (f.value / left.total) * left.height;
-    const rightH = (f.value / right.total) * right.height;
+    const topW = (f.value / top.total) * top.width;
+    const botW = (f.value / bot.total) * bot.width;
 
-    leftOffsets.set(f.from, leftY + leftH);
-    rightOffsets.set(f.to, rightY + rightH);
+    topOffsets.set(f.from, topX + topW);
+    botOffsets.set(f.to, botX + botW);
 
-    const x0 = LEFT_X + NODE_W;
-    const x1 = RIGHT_X;
-    const cx = (x0 + x1) / 2;
+    const y0 = TOP_Y + NODE_H;
+    const y1 = BOT_Y;
+    const cy = (y0 + y1) / 2;
 
     const d = `
-      M ${x0} ${leftY}
-      C ${cx} ${leftY}, ${cx} ${rightY}, ${x1} ${rightY}
-      L ${x1} ${rightY + rightH}
-      C ${cx} ${rightY + rightH}, ${cx} ${leftY + leftH}, ${x0} ${leftY + leftH}
+      M ${topX} ${y0}
+      C ${topX} ${cy}, ${botX} ${cy}, ${botX} ${y1}
+      L ${botX + botW} ${y1}
+      C ${botX + botW} ${cy}, ${topX + topW} ${cy}, ${topX + topW} ${y0}
       Z
     `;
 
@@ -276,38 +258,36 @@ function renderSankey(flows: Flow[]) {
         strokeOpacity={0.5}
         strokeWidth={0.5}
       >
-        <title>{`${f.from} → ${f.to}: ${formatKwh(f.value)}`}</title>
+        <title>{`${f.from} \u2192 ${f.to}: ${formatKwh(f.value)}`}</title>
       </path>
     );
   });
 
   // Render nodes
-  const renderNodes = (info: Map<string, NodeInfo>, x: number) =>
+  const renderNodes = (info: Map<string, NodeInfo>, y: number) =>
     [...info.values()].map((n) => (
       <g key={n.label}>
         <rect
-          x={x}
-          y={n.y}
-          width={NODE_W}
-          height={n.height}
+          x={n.x}
+          y={y}
+          width={n.width}
+          height={NODE_H}
           rx={4}
           fill={n.color}
           fillOpacity={0.8}
         />
         <text
-          x={n.side === "left" ? x - 6 : x + NODE_W + 6}
-          y={n.y + n.height / 2}
-          dy="0.35em"
-          textAnchor={n.side === "left" ? "end" : "start"}
+          x={n.x + n.width / 2}
+          y={n.side === "top" ? y - 16 : y + NODE_H + 14}
+          textAnchor="middle"
           className="text-[11px] fill-gray-300 font-medium"
         >
           {n.label}
         </text>
         <text
-          x={n.side === "left" ? x - 6 : x + NODE_W + 6}
-          y={n.y + n.height / 2 + 14}
-          dy="0.35em"
-          textAnchor={n.side === "left" ? "end" : "start"}
+          x={n.x + n.width / 2}
+          y={n.side === "top" ? y - 4 : y + NODE_H + 26}
+          textAnchor="middle"
           className="text-[10px] fill-gray-500"
         >
           {formatKwh(n.total)}
@@ -316,10 +296,10 @@ function renderSankey(flows: Flow[]) {
     ));
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[280px] sm:h-[380px]">
+    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[320px] sm:h-[420px]">
       {flowPaths}
-      {renderNodes(leftInfo, LEFT_X)}
-      {renderNodes(rightInfo, RIGHT_X)}
+      {renderNodes(topInfo, TOP_Y)}
+      {renderNodes(botInfo, BOT_Y)}
     </svg>
   );
 }
@@ -332,7 +312,6 @@ interface Props {
 }
 
 export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }: Props) {
-  // Compute total energy from RAW data (same formula as HourlyChart) so numbers match
   const totalEnergy = useMemo(() => {
     if (hourlyData.length > 0) {
       let total = 0;
@@ -348,11 +327,9 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }
   }, [hourlyData, dailyData]);
 
   const flows = useMemo(() => {
-    // Prefer server-computed 5-min interval flows (most accurate)
     if (sankeyFlows) {
       return convertSankeyFlowsToFlows(sankeyFlows);
     }
-    // Fallback: client-side computation from hourly or daily data
     if (hourlyData.length > 0) {
       return computeFlowsFromHourly(hourlyData);
     }
