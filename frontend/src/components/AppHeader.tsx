@@ -13,6 +13,12 @@ export default function AppHeader() {
       {user && (
         <div className="flex items-center gap-3 text-sm">
           <span className="text-gray-500 hidden sm:inline">{user.email}</span>
+          <a
+            href="/settings"
+            className="text-gray-400 hover:text-gray-200 text-sm"
+          >
+            Settings
+          </a>
           <button
             onClick={logout}
             className="text-gray-400 hover:text-gray-200 text-sm"

@@ -96,3 +96,45 @@ export function logout() {
   clearTokens();
   window.location.href = "/login";
 }
+
+// --------------- invite & register helpers ---------------
+
+export async function createInvite(email: string): Promise<{ invite_id: string }> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/auth/invite`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create invite" }));
+    throw new Error(err.detail || "Failed to create invite");
+  }
+
+  return res.json();
+}
+
+export async function register(
+  email: string,
+  password: string,
+  invite_token: string,
+): Promise<{ user: AuthUser }> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, invite_token }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Registration failed" }));
+    throw new Error(err.detail || "Registration failed");
+  }
+
+  const data = await res.json();
+  setTokens(data.access_token, data.refresh_token);
+  return { user: data.user };
+}
