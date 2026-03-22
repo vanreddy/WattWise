@@ -25,8 +25,10 @@ import DateRangePicker, { type DateRange } from "@/components/DateRangePicker";
 import SankeyChart from "@/components/SankeyChart";
 import SelfPoweredRing from "@/components/SelfPoweredRing";
 import { Radio, BarChart3 } from "lucide-react";
+import { getAccessToken } from "@/lib/auth";
 
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
 function todayStr() {
   // Use local date (PST), not UTC — toISOString() would give UTC which is wrong after 4/5pm Pacific
@@ -48,7 +50,41 @@ export default function Dashboard() {
   const [sankeyFlows, setSankeyFlows] = useState<SankeyFlows | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [backfillActive, setBackfillActive] = useState(false);
+  const [backfillDays, setBackfillDays] = useState(0);
   const [dateRange, setDateRange] = useState<DateRange>(defaultRange);
+
+  // Detect backfill=active query param and poll backfill status
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("backfill") !== "active") return;
+
+    setBackfillActive(true);
+
+    const pollBackfill = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_BASE}/auth/account/backfill/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setBackfillDays(data.days_in_db || 0);
+          if (data.status === "done" || data.days_in_db >= 30) {
+            setBackfillActive(false);
+            // Clean up URL
+            window.history.replaceState({}, "", "/");
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    pollBackfill();
+    const id = setInterval(pollBackfill, 10000);
+    return () => clearInterval(id);
+  }, []);
 
   // Fetch summary + alerts (always current)
   const fetchLive = useCallback(async () => {
@@ -162,6 +198,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Backfill banner */}
+      {backfillActive && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 flex items-center gap-3">
+          <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+          <p className="text-sm text-yellow-400">
+            Loading historical data ({backfillDays} of 30 days)
+            &mdash; 30-day view will unlock when complete
+          </p>
+        </div>
+      )}
+
       {/* Status bar */}
       <div className="flex justify-between items-center text-xs text-gray-500">
         <span>
@@ -185,7 +232,11 @@ export default function Dashboard() {
           <BarChart3 size={14} className="text-blue-400" />
           Charts
         </h2>
-        <DateRangePicker value={dateRange} onChange={handleRangeChange} />
+        <DateRangePicker
+          value={dateRange}
+          onChange={handleRangeChange}
+          disabledPresets={backfillActive ? ["30 Days"] : []}
+        />
       </div>
 
       {/* 3. Self-powered + 4. Cost Waterfall + Alerts */}

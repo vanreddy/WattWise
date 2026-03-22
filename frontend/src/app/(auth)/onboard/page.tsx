@@ -376,7 +376,7 @@ function TelegramStep({ onFinish }: { onFinish: () => void }) {
 
       {success ? (
         <div className="bg-green-900/30 border border-green-800 text-green-300 text-sm rounded px-3 py-2 text-center">
-          Telegram connected! Redirecting to dashboard...
+          Telegram connected! Setting up your account...
         </div>
       ) : (
         <>
@@ -444,7 +444,7 @@ export default function OnboardPage() {
   const [step, setStep] = useState(0);
 
   function handleFinish() {
-    window.location.href = "/";
+    window.location.href = "/setup";
   }
 
   return (

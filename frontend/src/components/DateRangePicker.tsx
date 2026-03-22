@@ -49,9 +49,11 @@ const PRESETS: { label: string; getDates: () => { from: string; to: string; days
 export default function DateRangePicker({
   value,
   onChange,
+  disabledPresets = [],
 }: {
   value: DateRange;
   onChange: (range: DateRange) => void;
+  disabledPresets?: string[];
 }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customFrom, setCustomFrom] = useState(value.from);
@@ -81,23 +83,33 @@ export default function DateRangePicker({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 relative">
-      {PRESETS.map((p) => (
-        <button
-          key={p.label}
-          onClick={() => {
-            const { from, to, days } = p.getDates();
-            onChange({ label: p.label, from, to, days });
-            setShowCustom(false);
-          }}
-          className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors ${
-            value.label === p.label
-              ? "bg-blue-600 text-white"
-              : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-          }`}
-        >
-          {p.label}
-        </button>
-      ))}
+      {PRESETS.map((p) => {
+        const isDisabled = disabledPresets.includes(p.label);
+        return (
+          <button
+            key={p.label}
+            disabled={isDisabled}
+            title={isDisabled ? "Data still loading..." : undefined}
+            onClick={() => {
+              const { from, to, days } = p.getDates();
+              onChange({ label: p.label, from, to, days });
+              setShowCustom(false);
+            }}
+            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors ${
+              isDisabled
+                ? "bg-gray-800/50 text-gray-600 cursor-not-allowed"
+                : value.label === p.label
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            {p.label}
+            {isDisabled && (
+              <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-yellow-500/60 animate-pulse" />
+            )}
+          </button>
+        );
+      })}
 
       {/* Custom range button */}
       <button

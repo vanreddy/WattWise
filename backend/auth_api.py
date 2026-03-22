@@ -19,6 +19,7 @@ from backend.auth import (
     verify_password,
     REFRESH_EXPIRE_DAYS,
 )
+from backend.backfill import backfill_account, get_backfill_status
 from backend.poller import _make_cache_callbacks, _token_caches, _save_cache_to_db, TESLA_CACHE_KEY
 
 logger = logging.getLogger(__name__)
@@ -472,8 +473,34 @@ async def tesla_oauth_complete(body: TeslaCompleteRequest, request: Request, use
     )
 
     logger.info("Tesla connected: account=%s site=%s", account_id, site_name)
+
+    # Kick off 30-day backfill in the background
+    import asyncio
+    asyncio.create_task(backfill_account(pool, account_id, days=30))
+
     return {
         "status": "ok",
         "site_name": site_name,
         "energy_site_id": energy_site_id,
+    }
+
+
+# --------------- Backfill status ---------------
+
+@router.get("/account/backfill/status")
+async def backfill_status(request: Request, user: dict = Depends(get_current_user)):
+    """Get the backfill progress for the current account."""
+    account_id = UUID(user["account_id"])
+    status = get_backfill_status(account_id)
+
+    # Also check how many days of data actually exist in the DB
+    pool = request.app.state.pool
+    days_in_db = await pool.fetchval(
+        """SELECT COUNT(DISTINCT day) FROM daily_summaries WHERE account_id = $1""",
+        account_id,
+    )
+
+    return {
+        **status,
+        "days_in_db": days_in_db or 0,
     }
