@@ -172,7 +172,7 @@ interface NodeLayout {
   side: "left" | "right";
 }
 
-function renderSankey(flows: Flow[]) {
+function renderSankey(flows: Flow[], animated?: boolean) {
   if (flows.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] sm:h-[400px] text-gray-500 text-sm">
@@ -241,6 +241,38 @@ function renderSankey(flows: Flow[]) {
       Z
     `;
 
+    if (animated) {
+      const maxVal = flows.length > 0 ? Math.max(...flows.map(fl => fl.value)) : 1;
+      const speed = Math.max(1.5, 5 - (f.value / maxVal) * 3.5);
+      const gradId = `sankey-flow-grad-${i}`;
+      const clipId = `sankey-flow-clip-${i}`;
+      const midLeftY = leftY + leftH / 2;
+      const midRightY = rightY + rightH / 2;
+      const flowLine = `M ${x0} ${midLeftY} C ${cx} ${midLeftY}, ${cx} ${midRightY}, ${x1} ${midRightY}`;
+
+      return (
+        <g key={i}>
+          <clipPath id={clipId}><path d={d} /></clipPath>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={f.color} stopOpacity={0.05}>
+              <animate attributeName="stop-opacity" values="0.05;0.25;0.05" dur={`${speed}s`} repeatCount="indefinite" />
+            </stop>
+            <stop offset="40%" stopColor={f.color} stopOpacity={0.3}>
+              <animate attributeName="offset" values="0;0.5;1" dur={`${speed}s`} repeatCount="indefinite" />
+              <animate attributeName="stop-opacity" values="0.08;0.35;0.08" dur={`${speed}s`} repeatCount="indefinite" />
+            </stop>
+            <stop offset="100%" stopColor={f.color} stopOpacity={0.05}>
+              <animate attributeName="stop-opacity" values="0.05;0.2;0.05" dur={`${speed}s`} repeatCount="indefinite" />
+            </stop>
+          </linearGradient>
+          <path d={d} fill={f.color} fillOpacity={0.07} stroke={f.color} strokeOpacity={0.15} strokeWidth={0.5} />
+          <path d={d} fill={`url(#${gradId})`} stroke="none" clipPath={`url(#${clipId})`} />
+          <path d={flowLine} fill="none" stroke={f.color} strokeOpacity={0.12}
+            strokeWidth={Math.max(3, Math.min(leftH, rightH) * 0.3)} strokeLinecap="round" clipPath={`url(#${clipId})`} />
+        </g>
+      );
+    }
+
     return (
       <path
         key={i}
@@ -293,9 +325,10 @@ interface Props {
   dailyData: DailySummary[];
   days: number;
   sankeyFlows?: SankeyFlows | null;
+  animated?: boolean;
 }
 
-export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }: Props) {
+export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated }: Props) {
   const totalEnergy = useMemo(() => {
     if (hourlyData.length > 0) {
       let total = 0;
@@ -339,7 +372,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows }
           </div>
         )}
       </div>
-      {renderSankey(flows)}
+      {renderSankey(flows, animated)}
     </div>
   );
 }

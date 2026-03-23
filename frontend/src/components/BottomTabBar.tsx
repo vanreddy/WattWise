@@ -1,11 +1,10 @@
 "use client";
 
-import { Radio, GitBranch, DollarSign, Lightbulb } from "lucide-react";
+import { GitBranch, DollarSign, Lightbulb } from "lucide-react";
 
-export type TabId = "now" | "flow" | "savings" | "optimize";
+export type TabId = "flow" | "savings" | "optimize";
 
-const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
-  { id: "now", label: "Now", icon: Radio },
+const TABS: { id: TabId; label: string; icon: typeof GitBranch }[] = [
   { id: "flow", label: "Flow", icon: GitBranch },
   { id: "savings", label: "Savings", icon: DollarSign },
   { id: "optimize", label: "Optimize", icon: Lightbulb },

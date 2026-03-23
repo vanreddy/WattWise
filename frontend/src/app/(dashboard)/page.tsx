@@ -5,14 +5,13 @@ import { useAuth } from "@/components/AuthProvider";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useWeather } from "@/hooks/useWeather";
 import BottomTabBar, { type TabId } from "@/components/BottomTabBar";
-import NowTab from "@/components/tabs/NowTab";
 import FlowTab from "@/components/tabs/FlowTab";
 import SavingsTab from "@/components/tabs/SavingsTab";
 import OptimizeTab from "@/components/tabs/OptimizeTab";
 
 export default function Dashboard() {
   const { user, isLoading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>("now");
+  const [activeTab, setActiveTab] = useState<TabId>("flow");
   const data = useDashboardData();
   const weather = useWeather();
 
@@ -62,25 +61,19 @@ export default function Dashboard() {
 
       {/* Tab content */}
       <div className="min-h-[calc(100vh-10rem)]">
-        {activeTab === "now" && (
-          <NowTab
-            summary={data.summary}
-            lastUpdated={data.lastUpdated}
-            error={data.error}
-            weather={weather}
-          />
-        )}
-
         {activeTab === "flow" && (
           <FlowTab
             daily={data.daily}
             hourly={data.hourly}
-            alerts={data.alerts}
             intervalData={data.intervalData}
             sankeyFlows={data.sankeyFlows}
             dateRange={data.dateRange}
             setDateRange={data.setDateRange}
             backfillActive={data.backfillActive}
+            summary={data.summary}
+            lastUpdated={data.lastUpdated}
+            error={data.error}
+            weather={weather}
           />
         )}
 
@@ -98,6 +91,7 @@ export default function Dashboard() {
             summary={data.summary}
             daily={data.daily}
             alerts={data.alerts}
+            user={user}
           />
         )}
       </div>

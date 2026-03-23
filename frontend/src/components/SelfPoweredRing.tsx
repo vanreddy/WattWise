@@ -6,6 +6,7 @@ interface Props {
   selfPoweredPct: number; // 0–100
   label?: string;
   glass?: boolean;
+  live?: boolean;
 }
 
 function getColor(pct: number): string {
@@ -22,7 +23,7 @@ function getColor(pct: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export default function SelfPoweredRing({ selfPoweredPct, label = "Self-Powered", glass }: Props) {
+export default function SelfPoweredRing({ selfPoweredPct, label = "Self-Powered", glass, live }: Props) {
   const pct = Math.max(0, Math.min(100, selfPoweredPct));
 
   const { arcLength, offset, color } = useMemo(() => {
@@ -38,7 +39,10 @@ export default function SelfPoweredRing({ selfPoweredPct, label = "Self-Powered"
   // We rotate the group so the arc starts at bottom-left and sweeps to bottom-right
   return (
     <div className={glass ? "flex flex-col items-center justify-center" : "bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center"}>
-      <h2 className={`text-sm font-semibold mb-1 ${glass ? "text-white/60" : "text-gray-400"}`}>{label}</h2>
+      <h2 className={`text-sm font-semibold mb-1 ${glass ? "text-white/60" : "text-gray-400"} flex items-center gap-2 justify-center`}>
+        {live && <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" /></span>}
+        {label}
+      </h2>
       <div className="relative w-56 h-36 sm:w-72 sm:h-44">
         <svg viewBox="0 0 260 150" className="w-full h-full">
           {/* Background track — semi-circle arc */}
