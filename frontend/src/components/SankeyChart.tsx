@@ -74,12 +74,12 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
 
     let solarLeft = solar - solarToLoad;
     const solarToBat = Math.min(batChg, solarLeft);
-    addTo("Solar→Battery", solarToBat);
+    addTo("Solar→Powerwall", solarToBat);
     solarLeft -= solarToBat;
     addTo("Solar→Grid Export", Math.min(exp, solarLeft));
     const solarToExp = Math.min(exp, solarLeft);
 
-    // Battery discharge: home+EV demand remaining, then grid export
+    // Powerwall discharge: home+EV demand remaining, then grid export
     const remainHome = Math.max(0, home - solarToLoad * homeRatio);
     const remainEv = Math.max(0, ev - solarToLoad * (1 - homeRatio));
     const remainDemand = remainHome + remainEv;
@@ -99,7 +99,7 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
     const gridToLoad = remainHome2 + remainEv2;
     const gridLeft = imp - gridToLoad;
     const remainBatChg = Math.max(0, batChg - solarToBat);
-    addTo("Grid Import→Battery", Math.min(gridLeft, remainBatChg));
+    addTo("Grid Import→Powerwall", Math.min(gridLeft, remainBatChg));
   }
 
   const flows: Flow[] = [];
@@ -161,12 +161,12 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
 function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
   const mapping: [keyof SankeyFlows, string, string, string][] = [
     ["solar_to_home", "Solar", "Home", "#facc15"],
-    ["solar_to_battery", "Solar", "Battery", "#facc15"],
+    ["solar_to_battery", "Solar", "Powerwall", "#facc15"],
     ["solar_to_grid", "Solar", "Grid Export", "#facc15"],
     ["battery_to_home", "Powerwall", "Home", "#34d399"],
     ["battery_to_grid", "Powerwall", "Grid Export", "#34d399"],
     ["grid_to_home", "Grid Import", "Home", "#f87171"],
-    ["grid_to_battery", "Grid Import", "Battery", "#f87171"],
+    ["grid_to_battery", "Grid Import", "Powerwall", "#f87171"],
   ];
   return mapping
     .filter(([key]) => sf[key] >= 0.01)
@@ -198,7 +198,7 @@ function renderSankey(flows: Flow[]) {
     Powerwall: "#34d399",
     Home: "#60a5fa",
     EV: "#a78bfa",
-    Battery: "#2dd4bf",
+    Powerwall: "#2dd4bf",
     "Grid Export": "#fb923c",
   };
 
