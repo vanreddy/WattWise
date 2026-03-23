@@ -9,7 +9,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   ReferenceLine,
   ReferenceDot,
 } from "recharts";
@@ -308,6 +307,41 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   // XAxis tick interval: for 96 slots show every 2h (8 slots), for 24 hourly show every 2h
   const xInterval = useIntervals ? 7 : 2;
 
+  // Sankey-matched color palette
+  const colors = {
+    solar:             { stroke: "#facc15", fill: "#facc1540" },
+    grid_import:       { stroke: "#f87171", fill: "#f8717140" },
+    battery_discharge: { stroke: "#34d399", fill: "#34d39940" },
+    home:              { stroke: "#60a5fa", fill: "#60a5fa40" },
+    ev:                { stroke: "#a78bfa", fill: "#a78bfa40" },
+    grid_export:       { stroke: "#fb923c", fill: "#fb923c40" },
+    battery_charge:    { stroke: "#2dd4bf", fill: "#2dd4bf40" },
+  };
+
+  const sourceLegend = [
+    { label: "Solar", color: colors.solar.stroke },
+    { label: "Grid Import", color: colors.grid_import.stroke },
+    { label: "Powerwall Discharge", color: colors.battery_discharge.stroke },
+  ];
+  const consumptionLegend = [
+    { label: "Home", color: colors.home.stroke },
+    { label: "EV", color: colors.ev.stroke },
+    { label: "Grid Export", color: colors.grid_export.stroke },
+    { label: "Battery Charge", color: colors.battery_charge.stroke },
+  ];
+
+  const LegendRow = ({ items, label }: { items: typeof sourceLegend; label: string }) => (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+      <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
+      {items.map((it) => (
+        <span key={it.label} className="flex items-center gap-1.5 text-xs text-gray-400">
+          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: it.color }} />
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
+
   return (
     <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
       <style>{`
@@ -327,6 +361,10 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
           <span className="text-blue-400">↓ Consumption: {fmtKwh(totalEnergy)}</span>
         </div>
       </div>
+
+      {/* Sources legend — above chart */}
+      <LegendRow items={sourceLegend} label="Sources ↑" />
+
       <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
         <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -345,17 +383,14 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
           />
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip content={<CustomTooltip />} />
-          <Legend
-            formatter={(value) => <span className="text-xs text-gray-400">{value}</span>}
-          />
 
-          {/* Sources — stacked above zero */}
+          {/* Sources — stacked above zero (no stroke to avoid outline at bounds) */}
           <Area
             type="monotone"
             dataKey="solar"
             stackId="src"
-            stroke="#facc15"
-            fill="#facc1550"
+            stroke="none"
+            fill={colors.solar.fill}
             name="Solar"
             connectNulls={false}
           />
@@ -363,8 +398,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
             type="monotone"
             dataKey="grid_import"
             stackId="src"
-            stroke="#f87171"
-            fill="#f8717150"
+            stroke="none"
+            fill={colors.grid_import.fill}
             name="Grid Import"
             connectNulls={false}
           />
@@ -372,19 +407,19 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
             type="monotone"
             dataKey="battery_discharge"
             stackId="src"
-            stroke="#34d399"
-            fill="#34d39950"
+            stroke="none"
+            fill={colors.battery_discharge.fill}
             name="Powerwall Discharge"
             connectNulls={false}
           />
 
-          {/* Consumption — stacked below zero */}
+          {/* Consumption — stacked below zero (no stroke to avoid outline at bounds) */}
           <Area
             type="monotone"
             dataKey="home"
             stackId="sink"
-            stroke="#60a5fa"
-            fill="#60a5fa50"
+            stroke="none"
+            fill={colors.home.fill}
             name="Home"
             connectNulls={false}
           />
@@ -392,8 +427,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
             type="monotone"
             dataKey="ev"
             stackId="sink"
-            stroke="#a78bfa"
-            fill="#a78bfa50"
+            stroke="none"
+            fill={colors.ev.fill}
             name="EV"
             connectNulls={false}
           />
@@ -401,8 +436,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
             type="monotone"
             dataKey="grid_export"
             stackId="sink"
-            stroke="#fb923c"
-            fill="#fb923c50"
+            stroke="none"
+            fill={colors.grid_export.fill}
             name="Grid Export"
             connectNulls={false}
           />
@@ -410,8 +445,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
             type="monotone"
             dataKey="battery_charge"
             stackId="sink"
-            stroke="#2dd4bf"
-            fill="#2dd4bf50"
+            stroke="none"
+            fill={colors.battery_charge.fill}
             name="Battery Charge"
             connectNulls={false}
           />
@@ -430,6 +465,9 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
           )}
         </AreaChart>
       </ResponsiveContainer>
+
+      {/* Consumption legend — below chart */}
+      <LegendRow items={consumptionLegend} label="Consumption ↓" />
     </div>
   );
 }
