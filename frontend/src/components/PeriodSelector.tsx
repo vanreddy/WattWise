@@ -28,7 +28,7 @@ function formatWeekly(from: string, to: string): string {
   const t = new Date(to + "T12:00:00");
   const fStr = f.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const tStr = t.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${fStr} - ${tStr}`;
+  return `${fStr} – ${tStr}`;
 }
 
 function formatMonthly(dateStr: string): string {
@@ -47,7 +47,6 @@ function computeRange(mode: Mode, offset: number): DateRange {
   }
 
   if (mode === "weekly") {
-    // Week starts on Monday
     const d = new Date(now);
     const day = d.getDay();
     const mondayOffset = day === 0 ? -6 : 1 - day;
@@ -55,7 +54,6 @@ function computeRange(mode: Mode, offset: number): DateRange {
     const from = toDateStr(d);
     const sunday = new Date(d);
     sunday.setDate(sunday.getDate() + 6);
-    // Cap at today
     const today = new Date(now);
     const to = sunday > today ? toDateStr(today) : toDateStr(sunday);
     const days = Math.round((new Date(to + "T12:00:00").getTime() - new Date(from + "T12:00:00").getTime()) / 86400000) + 1;
@@ -66,14 +64,12 @@ function computeRange(mode: Mode, offset: number): DateRange {
     const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     const from = toDateStr(d);
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    // Cap at today
     const today = new Date(now);
     const to = lastDay > today ? toDateStr(today) : toDateStr(lastDay);
     const days = Math.round((new Date(to + "T12:00:00").getTime() - new Date(from + "T12:00:00").getTime()) / 86400000) + 1;
     return { label: "Monthly", from, to, days };
   }
 
-  // Custom — won't be called with offset
   const ds = toDateStr(now);
   return { label: "Custom", from: ds, to: ds, days: 1 };
 }
@@ -93,7 +89,6 @@ export default function PeriodSelector({ value, onChange, onModeChange }: Props)
   const [customTo, setCustomTo] = useState(value.to);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Close custom popover on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -122,13 +117,11 @@ export default function PeriodSelector({ value, onChange, onModeChange }: Props)
   const navigate = (dir: -1 | 1) => {
     if (mode === "custom") return;
     const newOffset = offset + dir;
-    // Don't go into the future
     if (newOffset > 0) return;
     setOffset(newOffset);
     const range = computeRange(mode, newOffset);
     onChange(range);
   };
-
 
   const applyCustom = () => {
     if (customFrom && customTo && customFrom <= customTo) {
@@ -150,24 +143,24 @@ export default function PeriodSelector({ value, onChange, onModeChange }: Props)
   const canGoForward = offset < 0;
 
   const MODES: { id: Mode; label: string }[] = [
-    { id: "daily", label: "Daily" },
-    { id: "weekly", label: "Weekly" },
-    { id: "monthly", label: "Monthly" },
+    { id: "daily", label: "Day" },
+    { id: "weekly", label: "Week" },
+    { id: "monthly", label: "Month" },
     { id: "custom", label: "Custom" },
   ];
 
   return (
-    <div className="flex flex-col items-center gap-2 relative">
-      {/* Mode toggle */}
-      <div className="flex bg-gray-800 rounded-lg p-0.5">
+    <div className="flex flex-col items-center gap-3 relative px-2">
+      {/* Segmented control */}
+      <div className="w-full max-w-sm bg-gray-800/60 rounded-2xl p-1 flex">
         {MODES.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => handleModeChange(id)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
               mode === id
-                ? "bg-blue-600 text-white"
-                : "text-gray-400 hover:text-gray-300"
+                ? "bg-gray-700 text-white shadow-md"
+                : "text-gray-500 active:bg-gray-800"
             }`}
           >
             {label}
@@ -177,70 +170,69 @@ export default function PeriodSelector({ value, onChange, onModeChange }: Props)
 
       {/* Period navigation */}
       {mode !== "custom" ? (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center w-full max-w-sm justify-between">
           <button
             onClick={() => navigate(-1)}
-            className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="p-2.5 rounded-xl text-gray-400 hover:text-white active:bg-gray-800 transition-colors"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={24} />
           </button>
-          <span className="text-sm font-medium text-gray-300 min-w-[140px] text-center">
+          <span className="text-base font-semibold text-gray-200 min-w-[160px] text-center">
             {periodLabel}
           </span>
           <button
             onClick={() => navigate(1)}
             disabled={!canGoForward}
-            className={`p-1 rounded-full transition-colors ${
+            className={`p-2.5 rounded-xl transition-colors ${
               canGoForward
-                ? "text-gray-400 hover:text-white hover:bg-gray-800"
-                : "text-gray-700 cursor-not-allowed"
+                ? "text-gray-400 hover:text-white active:bg-gray-800"
+                : "text-gray-800 cursor-not-allowed"
             }`}
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={24} />
           </button>
         </div>
       ) : (
-        <div className="relative">
+        <div className="relative w-full max-w-sm">
           <button
             onClick={() => setShowCustom(!showCustom)}
-            className="text-sm text-gray-400 hover:text-gray-300"
+            className="w-full py-2.5 text-sm font-medium text-gray-400 hover:text-gray-300 text-center"
           >
             {value.label === "Custom" && value.from !== value.to
               ? `${value.from} — ${value.to}`
-              : "Select dates..."}
+              : "Tap to select dates"}
           </button>
           {showCustom && (
             <div
               ref={popoverRef}
-              className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-xl z-50"
+              className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-2xl p-5 shadow-2xl z-50"
             >
-              <div className="flex items-center gap-2 mb-3">
+              <div className="space-y-4">
                 <div>
-                  <label className="text-[10px] text-gray-500 block mb-1">From</label>
+                  <label className="text-xs font-medium text-gray-500 block mb-1.5">From</label>
                   <input
                     type="date"
                     value={customFrom}
                     onChange={(e) => setCustomFrom(e.target.value)}
-                    className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-300"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
                   />
                 </div>
-                <span className="text-gray-500 mt-4">&rarr;</span>
                 <div>
-                  <label className="text-[10px] text-gray-500 block mb-1">To</label>
+                  <label className="text-xs font-medium text-gray-500 block mb-1.5">To</label>
                   <input
                     type="date"
                     value={customTo}
                     onChange={(e) => setCustomTo(e.target.value)}
-                    className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-300"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
                   />
                 </div>
+                <button
+                  onClick={applyCustom}
+                  className="w-full bg-blue-600 text-white text-sm font-semibold py-3 rounded-xl hover:bg-blue-500 active:bg-blue-700 transition-colors"
+                >
+                  Apply
+                </button>
               </div>
-              <button
-                onClick={applyCustom}
-                className="w-full bg-blue-600 text-white text-xs font-medium py-1.5 rounded-lg hover:bg-blue-500 transition-colors"
-              >
-                Apply
-              </button>
             </div>
           )}
         </div>
@@ -249,6 +241,5 @@ export default function PeriodSelector({ value, onChange, onModeChange }: Props)
   );
 }
 
-// Export for swipe integration
 export { computeRange };
 export type { Mode };
