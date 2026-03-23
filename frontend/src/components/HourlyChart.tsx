@@ -368,16 +368,15 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
       </div>
 
       <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
-        <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: -10, left: 5 }}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis
             dataKey="label"
             stroke="#6b7280"
             fontSize={10}
             interval={xInterval}
-            tick={{ dy: 2 }}
+            tick={{ dy: 4 }}
             tickLine={false}
-            height={25}
           />
           <YAxis hide domain={[-yMax, yMax]} />
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
@@ -402,7 +401,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
       </ResponsiveContainer>
 
       {/* Consumption legend — centered below chart */}
-      <div className="flex justify-center -mt-1">
+      <div className="flex justify-center mt-1">
         <LegendRow items={consumptionLegend} label="Consumption ↓" />
       </div>
     </div>
