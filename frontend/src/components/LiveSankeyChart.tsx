@@ -30,7 +30,6 @@ const NODE_ICONS: Record<string, string> = {
 };
 
 function formatW(w: number): string {
-  if (Math.abs(w) >= 1000) return `${(w / 1000).toFixed(1)} kW`;
   return `${(w / 1000).toFixed(1)} kW`;
 }
 
@@ -79,23 +78,23 @@ function computeLiveFlows(current: CurrentPower): LiveFlow[] {
   return flows;
 }
 
-// Transposed layout: sources at top, consumption at bottom
+// Horizontal layout: sources on left, consumption on right
 interface NodeLayout {
   label: string;
   total: number;
-  x: number;
-  width: number;
+  y: number;
+  height: number;
   color: string;
-  row: "top" | "bottom";
+  side: "left" | "right";
 }
 
 const CHART_W = 600;
-const CHART_H = 400;
-const NODE_H = 12;
-const TOP_Y = 70;
-const BOTTOM_Y = CHART_H - 70;
-const NODE_GAP = 12;
-const MIN_NODE_W = 40;
+const CHART_H = 350;
+const NODE_W = 14;
+const LEFT_X = 110;
+const RIGHT_X = CHART_W - 110;
+const NODE_GAP = 14;
+const MIN_NODE_H = 30;
 
 export default function LiveSankeyChart({ current }: { current: CurrentPower }) {
   const flows = useMemo(() => computeLiveFlows(current), [current]);
@@ -110,70 +109,70 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
     );
   }
 
-  const topNodes = new Map<string, number>();
-  const bottomNodes = new Map<string, number>();
+  const leftNodes = new Map<string, number>();
+  const rightNodes = new Map<string, number>();
   for (const f of flows) {
-    topNodes.set(f.from, (topNodes.get(f.from) || 0) + f.watts);
-    bottomNodes.set(f.to, (bottomNodes.get(f.to) || 0) + f.watts);
+    leftNodes.set(f.from, (leftNodes.get(f.from) || 0) + f.watts);
+    rightNodes.set(f.to, (rightNodes.get(f.to) || 0) + f.watts);
   }
 
   const layoutNodes = (
     nodeMap: Map<string, number>,
-    row: "top" | "bottom"
+    side: "left" | "right"
   ): Map<string, NodeLayout> => {
     const entries = [...nodeMap.entries()].sort(([, a], [, b]) => b - a);
     const totalValue = entries.reduce((s, [, v]) => s + v, 0);
     const totalGap = (entries.length - 1) * NODE_GAP;
-    const availW = CHART_W - 80 - totalGap;
+    const availH = CHART_H - 60 - totalGap;
     const result = new Map<string, NodeLayout>();
 
-    let x = 40;
+    let y = 30;
     for (const [label, total] of entries) {
-      const width = Math.max(MIN_NODE_W, (total / totalValue) * availW);
-      result.set(label, { label, total, x, width, color: NODE_COLORS[label] || "#6b7280", row });
-      x += width + NODE_GAP;
+      const height = Math.max(MIN_NODE_H, (total / totalValue) * availH);
+      result.set(label, { label, total, y, height, color: NODE_COLORS[label] || "#6b7280", side });
+      y += height + NODE_GAP;
     }
     return result;
   };
 
-  const topInfo = layoutNodes(topNodes, "top");
-  const bottomInfo = layoutNodes(bottomNodes, "bottom");
+  const leftInfo = layoutNodes(leftNodes, "left");
+  const rightInfo = layoutNodes(rightNodes, "right");
 
-  const topOffsets = new Map<string, number>();
-  const bottomOffsets = new Map<string, number>();
-  for (const [k, v] of topInfo) topOffsets.set(k, v.x);
-  for (const [k, v] of bottomInfo) bottomOffsets.set(k, v.x);
+  const leftOffsets = new Map<string, number>();
+  const rightOffsets = new Map<string, number>();
+  for (const [k, v] of leftInfo) leftOffsets.set(k, v.y);
+  for (const [k, v] of rightInfo) rightOffsets.set(k, v.y);
 
   const maxWatts = Math.max(...flows.map((f) => f.watts));
 
   const flowPaths = flows.map((f, i) => {
-    const top = topInfo.get(f.from)!;
-    const bottom = bottomInfo.get(f.to)!;
+    const left = leftInfo.get(f.from)!;
+    const right = rightInfo.get(f.to)!;
 
-    const topX = topOffsets.get(f.from)!;
-    const bottomX = bottomOffsets.get(f.to)!;
+    const leftY = leftOffsets.get(f.from)!;
+    const rightY = rightOffsets.get(f.to)!;
 
-    const topW = (f.watts / top.total) * top.width;
-    const bottomW = (f.watts / bottom.total) * bottom.width;
+    const leftH = (f.watts / left.total) * left.height;
+    const rightH = (f.watts / right.total) * right.height;
 
-    topOffsets.set(f.from, topX + topW);
-    bottomOffsets.set(f.to, bottomX + bottomW);
+    leftOffsets.set(f.from, leftY + leftH);
+    rightOffsets.set(f.to, rightY + rightH);
 
-    const y0 = TOP_Y + NODE_H;
-    const y1 = BOTTOM_Y;
-    const cy = (y0 + y1) / 2;
+    const x0 = LEFT_X + NODE_W;
+    const x1 = RIGHT_X;
+    const cx = (x0 + x1) / 2;
 
     const d = `
-      M ${topX} ${y0}
-      C ${topX} ${cy}, ${bottomX} ${cy}, ${bottomX} ${y1}
-      L ${bottomX + bottomW} ${y1}
-      C ${bottomX + bottomW} ${cy}, ${topX + topW} ${cy}, ${topX + topW} ${y0}
+      M ${x0} ${leftY}
+      C ${cx} ${leftY}, ${cx} ${rightY}, ${x1} ${rightY}
+      L ${x1} ${rightY + rightH}
+      C ${cx} ${rightY + rightH}, ${cx} ${leftY + leftH}, ${x0} ${leftY + leftH}
       Z
     `;
 
-    const midTopX = topX + topW / 2;
-    const midBottomX = bottomX + bottomW / 2;
-    const flowLine = `M ${midTopX} ${y0} C ${midTopX} ${cy}, ${midBottomX} ${cy}, ${midBottomX} ${y1}`;
+    const midLeftY = leftY + leftH / 2;
+    const midRightY = rightY + rightH / 2;
+    const flowLine = `M ${x0} ${midLeftY} C ${cx} ${midLeftY}, ${cx} ${midRightY}, ${x1} ${midRightY}`;
 
     const speed = Math.max(1.5, 5 - (f.watts / maxWatts) * 3.5);
     const gradId = `live-flow-grad-${i}`;
@@ -184,7 +183,7 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
         <clipPath id={clipId}>
           <path d={d} />
         </clipPath>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={f.color} stopOpacity={0.05}>
             <animate attributeName="stop-opacity" values="0.05;0.25;0.05" dur={`${speed}s`} repeatCount="indefinite" />
           </stop>
@@ -200,29 +199,31 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
         <path d={d} fill={f.color} fillOpacity={0.07} stroke={f.color} strokeOpacity={0.15} strokeWidth={0.5} />
         <path d={d} fill={`url(#${gradId})`} stroke="none" clipPath={`url(#${clipId})`} />
         <path d={flowLine} fill="none" stroke={f.color} strokeOpacity={0.12}
-          strokeWidth={Math.max(3, Math.min(topW, bottomW) * 0.3)} strokeLinecap="round" clipPath={`url(#${clipId})`} />
+          strokeWidth={Math.max(3, Math.min(leftH, rightH) * 0.3)} strokeLinecap="round" clipPath={`url(#${clipId})`} />
       </g>
     );
   });
 
-  const renderNodes = (info: Map<string, NodeLayout>, y: number) =>
+  const renderNodes = (info: Map<string, NodeLayout>, x: number) =>
     [...info.values()].map((n) => {
       const iconPath = NODE_ICONS[n.label];
-      const labelY = n.row === "top" ? y - 28 : y + NODE_H + 18;
-      const valueY = n.row === "top" ? y - 14 : y + NODE_H + 32;
-      const iconY = n.row === "top" ? y - 44 : y + NODE_H + 38;
+      const isLeft = n.side === "left";
+      const textX = isLeft ? x - 8 : x + NODE_W + 8;
+      const anchor = isLeft ? "end" : "start";
+      const iconX = isLeft ? x - 22 : x + NODE_W + 8;
+      const centerY = n.y + n.height / 2;
       return (
         <g key={n.label}>
-          <rect x={n.x} y={y} width={n.width} height={NODE_H} rx={4} fill={n.color} fillOpacity={0.8} />
+          <rect x={x} y={n.y} width={NODE_W} height={n.height} rx={4} fill={n.color} fillOpacity={0.8} />
           {iconPath && (
-            <g transform={`translate(${n.x + n.width / 2 - 7}, ${iconY})`}>
+            <g transform={`translate(${iconX}, ${centerY - 20})`}>
               <path d={iconPath} fill={n.color} fillOpacity={0.7} transform="scale(0.875)" />
             </g>
           )}
-          <text x={n.x + n.width / 2} y={labelY} textAnchor="middle" fill={n.color} className="font-semibold" fontSize={11}>
+          <text x={textX} y={centerY - 3} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={11}>
             {n.label}
           </text>
-          <text x={n.x + n.width / 2} y={valueY} textAnchor="middle" fill={n.color} className="font-semibold" fontSize={11}>
+          <text x={textX} y={centerY + 11} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={11}>
             {formatW(n.total)}
           </text>
         </g>
@@ -241,11 +242,11 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
             </feMerge>
           </filter>
         </defs>
-        <text x={CHART_W / 2} y={14} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
-        <text x={CHART_W / 2} y={CHART_H - 4} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
+        <text x={LEFT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
+        <text x={RIGHT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
         {flowPaths}
-        {renderNodes(topInfo, TOP_Y)}
-        {renderNodes(bottomInfo, BOTTOM_Y)}
+        {renderNodes(leftInfo, LEFT_X)}
+        {renderNodes(rightInfo, RIGHT_X)}
       </svg>
     </div>
   );
