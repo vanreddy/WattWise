@@ -121,21 +121,29 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
   dateRange: DateRange;
   swipeDir: "left" | "right" | null;
 }) {
-  // Compute self-powered %
+  // Compute self-powered % with solar/battery breakout
   let gridImport = 0;
   let totalConsumption = 0;
+  let solarToHome = 0;
+  let batteryToHome = 0;
   if (sankeyFlows) {
     gridImport = sankeyFlows.grid_to_home + sankeyFlows.grid_to_battery;
-    totalConsumption = sankeyFlows.solar_to_home + sankeyFlows.battery_to_home + sankeyFlows.grid_to_home;
+    solarToHome = sankeyFlows.solar_to_home;
+    batteryToHome = sankeyFlows.battery_to_home;
+    totalConsumption = solarToHome + batteryToHome + sankeyFlows.grid_to_home;
   } else if (daily.length > 0) {
     gridImport = daily.reduce((s, d) => s + d.total_import_kwh, 0);
     const solar = daily.reduce((s, d) => s + d.solar_generated_kwh, 0);
     const exp = daily.reduce((s, d) => s + d.total_export_kwh, 0);
     totalConsumption = gridImport + solar - exp;
+    solarToHome = daily.reduce((s, d) => s + d.solar_self_consumed_kwh, 0);
+    batteryToHome = Math.max(0, totalConsumption - solarToHome - gridImport);
   }
   const selfPoweredPct = totalConsumption > 0
     ? Math.max(0, (1 - gridImport / totalConsumption) * 100)
     : 0;
+  const solarPct = totalConsumption > 0 ? (solarToHome / totalConsumption) * 100 : 0;
+  const batteryPctVal = totalConsumption > 0 ? (batteryToHome / totalConsumption) * 100 : 0;
 
   return (
     <div
@@ -148,7 +156,7 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
       }`}
     >
       <div className="space-y-4">
-        <SelfPoweredRing selfPoweredPct={selfPoweredPct} />
+        <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
 
         <SankeyChart
           hourlyData={hourly}

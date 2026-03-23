@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { GitBranch } from "lucide-react";
+import { useMemo, useState } from "react";
+import { GitBranch, X } from "lucide-react";
 import type { HourlyBucket, DailySummary, SankeyFlows } from "@/lib/api";
 
 interface Flow {
@@ -12,7 +12,7 @@ interface Flow {
 }
 
 const CHART_W = 700;
-const CHART_H = 400;
+const CHART_H = 420;
 const NODE_W = 14;
 const LEFT_X = 140;
 const RIGHT_X = CHART_W - 140;
@@ -22,10 +22,9 @@ const MIN_NODE_H = 30;
 const nodeColors: Record<string, string> = {
   Solar: "#facc15",
   "Grid Import": "#f87171",
-  "Powerwall Discharge": "#34d399",
+  Powerwall: "#34d399",
   Home: "#60a5fa",
   EV: "#a78bfa",
-  "Powerwall Charge": "#2dd4bf",
   "Grid Export": "#fb923c",
 };
 
@@ -33,8 +32,7 @@ const nodeColors: Record<string, string> = {
 const NODE_ICONS: Record<string, string> = {
   Solar: "M8 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 1zm3.7 2.3a.5.5 0 0 1 0 .7l-.7.7a.5.5 0 1 1-.7-.7l.7-.7a.5.5 0 0 1 .7 0zM14 8a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1A.5.5 0 0 1 14 8zM4.3 3.3a.5.5 0 0 1 .7 0l.7.7a.5.5 0 0 1-.7.7l-.7-.7a.5.5 0 0 1 0-.7zM3.5 8a.5.5 0 0 0-.5-.5H2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5zm8.5 3a4 4 0 1 1-8 0 4 4 0 0 1 8 0z",
   "Grid Import": "M13 2.5a1.5 1.5 0 0 1 3 0v11a1.5 1.5 0 0 1-3 0v-11zm-5 2a1.5 1.5 0 0 1 3 0v9a1.5 1.5 0 0 1-3 0v-9zm-5 3a1.5 1.5 0 0 1 3 0v6a1.5 1.5 0 0 1-3 0v-6z",
-  "Powerwall Discharge": "M2 4h10v1H2V4zm0 2h10v6H2V6zm1 1v4h8V7H3zm8-5h2v1h1v2h-1v7h1v2h-1v1h-2v-1H3v1H1v-2h1V5H1V3h1V2h1z",
-  "Powerwall Charge": "M2 4h10v1H2V4zm0 2h10v6H2V6zm1 1v4h8V7H3zm8-5h2v1h1v2h-1v7h1v2h-1v1h-2v-1H3v1H1v-2h1V5H1V3h1V2h1z",
+  Powerwall: "M2 4h10v1H2V4zm0 2h10v6H2V6zm1 1v4h8V7H3zm8-5h2v1h1v2h-1v7h1v2h-1v1h-2v-1H3v1H1v-2h1V5H1V3h1V2h1z",
   Home: "M8 1l7 5.5V14a1 1 0 0 1-1 1h-4v-4H6v4H2a1 1 0 0 1-1-1V6.5L8 1z",
   EV: "M4 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2H4zm1 2h6v4H5V3zm0 6h2v2H5V9zm4 0h2v2H9V9z",
   "Grid Export": "M13 2.5a1.5 1.5 0 0 1 3 0v11a1.5 1.5 0 0 1-3 0v-11zm-5 2a1.5 1.5 0 0 1 3 0v9a1.5 1.5 0 0 1-3 0v-9zm-5 3a1.5 1.5 0 0 1 3 0v6a1.5 1.5 0 0 1-3 0v-6z",
@@ -70,7 +68,7 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
 
     let solarLeft = solar - solarToLoad;
     const solarToBat = Math.min(batChg, solarLeft);
-    addTo("Solar→Powerwall Charge", solarToBat);
+    addTo("Solar→Powerwall", solarToBat);
     solarLeft -= solarToBat;
     addTo("Solar→Grid Export", Math.min(exp, solarLeft));
     const solarToExp = Math.min(exp, solarLeft);
@@ -80,11 +78,11 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
     const remainDemand = remainHome + remainEv;
     const batToLoad = Math.min(batDis, remainDemand);
     const demandRatio = remainDemand > 0 ? remainHome / remainDemand : 0;
-    addTo("Powerwall Discharge→Home", batToLoad * demandRatio);
-    addTo("Powerwall Discharge→EV", batToLoad * (1 - demandRatio));
+    addTo("Powerwall→Home", batToLoad * demandRatio);
+    addTo("Powerwall→EV", batToLoad * (1 - demandRatio));
     const batLeft = batDis - batToLoad;
     const remainExp = Math.max(0, exp - solarToExp);
-    addTo("Powerwall Discharge→Grid Export", Math.min(batLeft, remainExp));
+    addTo("Powerwall→Grid Export", Math.min(batLeft, remainExp));
 
     const remainHome2 = Math.max(0, remainHome - batToLoad * demandRatio);
     const remainEv2 = Math.max(0, remainEv - batToLoad * (1 - demandRatio));
@@ -93,14 +91,14 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
     const gridToLoad = remainHome2 + remainEv2;
     const gridLeft = imp - gridToLoad;
     const remainBatChg = Math.max(0, batChg - solarToBat);
-    addTo("Grid Import→Powerwall Charge", Math.min(gridLeft, remainBatChg));
+    addTo("Grid Import→Powerwall", Math.min(gridLeft, remainBatChg));
   }
 
   const flows: Flow[] = [];
   const colorMap: Record<string, string> = {
     "Solar": "#facc15",
     "Grid Import": "#f87171",
-    "Powerwall Discharge": "#34d399",
+    "Powerwall": "#34d399",
   };
 
   for (const [key, value] of flowTotals) {
@@ -151,12 +149,12 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
 function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
   const mapping: [keyof SankeyFlows, string, string, string][] = [
     ["solar_to_home", "Solar", "Home", "#facc15"],
-    ["solar_to_battery", "Solar", "Powerwall Charge", "#facc15"],
+    ["solar_to_battery", "Solar", "Powerwall", "#facc15"],
     ["solar_to_grid", "Solar", "Grid Export", "#facc15"],
-    ["battery_to_home", "Powerwall Discharge", "Home", "#34d399"],
-    ["battery_to_grid", "Powerwall Discharge", "Grid Export", "#34d399"],
+    ["battery_to_home", "Powerwall", "Home", "#34d399"],
+    ["battery_to_grid", "Powerwall", "Grid Export", "#34d399"],
     ["grid_to_home", "Grid Import", "Home", "#f87171"],
-    ["grid_to_battery", "Grid Import", "Powerwall Charge", "#f87171"],
+    ["grid_to_battery", "Grid Import", "Powerwall", "#f87171"],
   ];
   return mapping
     .filter(([key]) => sf[key] >= 0.01)
@@ -172,7 +170,7 @@ interface NodeLayout {
   side: "left" | "right";
 }
 
-function renderSankey(flows: Flow[], animated?: boolean) {
+function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: string, side: "left" | "right") => void) {
   if (flows.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] sm:h-[400px] text-gray-500 text-sm">
@@ -290,14 +288,21 @@ function renderSankey(flows: Flow[], animated?: boolean) {
 
   const renderNodes = (info: Map<string, NodeLayout>, x: number) =>
     [...info.values()].map((n) => {
-      const iconPath = NODE_ICONS[n.label];
       const isLeft = n.side === "left";
       const textX = isLeft ? x - 8 : x + NODE_W + 8;
       const anchor = isLeft ? "end" : "start";
-      const iconX = isLeft ? x - 22 : x + NODE_W + 8;
       const centerY = n.y + n.height / 2;
+      const clickable = !!onNodeClick;
       return (
-        <g key={`${n.side}-${n.label}`}>
+        <g
+          key={`${n.side}-${n.label}`}
+          onClick={() => onNodeClick?.(n.label, n.side)}
+          className={clickable ? "cursor-pointer" : ""}
+        >
+          {/* Invisible wider hit area for easier tapping */}
+          {clickable && (
+            <rect x={isLeft ? x - 80 : x - 10} y={n.y - 5} width={100 + NODE_W} height={n.height + 10} fill="transparent" />
+          )}
           <rect x={x} y={n.y} width={NODE_W} height={n.height} rx={4} fill={n.color} fillOpacity={0.8} />
           <text x={textX} y={centerY - 3} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={12}>
             {n.label}
@@ -310,7 +315,7 @@ function renderSankey(flows: Flow[], animated?: boolean) {
     });
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[300px] sm:h-[400px]">
+    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[340px] sm:h-[420px]">
       <text x={LEFT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>SOURCES</text>
       <text x={RIGHT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>CONSUMPTION</text>
       {flowPaths}
@@ -329,6 +334,8 @@ interface Props {
 }
 
 export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated }: Props) {
+  const [selectedNode, setSelectedNode] = useState<{ label: string; side: "left" | "right" } | null>({ label: "Home", side: "right" });
+
   const totalEnergy = useMemo(() => {
     if (hourlyData.length > 0) {
       let total = 0;
@@ -358,9 +365,33 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
 
   const title = days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
 
+  // Compute detail rows for selected node
+  const detailRows = useMemo(() => {
+    if (!selectedNode) return [];
+    const { label, side } = selectedNode;
+    const relevant = side === "left"
+      ? flows.filter(f => f.from === label)
+      : flows.filter(f => f.to === label);
+    const total = relevant.reduce((s, f) => s + f.value, 0);
+    return relevant.map(f => ({
+      target: side === "left" ? f.to : f.from,
+      value: f.value,
+      pct: total > 0 ? (f.value / total) * 100 : 0,
+      color: side === "left" ? nodeColors[f.to] || "#6b7280" : nodeColors[f.from] || "#6b7280",
+    }));
+  }, [selectedNode, flows]);
+
+  const handleNodeClick = (label: string, side: "left" | "right") => {
+    if (selectedNode?.label === label && selectedNode?.side === side) {
+      setSelectedNode(null);
+    } else {
+      setSelectedNode({ label, side });
+    }
+  };
+
   return (
     <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 mb-3">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 mb-1">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <GitBranch size={14} className="text-purple-400" />
           {title}
@@ -372,7 +403,39 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
           </div>
         )}
       </div>
-      {renderSankey(flows, animated)}
+      {renderSankey(flows, animated, handleNodeClick)}
+
+      {/* Detail table for selected node */}
+      {selectedNode && detailRows.length > 0 && (
+        <div className="mt-1 bg-gray-800/60 rounded-lg border border-gray-700/50 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold" style={{ color: nodeColors[selectedNode.label] || "#fff" }}>
+              {selectedNode.label} {selectedNode.side === "left" ? "→" : "←"}
+            </h3>
+            <button onClick={() => setSelectedNode(null)} className="text-gray-500 hover:text-gray-300 p-0.5">
+              <X size={14} />
+            </button>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500 border-b border-gray-700/50">
+                <th className="text-left py-1 font-medium">{selectedNode.side === "left" ? "To" : "From"}</th>
+                <th className="text-right py-1 font-medium">Energy</th>
+                <th className="text-right py-1 font-medium">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailRows.map(row => (
+                <tr key={row.target} className="border-b border-gray-700/30 last:border-0">
+                  <td className="py-1.5 font-medium" style={{ color: row.color }}>{row.target}</td>
+                  <td className="text-right py-1.5 text-gray-300">{formatKwh(row.value)}</td>
+                  <td className="text-right py-1.5 text-gray-400">{row.pct.toFixed(0)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -301,7 +301,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
     };
   }, [data, days, intervalData, useIntervals]);
 
-  const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
+  const title = isMultiDay ? `Average Day (${days} Days)` : "Hourly Energy Flow";
   const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
 
   // XAxis tick interval: 3-hour marks (every 12 slots for 96 15-min slots, every 3 for 24 hourly)
@@ -367,7 +367,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
         <LegendRow items={sourceLegend} label="Sources ↑" />
       </div>
 
-      <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
+      <ResponsiveContainer width="100%" height={400} className="sm:!h-[500px]">
         <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis
