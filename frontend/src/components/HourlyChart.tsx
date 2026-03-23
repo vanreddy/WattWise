@@ -304,8 +304,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   const title = isMultiDay ? `Average Day (${days} Days)` : "24-Hour Energy Flow";
   const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
 
-  // XAxis tick interval: for 96 slots show every 2h (8 slots), for 24 hourly show every 2h
-  const xInterval = useIntervals ? 7 : 2;
+  // XAxis tick interval: 3-hour marks (every 12 slots for 96 15-min slots, every 3 for 24 hourly)
+  const xInterval = useIntervals ? 11 : 2;
 
   // Sankey-matched color palette — 70% opacity fills for vibrancy
   const colors = {
@@ -330,12 +330,12 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
     { label: "Battery Charge", color: colors.battery_charge.stroke },
   ];
 
-  const LegendRow = ({ items, label }: { items: typeof sourceLegend; label: string }) => (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+  const LegendColumn = ({ items, label }: { items: typeof sourceLegend; label: string }) => (
+    <div className="flex flex-col gap-1.5">
       <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
       {items.map((it) => (
-        <span key={it.label} className="flex items-center gap-1.5 text-xs text-gray-400">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: it.color }} />
+        <span key={it.label} className="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <span className="inline-block w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: it.color }} />
           {it.label}
         </span>
       ))}
@@ -362,112 +362,60 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
         </div>
       </div>
 
-      {/* Sources legend — above chart */}
-      <LegendRow items={sourceLegend} label="Sources ↑" />
+      {/* Chart + right-side legends */}
+      <div className="flex gap-3">
+        {/* Chart */}
+        <div className="flex-1 min-w-0">
+          <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
+            <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+              <XAxis
+                dataKey="label"
+                stroke="#6b7280"
+                fontSize={10}
+                interval={xInterval}
+                tick={{ dy: 4 }}
+                tickLine={false}
+              />
+              <YAxis hide domain={[-yMax, yMax]} />
+              <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
+              <Tooltip content={<CustomTooltip />} />
 
-      <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
-        <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis
-            dataKey="label"
-            stroke="#6b7280"
-            fontSize={10}
-            interval={xInterval}
-            tick={{ dy: 4 }}
-          />
-          <YAxis
-            stroke="#6b7280"
-            fontSize={11}
-            domain={[-yMax, yMax]}
-            tickFormatter={(v) => formatW(Math.abs(v))}
-          />
-          <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
-          <Tooltip content={<CustomTooltip />} />
+              {/* Sources — stacked above zero */}
+              <Area type="monotone" dataKey="solar" stackId="src" stroke="none" fill={colors.solar.fill} name="Solar" connectNulls={false} />
+              <Area type="monotone" dataKey="grid_import" stackId="src" stroke="none" fill={colors.grid_import.fill} name="Grid Import" connectNulls={false} />
+              <Area type="monotone" dataKey="battery_discharge" stackId="src" stroke="none" fill={colors.battery_discharge.fill} name="Powerwall Discharge" connectNulls={false} />
 
-          {/* Sources — stacked above zero (no stroke to avoid outline at bounds) */}
-          <Area
-            type="monotone"
-            dataKey="solar"
-            stackId="src"
-            stroke="none"
-            fill={colors.solar.fill}
-            name="Solar"
-            connectNulls={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="grid_import"
-            stackId="src"
-            stroke="none"
-            fill={colors.grid_import.fill}
-            name="Grid Import"
-            connectNulls={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="battery_discharge"
-            stackId="src"
-            stroke="none"
-            fill={colors.battery_discharge.fill}
-            name="Powerwall Discharge"
-            connectNulls={false}
-          />
+              {/* Consumption — stacked below zero */}
+              <Area type="monotone" dataKey="home" stackId="sink" stroke="none" fill={colors.home.fill} name="Home" connectNulls={false} />
+              <Area type="monotone" dataKey="ev" stackId="sink" stroke="none" fill={colors.ev.fill} name="EV" connectNulls={false} />
+              <Area type="monotone" dataKey="grid_export" stackId="sink" stroke="none" fill={colors.grid_export.fill} name="Grid Export" connectNulls={false} />
+              <Area type="monotone" dataKey="battery_charge" stackId="sink" stroke="none" fill={colors.battery_charge.fill} name="Battery Charge" connectNulls={false} />
 
-          {/* Consumption — stacked below zero (no stroke to avoid outline at bounds) */}
-          <Area
-            type="monotone"
-            dataKey="home"
-            stackId="sink"
-            stroke="none"
-            fill={colors.home.fill}
-            name="Home"
-            connectNulls={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="ev"
-            stackId="sink"
-            stroke="none"
-            fill={colors.ev.fill}
-            name="EV"
-            connectNulls={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="grid_export"
-            stackId="sink"
-            stroke="none"
-            fill={colors.grid_export.fill}
-            name="Grid Export"
-            connectNulls={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="battery_charge"
-            stackId="sink"
-            stroke="none"
-            fill={colors.battery_charge.fill}
-            name="Battery Charge"
-            connectNulls={false}
-          />
+              {/* Pulsing "Now" dot — single-day only */}
+              {!isMultiDay && nowIndex >= 0 && (
+                <ReferenceDot x={chartData[nowIndex]?.label} y={nowY} r={6} fill="#22d3ee" stroke="#22d3ee" strokeWidth={2} className="now-dot" />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
 
-          {/* Pulsing "Now" dot — single-day only */}
-          {!isMultiDay && nowIndex >= 0 && (
-            <ReferenceDot
-              x={chartData[nowIndex]?.label}
-              y={nowY}
-              r={6}
-              fill="#22d3ee"
-              stroke="#22d3ee"
-              strokeWidth={2}
-              className="now-dot"
-            />
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
+        {/* Right-side legends */}
+        <div className="hidden sm:flex flex-col justify-center gap-6 pr-1" style={{ minWidth: "130px" }}>
+          <LegendColumn items={sourceLegend} label="Sources ↑" />
+          <LegendColumn items={consumptionLegend} label="Consumption ↓" />
+        </div>
+      </div>
 
-      {/* Consumption legend — below chart */}
-      <LegendRow items={consumptionLegend} label="Consumption ↓" />
+      {/* Mobile-only: legends below chart in a compact row */}
+      <div className="flex sm:hidden flex-wrap gap-x-3 gap-y-1 mt-2 px-1">
+        {[...sourceLegend, ...consumptionLegend].map((it) => (
+          <span key={it.label} className="flex items-center gap-1 text-[10px] text-gray-400">
+            <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: it.color }} />
+            {it.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
