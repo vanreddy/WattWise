@@ -237,7 +237,7 @@ export default function PrototypePage() {
                 letterSpacing: "0.15em",
               }}
             >
-              WattWise Prototype &middot; Oura-Inspired Design
+              SelfPower Prototype &middot; Oura-Inspired Design
             </p>
           </div>
         </main>

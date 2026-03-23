@@ -59,10 +59,10 @@ function SignupForm() {
     <div className="flex items-center justify-center min-h-[70vh]">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5">
         <div className="flex flex-col items-center gap-2">
-          <img src="/icon.svg" alt="WattWise" className="h-14 w-14 rounded-lg" />
+          <img src="/icon.svg" alt="SelfPower" className="h-14 w-14 rounded-lg" />
           <h2 className="text-2xl font-bold">
-            <span className="text-white">Watt</span>
-            <span className="text-green-400">Wise</span>
+            <span className="text-white">Self</span>
+            <span className="text-green-400">Power</span>
           </h2>
           <p className="text-gray-500 text-sm">Create your account</p>
         </div>

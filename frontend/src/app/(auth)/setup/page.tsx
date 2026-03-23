@@ -95,7 +95,7 @@ export default function SetupPage() {
         <div className="space-y-4">
           <img
             src="/icon.svg"
-            alt="WattWise"
+            alt="SelfPower"
             className="h-20 w-20 mx-auto rounded-xl"
             style={{
               animation: redirecting

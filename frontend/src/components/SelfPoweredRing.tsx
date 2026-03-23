@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 interface Props {
   selfPoweredPct: number; // 0–100
+  label?: string;
 }
 
 function getColor(pct: number): string {
@@ -20,7 +21,7 @@ function getColor(pct: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export default function SelfPoweredRing({ selfPoweredPct }: Props) {
+export default function SelfPoweredRing({ selfPoweredPct, label = "Self-Powered" }: Props) {
   const pct = Math.max(0, Math.min(100, selfPoweredPct));
 
   const { arcLength, offset, color } = useMemo(() => {
@@ -36,7 +37,7 @@ export default function SelfPoweredRing({ selfPoweredPct }: Props) {
   // We rotate the group so the arc starts at bottom-left and sweeps to bottom-right
   return (
     <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center">
-      <h2 className="text-sm font-semibold text-gray-400 mb-1">Self-Powered</h2>
+      <h2 className="text-sm font-semibold text-gray-400 mb-1">{label}</h2>
       <div className="relative w-56 h-36 sm:w-72 sm:h-44">
         <svg viewBox="0 0 260 150" className="w-full h-full">
           {/* Background track — semi-circle arc */}

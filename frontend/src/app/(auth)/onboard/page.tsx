@@ -43,7 +43,7 @@ function SplashStep({ onNext }: { onNext: () => void }) {
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
       {/* Logo */}
       <div className="space-y-4">
-        <img src="/logo.svg" alt="WattWise" className="h-20 mx-auto rounded-xl" />
+        <img src="/logo.svg" alt="SelfPower" className="h-20 mx-auto rounded-xl" />
       </div>
 
       <div className="max-w-xs space-y-3 text-gray-400 text-sm">
@@ -114,7 +114,7 @@ function AccountStep({
       <div className="text-center space-y-1">
         <h2 className="text-xl font-bold">Create Your Account</h2>
         <p className="text-gray-500 text-sm">
-          Set up your WattWise login credentials
+          Set up your SelfPower login credentials
         </p>
       </div>
 
@@ -267,7 +267,7 @@ function TeslaStep({ onNext }: { onNext: () => void }) {
             </p>
             <ol className="text-sm text-gray-500 list-decimal list-inside space-y-1">
               <li>Sign in with your Tesla credentials</li>
-              <li>Authorize WattWise to access your energy data</li>
+              <li>Authorize SelfPower to access your energy data</li>
               <li>Copy the redirect URL from your browser</li>
               <li>Paste it back here</li>
             </ol>

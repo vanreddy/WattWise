@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WattWise",
+  title: "SelfPower",
   description: "Home energy monitoring dashboard",
   icons: { icon: "/icon.svg" },
 };
