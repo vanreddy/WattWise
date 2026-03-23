@@ -8,6 +8,8 @@ telegram_link_codes with their chat_id, and replies with instructions.
 Runs as a background asyncio task alongside the FastAPI server.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
