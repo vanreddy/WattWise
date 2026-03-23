@@ -11,15 +11,22 @@ interface Flow {
   color: string;
 }
 
-// NodeInfo kept for type compatibility — actual layout uses NodeLayout in renderSankey
+interface NodeInfo {
+  label: string;
+  total: number;
+  y: number;
+  height: number;
+  color: string;
+  side: "left" | "right";
+}
 
 const CHART_W = 700;
-const CHART_H = 420;
-const NODE_H = 14;
-const TOP_Y = 60;
-const BOTTOM_Y = CHART_H - 60;
-const NODE_GAP = 12;
-const MIN_NODE_W = 40;
+const CHART_H = 380;
+const NODE_W = 14;
+const LEFT_X = 50;
+const RIGHT_X = CHART_W - 50;
+const NODE_GAP = 8;
+const MIN_NODE_H = 18;
 
 function formatKwh(v: number): string {
   if (v >= 100) return `${Math.round(v)} kWh`;
@@ -166,31 +173,22 @@ function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
     .map(([key, from, to, color]) => ({ from, to, value: sf[key], color }));
 }
 
-interface NodeLayout {
-  label: string;
-  total: number;
-  x: number;
-  width: number;
-  color: string;
-  row: "top" | "bottom";
-}
-
 function renderSankey(flows: Flow[]) {
   if (flows.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[320px] sm:h-[420px] text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-[280px] sm:h-[380px] text-gray-500 text-sm">
         No energy flow data for this period
       </div>
     );
   }
 
-  // Compute node totals — sources (top) and consumption (bottom)
-  const topNodes = new Map<string, number>();
-  const bottomNodes = new Map<string, number>();
+  // Compute node totals
+  const leftNodes = new Map<string, number>();
+  const rightNodes = new Map<string, number>();
 
   for (const f of flows) {
-    topNodes.set(f.from, (topNodes.get(f.from) || 0) + f.value);
-    bottomNodes.set(f.to, (bottomNodes.get(f.to) || 0) + f.value);
+    leftNodes.set(f.from, (leftNodes.get(f.from) || 0) + f.value);
+    rightNodes.set(f.to, (rightNodes.get(f.to) || 0) + f.value);
   }
 
   // Color map
@@ -204,145 +202,113 @@ function renderSankey(flows: Flow[]) {
     "Grid Export": "#fb923c",
   };
 
-  // Layout nodes horizontally at a given y
+  // Layout nodes vertically
   const layoutNodes = (
     nodeMap: Map<string, number>,
-    row: "top" | "bottom"
-  ): Map<string, NodeLayout> => {
+    x: number,
+    side: "left" | "right"
+  ): Map<string, NodeInfo> => {
     const entries = [...nodeMap.entries()].sort(([, a], [, b]) => b - a);
     const totalValue = entries.reduce((s, [, v]) => s + v, 0);
     const totalGap = (entries.length - 1) * NODE_GAP;
-    const availW = CHART_W - 80 - totalGap;
-    const result = new Map<string, NodeLayout>();
+    const availH = CHART_H - 60 - totalGap;
+    const result = new Map<string, NodeInfo>();
 
-    let x = 40;
+    let y = 30;
     for (const [label, total] of entries) {
-      const width = Math.max(MIN_NODE_W, (total / totalValue) * availW);
+      const height = Math.max(MIN_NODE_H, (total / totalValue) * availH);
       result.set(label, {
         label,
         total,
-        x,
-        width,
+        y,
+        height,
         color: nodeColors[label] || "#6b7280",
-        row,
+        side,
       });
-      x += width + NODE_GAP;
+      y += height + NODE_GAP;
     }
 
     return result;
   };
 
-  const topInfo = layoutNodes(topNodes, "top");
-  const bottomInfo = layoutNodes(bottomNodes, "bottom");
+  const leftInfo = layoutNodes(leftNodes, LEFT_X, "left");
+  const rightInfo = layoutNodes(rightNodes, RIGHT_X, "right");
 
-  // Track cumulative x-offsets for stacking flows within each node
-  const topOffsets = new Map<string, number>();
-  const bottomOffsets = new Map<string, number>();
-  for (const [k, v] of topInfo) topOffsets.set(k, v.x);
-  for (const [k, v] of bottomInfo) bottomOffsets.set(k, v.x);
+  // Track cumulative offsets for stacking flows within each node
+  const leftOffsets = new Map<string, number>();
+  const rightOffsets = new Map<string, number>();
+  for (const [k, v] of leftInfo) leftOffsets.set(k, v.y);
+  for (const [k, v] of rightInfo) rightOffsets.set(k, v.y);
 
-  // Build flow paths (top-to-bottom vertical curves)
+  // Build flow paths
   const flowPaths = flows.map((f, i) => {
-    const top = topInfo.get(f.from)!;
-    const bottom = bottomInfo.get(f.to)!;
+    const left = leftInfo.get(f.from)!;
+    const right = rightInfo.get(f.to)!;
 
-    const topX = topOffsets.get(f.from)!;
-    const bottomX = bottomOffsets.get(f.to)!;
+    const leftY = leftOffsets.get(f.from)!;
+    const rightY = rightOffsets.get(f.to)!;
 
-    const topW = (f.value / top.total) * top.width;
-    const bottomW = (f.value / bottom.total) * bottom.width;
+    const leftH = (f.value / left.total) * left.height;
+    const rightH = (f.value / right.total) * right.height;
 
-    topOffsets.set(f.from, topX + topW);
-    bottomOffsets.set(f.to, bottomX + bottomW);
+    leftOffsets.set(f.from, leftY + leftH);
+    rightOffsets.set(f.to, rightY + rightH);
 
-    const y0 = TOP_Y + NODE_H;
-    const y1 = BOTTOM_Y;
-    const cy = (y0 + y1) / 2;
-
-    const srcPct = Math.round((f.value / top.total) * 100);
-    const destPct = Math.round((f.value / bottom.total) * 100);
+    const x0 = LEFT_X + NODE_W;
+    const x1 = RIGHT_X;
+    const cx = (x0 + x1) / 2;
 
     const d = `
-      M ${topX} ${y0}
-      C ${topX} ${cy}, ${bottomX} ${cy}, ${bottomX} ${y1}
-      L ${bottomX + bottomW} ${y1}
-      C ${bottomX + bottomW} ${cy}, ${topX + topW} ${cy}, ${topX + topW} ${y0}
+      M ${x0} ${leftY}
+      C ${cx} ${leftY}, ${cx} ${rightY}, ${x1} ${rightY}
+      L ${x1} ${rightY + rightH}
+      C ${cx} ${rightY + rightH}, ${cx} ${leftY + leftH}, ${x0} ${leftY + leftH}
       Z
     `;
 
-    // Place % labels near source (top) and destination (bottom)
-    const midTopX = topX + topW / 2;
-    const midBottomX = bottomX + bottomW / 2;
-
     return (
-      <g key={i}>
-        <path
-          d={d}
-          fill={f.color}
-          fillOpacity={0.3}
-          stroke={f.color}
-          strokeOpacity={0.4}
-          strokeWidth={0.5}
-        >
-          <title>{`${f.from} → ${f.to}: ${formatKwh(f.value)}`}</title>
-        </path>
-        {/* Source % near top */}
-        {topW > 20 && (
-          <text
-            x={midTopX}
-            y={y0 + 18}
-            textAnchor="middle"
-            className="fill-gray-400 font-medium"
-            fontSize={11}
-          >
-            {srcPct}%
-          </text>
-        )}
-        {/* Destination % near bottom */}
-        {bottomW > 20 && (
-          <text
-            x={midBottomX}
-            y={y1 - 10}
-            textAnchor="middle"
-            className="fill-gray-400 font-medium"
-            fontSize={11}
-          >
-            {destPct}%
-          </text>
-        )}
-      </g>
+      <path
+        key={i}
+        d={d}
+        fill={f.color}
+        fillOpacity={0.25}
+        stroke={f.color}
+        strokeOpacity={0.5}
+        strokeWidth={0.5}
+      >
+        <title>{`${f.from} → ${f.to}: ${formatKwh(f.value)}`}</title>
+      </path>
     );
   });
 
-  // Render nodes (horizontal bars)
-  const renderNodes = (info: Map<string, NodeLayout>, y: number) =>
+  // Render nodes
+  const renderNodes = (info: Map<string, NodeInfo>, x: number) =>
     [...info.values()].map((n) => (
       <g key={n.label}>
         <rect
-          x={n.x}
-          y={y}
-          width={n.width}
-          height={NODE_H}
+          x={x}
+          y={n.y}
+          width={NODE_W}
+          height={n.height}
           rx={4}
           fill={n.color}
           fillOpacity={0.8}
         />
-        {/* Label above for top nodes, below for bottom nodes */}
         <text
-          x={n.x + n.width / 2}
-          y={n.row === "top" ? y - 16 : y + NODE_H + 16}
-          textAnchor="middle"
-          className="fill-gray-300 font-medium"
-          fontSize={13}
+          x={n.side === "left" ? x - 6 : x + NODE_W + 6}
+          y={n.y + n.height / 2}
+          dy="0.35em"
+          textAnchor={n.side === "left" ? "end" : "start"}
+          className="text-[11px] fill-gray-300 font-medium"
         >
           {n.label}
         </text>
         <text
-          x={n.x + n.width / 2}
-          y={n.row === "top" ? y - 3 : y + NODE_H + 30}
-          textAnchor="middle"
-          className="fill-gray-500"
-          fontSize={13}
+          x={n.side === "left" ? x - 6 : x + NODE_W + 6}
+          y={n.y + n.height / 2 + 14}
+          dy="0.35em"
+          textAnchor={n.side === "left" ? "end" : "start"}
+          className="text-[10px] fill-gray-500"
         >
           {formatKwh(n.total)}
         </text>
@@ -350,10 +316,10 @@ function renderSankey(flows: Flow[]) {
     ));
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[320px] sm:h-[420px]">
+    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[280px] sm:h-[380px]">
       {flowPaths}
-      {renderNodes(topInfo, TOP_Y)}
-      {renderNodes(bottomInfo, BOTTOM_Y)}
+      {renderNodes(leftInfo, LEFT_X)}
+      {renderNodes(rightInfo, RIGHT_X)}
     </svg>
   );
 }
