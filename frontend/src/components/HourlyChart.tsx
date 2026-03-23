@@ -307,15 +307,15 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   // XAxis tick interval: for 96 slots show every 2h (8 slots), for 24 hourly show every 2h
   const xInterval = useIntervals ? 7 : 2;
 
-  // Sankey-matched color palette
+  // Sankey-matched color palette — 70% opacity fills for vibrancy
   const colors = {
-    solar:             { stroke: "#facc15", fill: "#facc1540" },
-    grid_import:       { stroke: "#f87171", fill: "#f8717140" },
-    battery_discharge: { stroke: "#34d399", fill: "#34d39940" },
-    home:              { stroke: "#60a5fa", fill: "#60a5fa40" },
-    ev:                { stroke: "#a78bfa", fill: "#a78bfa40" },
-    grid_export:       { stroke: "#fb923c", fill: "#fb923c40" },
-    battery_charge:    { stroke: "#2dd4bf", fill: "#2dd4bf40" },
+    solar:             { stroke: "#facc15", fill: "#facc15b3" },
+    grid_import:       { stroke: "#f87171", fill: "#f87171b3" },
+    battery_discharge: { stroke: "#34d399", fill: "#34d399b3" },
+    home:              { stroke: "#60a5fa", fill: "#60a5fab3" },
+    ev:                { stroke: "#a78bfa", fill: "#a78bfab3" },
+    grid_export:       { stroke: "#fb923c", fill: "#fb923cb3" },
+    battery_charge:    { stroke: "#2dd4bf", fill: "#2dd4bfb3" },
   };
 
   const sourceLegend = [
