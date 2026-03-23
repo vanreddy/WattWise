@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 from uuid import UUID
 
+import anthropic
 import asyncpg
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -26,6 +27,7 @@ from backend.rates import (
     get_import_rate,
     get_tou_period,
     is_peak_window,
+    is_summer,
 )
 
 logger = logging.getLogger(__name__)
@@ -333,58 +335,120 @@ async def evaluate_actions(pool: asyncpg.Pool, target_day: date, account_id: UUI
 
 # --- Context narrative ---
 
+DAILY_NARRATIVE_PROMPT = """\
+You are an energy advisor for a homeowner with solar panels, a Tesla Powerwall, \
+and a BMW iX EV. Write a 2-3 sentence daily insight for their energy dashboard. \
+Be specific about dollar amounts and kWh. Focus on the single most interesting \
+or actionable pattern from the day. Keep the tone concise and helpful — like a \
+knowledgeable friend, not a formal report.
 
-def pick_context_narrative(summary: dict) -> str:
-    """Pick the most relevant templated context for the day."""
+Rate context: {season_rates} Export earns ~$0.068/kWh. Current season: {season}.
+
+Yesterday's data:
+- Grid import: {total_import_kwh:.1f} kWh, cost ${total_cost:.2f}
+- Peak hours: {peak_import_kwh:.1f} kWh (${peak_cost:.2f}), Part-peak: \
+{part_peak_import_kwh:.1f} kWh (${part_peak_cost:.2f}), Off-peak: \
+{off_peak_import_kwh:.1f} kWh (${off_peak_cost:.2f})
+- Solar generated: {solar_generated_kwh:.1f} kWh
+- Solar self-consumed: {solar_self_consumed_kwh:.1f} kWh \
+(avoided ${solar_self_consumed_value:.2f} in grid imports)
+- Solar exported: {total_export_kwh:.1f} kWh (earned ${export_credit:.2f})
+- EV charging: {ev_kwh:.1f} kWh total — {ev_peak_kwh:.1f} kWh during peak \
+(${ev_peak_cost:.2f}), {ev_off_peak_kwh:.1f} kWh off-peak (${ev_off_peak_cost:.2f})
+- Powerwall: covered {battery_peak_coverage_pct:.0f}% of peak window. \
+{depletion_note}
+
+Do NOT start with "Yesterday" — vary your opening. End with one specific, \
+actionable suggestion if applicable."""
+
+
+def _pick_context_narrative_fallback(summary: dict) -> str:
+    """Templated fallback if LLM call fails."""
     s = summary
-
-    # EV charged at peak rates
     if s["ev_peak_kwh"] > 1.0:
         avoidable = s["ev_peak_kwh"] * 0.356
         return (
-            f"Your EV pulled {s['ev_peak_kwh']:.1f} kWh during peak hours yesterday, "
+            f"Your EV pulled {s['ev_peak_kwh']:.1f} kWh during peak hours, "
             f"costing ${avoidable:.2f} at peak rates. Charging during solar hours "
             f"or off-peak would save you money."
         )
-
-    # Powerwall depleted early
-    if s["battery_depletion_hour"] and s["battery_depletion_hour"] < 21:
+    if s.get("battery_depletion_hour") and s["battery_depletion_hour"] < 21:
         hr = int(s["battery_depletion_hour"])
         return (
             f"Your Powerwall ran out around {hr % 12 or 12}pm, leaving "
             f"{21 - hr} hours of peak window uncovered by battery. "
             f"Grid import during that window cost ${s['peak_cost']:.2f}."
         )
-
-    # Strong solar, low peak draw
     if s["solar_generated_kwh"] > 20 and s["peak_import_kwh"] < 3:
         return (
             f"Great solar day — {s['solar_generated_kwh']:.0f} kWh generated "
             f"with only {s['peak_import_kwh']:.1f} kWh imported during peak. "
             f"Your Powerwall covered {s['battery_peak_coverage_pct']:.0f}% of peak demand."
         )
-
-    # Powerwall covered full peak
-    if s["battery_peak_coverage_pct"] > 95:
-        return (
-            f"Your Powerwall covered the full peak window yesterday. "
-            f"Total grid cost was just ${s['total_cost']:.2f}, mostly off-peak."
-        )
-
-    # High peak draw day
-    if s["peak_cost"] > s["total_cost"] * 0.4:
-        return (
-            f"Peak hours accounted for ${s['peak_cost']:.2f} of your "
-            f"${s['total_cost']:.2f} grid cost yesterday — "
-            f"{s['peak_cost'] / s['total_cost'] * 100:.0f}% of total spend."
-        )
-
-    # Default
     return (
-        f"Yesterday you imported {s['total_import_kwh']:.1f} kWh from the grid "
+        f"Imported {s['total_import_kwh']:.1f} kWh from the grid "
         f"(${s['total_cost']:.2f}) and generated {s['solar_generated_kwh']:.1f} kWh "
         f"of solar."
     )
+
+
+async def generate_daily_narrative(summary: dict) -> str:
+    """Call Claude to generate the daily context narrative. Falls back to template."""
+    s = summary
+    season = "Summer" if is_summer(s["day"]) else "Winter"
+
+    if season == "Summer":
+        season_rates = "Peak $0.796/kWh (5-8pm weekdays), off-peak $0.561/kWh."
+    else:
+        season_rates = "Peak $0.356/kWh (4-9pm daily), part-peak $0.333/kWh (3-4pm, 9pm-12am), off-peak $0.319/kWh."
+
+    avg_rate = s["total_cost"] / max(s["total_import_kwh"], 0.1)
+    solar_self_consumed_value = s["solar_self_consumed_kwh"] * avg_rate
+
+    ev_peak_cost = s["ev_peak_kwh"] * (0.796 if season == "Summer" else 0.356)
+    ev_off_peak_cost = s["ev_off_peak_kwh"] * (0.561 if season == "Summer" else 0.319)
+
+    depletion_note = "Battery lasted through peak."
+    if s.get("battery_depletion_hour") and s["battery_depletion_hour"] < 21:
+        hr = int(s["battery_depletion_hour"])
+        depletion_note = f"Battery depleted at ~{hr % 12 or 12}pm, before peak ended at 9pm."
+
+    prompt = DAILY_NARRATIVE_PROMPT.format(
+        season=season,
+        season_rates=season_rates,
+        total_import_kwh=s["total_import_kwh"],
+        total_cost=s["total_cost"],
+        peak_import_kwh=s["peak_import_kwh"],
+        peak_cost=s["peak_cost"],
+        part_peak_import_kwh=s["part_peak_import_kwh"],
+        part_peak_cost=s["part_peak_cost"],
+        off_peak_import_kwh=s["off_peak_import_kwh"],
+        off_peak_cost=s["off_peak_cost"],
+        solar_generated_kwh=s["solar_generated_kwh"],
+        solar_self_consumed_kwh=s["solar_self_consumed_kwh"],
+        solar_self_consumed_value=solar_self_consumed_value,
+        total_export_kwh=s["total_export_kwh"],
+        export_credit=s["export_credit"],
+        ev_kwh=s["ev_kwh"],
+        ev_peak_kwh=s["ev_peak_kwh"],
+        ev_peak_cost=ev_peak_cost,
+        ev_off_peak_kwh=s["ev_off_peak_kwh"],
+        ev_off_peak_cost=ev_off_peak_cost,
+        battery_peak_coverage_pct=s["battery_peak_coverage_pct"] or 0,
+        depletion_note=depletion_note,
+    )
+
+    try:
+        client = anthropic.Anthropic()
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
+    except Exception:
+        logger.exception("Claude API failed for daily narrative, using fallback")
+        return _pick_context_narrative_fallback(s)
 
 
 # --- Month-to-date ---
@@ -448,7 +512,7 @@ async def _run_daily_for_account(pool: asyncpg.Pool, yesterday: date, account_id
 
     actions = await evaluate_actions(pool, yesterday, account_id=account_id)
     summary["actions"] = actions
-    summary["context_narrative"] = pick_context_narrative(summary)
+    summary["context_narrative"] = await generate_daily_narrative(summary)
 
     await save_summary(pool, summary, account_id=account_id)
 

@@ -83,12 +83,14 @@ export default function FlowTab({
 
   return (
     <div className="space-y-4">
-      {/* Period selector */}
-      <PeriodSelector
-        value={dateRange}
-        onChange={handlePeriodChange}
-        onModeChange={handleModeChange}
-      />
+      {/* Period selector — sticky while scrolling */}
+      <div className="sticky top-0 z-20 bg-gray-950 pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4">
+        <PeriodSelector
+          value={dateRange}
+          onChange={handlePeriodChange}
+          onModeChange={handleModeChange}
+        />
+      </div>
 
       {/* Swipeable content */}
       <div

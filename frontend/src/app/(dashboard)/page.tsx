@@ -93,7 +93,13 @@ export default function Dashboard() {
           />
         )}
 
-        {activeTab === "optimize" && <OptimizeTab />}
+        {activeTab === "optimize" && (
+          <OptimizeTab
+            summary={data.summary}
+            daily={data.daily}
+            alerts={data.alerts}
+          />
+        )}
       </div>
 
       {/* Bottom tab bar */}
