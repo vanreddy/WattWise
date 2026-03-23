@@ -401,7 +401,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
       </ResponsiveContainer>
 
       {/* Consumption legend — centered below chart */}
-      <div className="flex justify-center mt-1">
+      <div className="flex justify-center mt-3 sm:mt-1">
         <LegendRow items={consumptionLegend} label="Consumption ↓" />
       </div>
     </div>
