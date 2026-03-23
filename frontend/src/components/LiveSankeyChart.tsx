@@ -19,18 +19,9 @@ const NODE_COLORS: Record<string, string> = {
   "Grid Export": "#fb923c",
 };
 
-// SVG icon paths (16x16 viewBox)
-const NODE_ICONS: Record<string, string> = {
-  Solar: "M8 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 1zm3.7 2.3a.5.5 0 0 1 0 .7l-.7.7a.5.5 0 1 1-.7-.7l.7-.7a.5.5 0 0 1 .7 0zM14 8a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1A.5.5 0 0 1 14 8zM4.3 3.3a.5.5 0 0 1 .7 0l.7.7a.5.5 0 0 1-.7.7l-.7-.7a.5.5 0 0 1 0-.7zM3.5 8a.5.5 0 0 0-.5-.5H2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5zm8.5 3a4 4 0 1 1-8 0 4 4 0 0 1 8 0z",
-  "Grid Import": "M13 2.5a1.5 1.5 0 0 1 3 0v11a1.5 1.5 0 0 1-3 0v-11zm-5 2a1.5 1.5 0 0 1 3 0v9a1.5 1.5 0 0 1-3 0v-9zm-5 3a1.5 1.5 0 0 1 3 0v6a1.5 1.5 0 0 1-3 0v-6z",
-  Powerwall: "M2 4h10v1H2V4zm0 2h10v6H2V6zm1 1v4h8V7H3zm8-5h2v1h1v2h-1v7h1v2h-1v1h-2v-1H3v1H1v-2h1V5H1V3h1V2h1z",
-  Home: "M8 1l7 5.5V14a1 1 0 0 1-1 1h-4v-4H6v4H2a1 1 0 0 1-1-1V6.5L8 1z",
-  EV: "M4 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2H4zm1 2h6v4H5V3zm0 6h2v2H5V9zm4 0h2v2H9V9z",
-  "Grid Export": "M13 2.5a1.5 1.5 0 0 1 3 0v11a1.5 1.5 0 0 1-3 0v-11zm-5 2a1.5 1.5 0 0 1 3 0v9a1.5 1.5 0 0 1-3 0v-9zm-5 3a1.5 1.5 0 0 1 3 0v6a1.5 1.5 0 0 1-3 0v-6z",
-};
-
 function formatW(w: number): string {
-  return `${(w / 1000).toFixed(1)} kW`;
+  if (Math.abs(w) >= 1000) return `${(w / 1000).toFixed(1)} kW`;
+  return `${Math.round(w)} W`;
 }
 
 function computeLiveFlows(current: CurrentPower): LiveFlow[] {
@@ -42,9 +33,6 @@ function computeLiveFlows(current: CurrentPower): LiveFlow[] {
   const batCharge = Math.max(0, -current.battery_w);
   const home = Math.max(0, current.home_w - current.vehicle_w);
   const ev = Math.max(0, current.vehicle_w);
-
-  const totalDemand = home + ev + batCharge + gridExport;
-  if (totalDemand === 0 && solar === 0 && gridImport === 0) return flows;
 
   const homePlusEv = home + ev;
   const solarToLoad = Math.min(solar, homePlusEv);
@@ -78,85 +66,86 @@ function computeLiveFlows(current: CurrentPower): LiveFlow[] {
   return flows;
 }
 
-// Horizontal layout: sources on left, consumption on right
-interface NodeLayout {
-  label: string;
-  total: number;
-  y: number;
-  height: number;
-  color: string;
-  side: "left" | "right";
-}
-
+// Fixed node positions — all nodes always visible
 const CHART_W = 600;
-const CHART_H = 350;
+const CHART_H = 420;
 const NODE_W = 14;
-const LEFT_X = 110;
-const RIGHT_X = CHART_W - 110;
-const NODE_GAP = 14;
-const MIN_NODE_H = 30;
+const LEFT_X = 130;
+const RIGHT_X = CHART_W - 130;
+const NODE_H = 40;
+
+// Fixed Y positions for each node
+const LEFT_NODES = ["Solar", "Powerwall", "Grid Import"] as const;
+const RIGHT_NODES = ["Home", "Powerwall", "EV", "Grid Export"] as const;
+
+function getNodeY(index: number): number {
+  const startY = 45;
+  const gap = 20;
+  return startY + index * (NODE_H + gap);
+}
 
 export default function LiveSankeyChart({ current }: { current: CurrentPower }) {
   const flows = useMemo(() => computeLiveFlows(current), [current]);
 
-  if (flows.length === 0) {
-    return (
-      <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
-        <div className="flex items-center justify-center h-[250px] sm:h-[350px] text-gray-600 text-sm">
-          No active energy flow
-        </div>
-      </div>
-    );
-  }
+  const solar = Math.max(0, current.solar_w);
+  const gridImport = Math.max(0, current.grid_w);
+  const gridExport = Math.max(0, -current.grid_w);
+  const batDischarge = Math.max(0, current.battery_w);
+  const batCharge = Math.max(0, -current.battery_w);
+  const home = Math.max(0, current.home_w);
+  const ev = Math.max(0, current.vehicle_w);
+  const batteryPct = Math.round(current.battery_pct);
+  const isCharging = current.battery_w < -10;
+  const isDischarging = current.battery_w > 10;
 
-  const leftNodes = new Map<string, number>();
-  const rightNodes = new Map<string, number>();
-  for (const f of flows) {
-    leftNodes.set(f.from, (leftNodes.get(f.from) || 0) + f.watts);
-    rightNodes.set(f.to, (rightNodes.get(f.to) || 0) + f.watts);
-  }
-
-  const layoutNodes = (
-    nodeMap: Map<string, number>,
-    side: "left" | "right"
-  ): Map<string, NodeLayout> => {
-    const entries = [...nodeMap.entries()].sort(([, a], [, b]) => b - a);
-    const totalValue = entries.reduce((s, [, v]) => s + v, 0);
-    const totalGap = (entries.length - 1) * NODE_GAP;
-    const availH = CHART_H - 60 - totalGap;
-    const result = new Map<string, NodeLayout>();
-
-    let y = 30;
-    for (const [label, total] of entries) {
-      const height = Math.max(MIN_NODE_H, (total / totalValue) * availH);
-      result.set(label, { label, total, y, height, color: NODE_COLORS[label] || "#6b7280", side });
-      y += height + NODE_GAP;
-    }
-    return result;
+  // Left node totals
+  const leftTotals: Record<string, number> = {
+    Solar: solar,
+    Powerwall: isDischarging ? batDischarge : isCharging ? batCharge : 0,
+    "Grid Import": gridImport,
   };
 
-  const leftInfo = layoutNodes(leftNodes, "left");
-  const rightInfo = layoutNodes(rightNodes, "right");
+  // Right node totals
+  const rightTotals: Record<string, number> = {
+    Home: home,
+    Powerwall: isCharging ? batCharge : 0,
+    EV: ev,
+    "Grid Export": gridExport,
+  };
 
-  const leftOffsets = new Map<string, number>();
-  const rightOffsets = new Map<string, number>();
-  for (const [k, v] of leftInfo) leftOffsets.set(k, v.y);
-  for (const [k, v] of rightInfo) rightOffsets.set(k, v.y);
+  // Build node position maps for flow drawing
+  const leftNodeMap = new Map<string, { y: number; h: number; offset: number }>();
+  const rightNodeMap = new Map<string, { y: number; h: number; offset: number }>();
 
-  const maxWatts = Math.max(...flows.map((f) => f.watts));
+  LEFT_NODES.forEach((label, i) => {
+    leftNodeMap.set(label, { y: getNodeY(i), h: NODE_H, offset: 0 });
+  });
+  RIGHT_NODES.forEach((label, i) => {
+    // Use a distinct key for right-side Powerwall to avoid collision
+    const key = label === "Powerwall" ? "Powerwall_R" : label;
+    rightNodeMap.set(key, { y: getNodeY(i), h: NODE_H, offset: 0 });
+  });
+  // Also map "Powerwall" to right side for flows that target it as consumption
+  rightNodeMap.set("Powerwall", rightNodeMap.get("Powerwall_R")!);
+
+  const maxWatts = flows.length > 0 ? Math.max(...flows.map((f) => f.watts)) : 1;
 
   const flowPaths = flows.map((f, i) => {
-    const left = leftInfo.get(f.from)!;
-    const right = rightInfo.get(f.to)!;
+    const left = leftNodeMap.get(f.from);
+    const right = rightNodeMap.get(f.to);
+    if (!left || !right) return null;
 
-    const leftY = leftOffsets.get(f.from)!;
-    const rightY = rightOffsets.get(f.to)!;
+    const leftY = left.y + left.offset;
+    const rightY = right.y + right.offset;
 
-    const leftH = (f.watts / left.total) * left.height;
-    const rightH = (f.watts / right.total) * right.height;
+    // Proportion of this flow relative to total node
+    const leftTotal = leftTotals[f.from] || 1;
+    const rightTotal = rightTotals[f.to] || 1;
+    const leftH = Math.max(4, (f.watts / leftTotal) * NODE_H);
+    const rightH = Math.max(4, (f.watts / rightTotal) * NODE_H);
 
-    leftOffsets.set(f.from, leftY + leftH);
-    rightOffsets.set(f.to, rightY + rightH);
+    left.offset += leftH;
+    right.offset += rightH;
 
     const x0 = LEFT_X + NODE_W;
     const x1 = RIGHT_X;
@@ -204,44 +193,61 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
     );
   });
 
-  const renderNodes = (info: Map<string, NodeLayout>, x: number) =>
-    [...info.values()].map((n) => {
-      const iconPath = NODE_ICONS[n.label];
-      const isLeft = n.side === "left";
-      const textX = isLeft ? x - 8 : x + NODE_W + 8;
-      const anchor = isLeft ? "end" : "start";
-      const iconX = isLeft ? x - 22 : x + NODE_W + 8;
-      const centerY = n.y + n.height / 2;
-      return (
-        <g key={n.label}>
-          <rect x={x} y={n.y} width={NODE_W} height={n.height} rx={4} fill={n.color} fillOpacity={0.8} />
-          <text x={textX} y={centerY - 3} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={11}>
-            {n.label}
+  // Render a node (always visible)
+  const renderNode = (label: string, total: number, y: number, side: "left" | "right", extra?: string) => {
+    const color = NODE_COLORS[label] || "#6b7280";
+    const isActive = total > 10;
+    const x = side === "left" ? LEFT_X : RIGHT_X;
+    const textX = side === "left" ? x - 8 : x + NODE_W + 8;
+    const anchor = side === "left" ? "end" : "start";
+    const centerY = y + NODE_H / 2;
+
+    return (
+      <g key={`${side}-${label}`}>
+        <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={4}
+          fill={color} fillOpacity={isActive ? 0.8 : 0.15} />
+        <text x={textX} y={centerY - (extra ? 8 : 3)} textAnchor={anchor}
+          fill={color} className="font-semibold" fontSize={11}
+          opacity={isActive ? 1 : 0.4}>
+          {label}
+        </text>
+        <text x={textX} y={centerY + (extra ? 4 : 11)} textAnchor={anchor}
+          fill={color} className="font-semibold" fontSize={11}
+          opacity={isActive ? 1 : 0.4}>
+          {formatW(total)}
+        </text>
+        {extra && (
+          <text x={textX} y={centerY + 17} textAnchor={anchor}
+            fill={color} className="font-medium" fontSize={10}
+            opacity={0.7}>
+            {extra}
           </text>
-          <text x={textX} y={centerY + 11} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={11}>
-            {formatW(n.total)}
-          </text>
-        </g>
-      );
-    });
+        )}
+      </g>
+    );
+  };
+
+  // Battery extra label
+  const batteryExtra = `${isCharging ? "▲" : isDischarging ? "▼" : ""} ${batteryPct}%`;
 
   return (
     <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
-      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[250px] sm:h-[350px]">
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <text x={LEFT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
-        <text x={RIGHT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
+      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[280px] sm:h-[380px]">
+        <text x={LEFT_X + NODE_W / 2} y={28} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
+        <text x={RIGHT_X + NODE_W / 2} y={28} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
+
         {flowPaths}
-        {renderNodes(leftInfo, LEFT_X)}
-        {renderNodes(rightInfo, RIGHT_X)}
+
+        {/* Left nodes — always visible */}
+        {renderNode("Solar", solar, getNodeY(0), "left")}
+        {renderNode("Powerwall", isDischarging ? batDischarge : isCharging ? batCharge : 0, getNodeY(1), "left", batteryExtra)}
+        {renderNode("Grid Import", gridImport, getNodeY(2), "left")}
+
+        {/* Right nodes — always visible */}
+        {renderNode("Home", home, getNodeY(0), "right")}
+        {renderNode("Powerwall", isCharging ? batCharge : 0, getNodeY(1), "right", batteryExtra)}
+        {renderNode("EV", ev, getNodeY(2), "right")}
+        {renderNode("Grid Export", gridExport, getNodeY(3), "right")}
       </svg>
     </div>
   );
