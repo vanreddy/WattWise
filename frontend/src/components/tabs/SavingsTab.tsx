@@ -210,9 +210,9 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                     <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
                     <Tooltip {...tooltipStyle} formatter={(value: number) => fmt(value)} />
                     <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} iconSize={8} />
-                    <Bar dataKey="Solar" stackId="savings" fill="#22c55e" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="Solar" stackId="savings" fill="#166534" radius={[0, 0, 0, 0]} />
                     <Bar dataKey="Battery" stackId="savings" fill="#4ade80" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Export Credits" stackId="savings" fill="#86efac" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="Export Credits" stackId="savings" fill="#6b7280" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -244,9 +244,9 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                     <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
                     <Tooltip {...tooltipStyle} formatter={(value: number) => fmt(value)} />
                     <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} iconSize={8} />
-                    <Bar dataKey="Solar" stackId="savings" fill="#22c55e" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="Solar" stackId="savings" fill="#166534" radius={[0, 0, 0, 0]} />
                     <Bar dataKey="Battery" stackId="savings" fill="#4ade80" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Export Credits" stackId="savings" fill="#86efac" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="Export Credits" stackId="savings" fill="#6b7280" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
