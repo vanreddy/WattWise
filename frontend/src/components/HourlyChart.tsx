@@ -330,8 +330,8 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
     { label: "Powerwall Charge", color: colors.battery_charge.stroke },
   ];
 
-  const LegendColumn = ({ items, label }: { items: typeof sourceLegend; label: string }) => (
-    <div className="flex flex-col gap-1.5">
+  const LegendRow = ({ items, label }: { items: typeof sourceLegend; label: string }) => (
+    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
       <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
       {items.map((it) => (
         <span key={it.label} className="flex items-center gap-1.5 text-[11px] text-gray-400">
@@ -362,59 +362,47 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
         </div>
       </div>
 
-      {/* Chart + right-side legends */}
-      <div className="flex gap-3">
-        {/* Chart */}
-        <div className="flex-1 min-w-0">
-          <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
-            <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-              <XAxis
-                dataKey="label"
-                stroke="#6b7280"
-                fontSize={10}
-                interval={xInterval}
-                tick={{ dy: 4 }}
-                tickLine={false}
-              />
-              <YAxis hide domain={[-yMax, yMax]} />
-              <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
-              <Tooltip content={<CustomTooltip />} />
-
-              {/* Sources — stacked above zero */}
-              <Area type="monotone" dataKey="solar" stackId="src" stroke="none" fill={colors.solar.fill} name="Solar" connectNulls={false} />
-              <Area type="monotone" dataKey="grid_import" stackId="src" stroke="none" fill={colors.grid_import.fill} name="Grid Import" connectNulls={false} />
-              <Area type="monotone" dataKey="battery_discharge" stackId="src" stroke="none" fill={colors.battery_discharge.fill} name="Powerwall Discharge" connectNulls={false} />
-
-              {/* Consumption — stacked below zero */}
-              <Area type="monotone" dataKey="home" stackId="sink" stroke="none" fill={colors.home.fill} name="Home" connectNulls={false} />
-              <Area type="monotone" dataKey="ev" stackId="sink" stroke="none" fill={colors.ev.fill} name="EV" connectNulls={false} />
-              <Area type="monotone" dataKey="grid_export" stackId="sink" stroke="none" fill={colors.grid_export.fill} name="Grid Export" connectNulls={false} />
-              <Area type="monotone" dataKey="battery_charge" stackId="sink" stroke="none" fill={colors.battery_charge.fill} name="Powerwall Charge" connectNulls={false} />
-
-              {/* Pulsing "Now" dot — single-day only */}
-              {!isMultiDay && nowIndex >= 0 && (
-                <ReferenceDot x={chartData[nowIndex]?.label} y={nowY} r={6} fill="#22d3ee" stroke="#22d3ee" strokeWidth={2} className="now-dot" />
-              )}
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Right-side legends */}
-        <div className="hidden sm:flex flex-col justify-center gap-6 pr-1" style={{ minWidth: "130px" }}>
-          <LegendColumn items={sourceLegend} label="Sources ↑" />
-          <LegendColumn items={consumptionLegend} label="Consumption ↓" />
-        </div>
+      {/* Sources legend — centered above chart */}
+      <div className="flex justify-center mb-1">
+        <LegendRow items={sourceLegend} label="Sources ↑" />
       </div>
 
-      {/* Mobile-only: legends below chart in a compact row */}
-      <div className="flex sm:hidden flex-wrap gap-x-3 gap-y-1 mt-2 px-1">
-        {[...sourceLegend, ...consumptionLegend].map((it) => (
-          <span key={it.label} className="flex items-center gap-1 text-[10px] text-gray-400">
-            <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: it.color }} />
-            {it.label}
-          </span>
-        ))}
+      <ResponsiveContainer width="100%" height={280} className="sm:!h-[360px]">
+        <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+          <XAxis
+            dataKey="label"
+            stroke="#6b7280"
+            fontSize={10}
+            interval={xInterval}
+            tick={{ dy: 4 }}
+            tickLine={false}
+          />
+          <YAxis hide domain={[-yMax, yMax]} />
+          <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
+          <Tooltip content={<CustomTooltip />} />
+
+          {/* Sources — stacked above zero */}
+          <Area type="monotone" dataKey="solar" stackId="src" stroke="none" fill={colors.solar.fill} name="Solar" connectNulls={false} />
+          <Area type="monotone" dataKey="grid_import" stackId="src" stroke="none" fill={colors.grid_import.fill} name="Grid Import" connectNulls={false} />
+          <Area type="monotone" dataKey="battery_discharge" stackId="src" stroke="none" fill={colors.battery_discharge.fill} name="Powerwall Discharge" connectNulls={false} />
+
+          {/* Consumption — stacked below zero */}
+          <Area type="monotone" dataKey="home" stackId="sink" stroke="none" fill={colors.home.fill} name="Home" connectNulls={false} />
+          <Area type="monotone" dataKey="ev" stackId="sink" stroke="none" fill={colors.ev.fill} name="EV" connectNulls={false} />
+          <Area type="monotone" dataKey="grid_export" stackId="sink" stroke="none" fill={colors.grid_export.fill} name="Grid Export" connectNulls={false} />
+          <Area type="monotone" dataKey="battery_charge" stackId="sink" stroke="none" fill={colors.battery_charge.fill} name="Powerwall Charge" connectNulls={false} />
+
+          {/* Pulsing "Now" dot — single-day only */}
+          {!isMultiDay && nowIndex >= 0 && (
+            <ReferenceDot x={chartData[nowIndex]?.label} y={nowY} r={6} fill="#22d3ee" stroke="#22d3ee" strokeWidth={2} className="now-dot" />
+          )}
+        </AreaChart>
+      </ResponsiveContainer>
+
+      {/* Consumption legend — centered below chart */}
+      <div className="flex justify-center mt-1">
+        <LegendRow items={consumptionLegend} label="Consumption ↓" />
       </div>
     </div>
   );
