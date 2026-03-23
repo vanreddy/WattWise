@@ -74,7 +74,7 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
 
     let solarLeft = solar - solarToLoad;
     const solarToBat = Math.min(batChg, solarLeft);
-    addTo("Solar→Powerwall", solarToBat);
+    addTo("Solar→Powerwall Charge", solarToBat);
     solarLeft -= solarToBat;
     addTo("Solar→Grid Export", Math.min(exp, solarLeft));
     const solarToExp = Math.min(exp, solarLeft);
@@ -85,11 +85,11 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
     const remainDemand = remainHome + remainEv;
     const batToLoad = Math.min(batDis, remainDemand);
     const demandRatio = remainDemand > 0 ? remainHome / remainDemand : 0;
-    addTo("Powerwall→Home", batToLoad * demandRatio);
-    addTo("Powerwall→EV", batToLoad * (1 - demandRatio));
+    addTo("Powerwall Discharge→Home", batToLoad * demandRatio);
+    addTo("Powerwall Discharge→EV", batToLoad * (1 - demandRatio));
     const batLeft = batDis - batToLoad;
     const remainExp = Math.max(0, exp - solarToExp);
-    addTo("Powerwall→Grid Export", Math.min(batLeft, remainExp));
+    addTo("Powerwall Discharge→Grid Export", Math.min(batLeft, remainExp));
 
     // Grid import: home+EV remaining, then battery charge
     const remainHome2 = Math.max(0, remainHome - batToLoad * demandRatio);
@@ -99,14 +99,14 @@ function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
     const gridToLoad = remainHome2 + remainEv2;
     const gridLeft = imp - gridToLoad;
     const remainBatChg = Math.max(0, batChg - solarToBat);
-    addTo("Grid Import→Powerwall", Math.min(gridLeft, remainBatChg));
+    addTo("Grid Import→Powerwall Charge", Math.min(gridLeft, remainBatChg));
   }
 
   const flows: Flow[] = [];
   const colorMap: Record<string, string> = {
     "Solar": "#facc15",
     "Grid Import": "#f87171",
-    "Powerwall": "#34d399",
+    "Powerwall Discharge": "#34d399",
   };
 
   for (const [key, value] of flowTotals) {
@@ -161,12 +161,12 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
 function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
   const mapping: [keyof SankeyFlows, string, string, string][] = [
     ["solar_to_home", "Solar", "Home", "#facc15"],
-    ["solar_to_battery", "Solar", "Powerwall", "#facc15"],
+    ["solar_to_battery", "Solar", "Powerwall Charge", "#facc15"],
     ["solar_to_grid", "Solar", "Grid Export", "#facc15"],
-    ["battery_to_home", "Powerwall", "Home", "#34d399"],
-    ["battery_to_grid", "Powerwall", "Grid Export", "#34d399"],
+    ["battery_to_home", "Powerwall Discharge", "Home", "#34d399"],
+    ["battery_to_grid", "Powerwall Discharge", "Grid Export", "#34d399"],
     ["grid_to_home", "Grid Import", "Home", "#f87171"],
-    ["grid_to_battery", "Grid Import", "Powerwall", "#f87171"],
+    ["grid_to_battery", "Grid Import", "Powerwall Charge", "#f87171"],
   ];
   return mapping
     .filter(([key]) => sf[key] >= 0.01)
@@ -195,10 +195,10 @@ function renderSankey(flows: Flow[]) {
   const nodeColors: Record<string, string> = {
     Solar: "#facc15",
     "Grid Import": "#f87171",
-    Powerwall: "#34d399",
+    "Powerwall Discharge": "#34d399",
     Home: "#60a5fa",
     EV: "#a78bfa",
-    Powerwall: "#2dd4bf",
+    "Powerwall Charge": "#2dd4bf",
     "Grid Export": "#fb923c",
   };
 
