@@ -267,11 +267,6 @@ function renderSankey(flows: Flow[]) {
       return (
         <g key={n.label}>
           <rect x={x} y={n.y} width={NODE_W} height={n.height} rx={4} fill={n.color} fillOpacity={0.8} />
-          {iconPath && (
-            <g transform={`translate(${iconX}, ${centerY - 20})`}>
-              <path d={iconPath} fill={n.color} fillOpacity={0.7} transform="scale(0.875)" />
-            </g>
-          )}
           <text x={textX} y={centerY - 3} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={12}>
             {n.label}
           </text>

@@ -37,7 +37,6 @@ export default function FlowTab({
 
   const navigate = useCallback(
     (dir: -1 | 1) => {
-      if (mode === "custom") return;
       const newOffset = offset + dir;
       if (newOffset > 0) return;
       setOffset(newOffset);
