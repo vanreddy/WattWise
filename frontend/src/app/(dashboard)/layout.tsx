@@ -9,7 +9,7 @@ export default function DashboardLayout({
   return (
     <AuthProvider>
       <AppHeader />
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 pb-24">
         {children}
       </main>
     </AuthProvider>
