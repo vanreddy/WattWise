@@ -6,6 +6,7 @@ import { useDashboardData } from "@/hooks/useDashboardData";
 import BottomTabBar, { type TabId } from "@/components/BottomTabBar";
 import NowTab from "@/components/tabs/NowTab";
 import FlowTab from "@/components/tabs/FlowTab";
+import SavingsTab from "@/components/tabs/SavingsTab";
 import OptimizeTab from "@/components/tabs/OptimizeTab";
 
 export default function Dashboard() {
@@ -78,6 +79,15 @@ export default function Dashboard() {
             dateRange={data.dateRange}
             setDateRange={data.setDateRange}
             backfillActive={data.backfillActive}
+          />
+        )}
+
+        {activeTab === "savings" && (
+          <SavingsTab
+            daily={data.daily}
+            hourly={data.hourly}
+            dateRange={data.dateRange}
+            setDateRange={data.setDateRange}
           />
         )}
 

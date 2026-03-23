@@ -6,7 +6,6 @@ import type { DailySummary, HourlyBucket, Alert, SankeyFlows, IntervalPoint } fr
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
 import SelfPoweredRing from "@/components/SelfPoweredRing";
-import CostTiles from "@/components/CostTiles";
 import SankeyChart from "@/components/SankeyChart";
 import HourlyChart from "@/components/HourlyChart";
 import AlertsList from "@/components/AlertsList";
@@ -104,11 +103,8 @@ export default function FlowTab({
         }`}
       >
         <div className="space-y-4">
-          {/* Self-powered + Cost tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SelfPoweredRing selfPoweredPct={selfPoweredPct} />
-            <CostTiles data={daily} days={dateRange.days} />
-          </div>
+          {/* Self-powered */}
+          <SelfPoweredRing selfPoweredPct={selfPoweredPct} />
 
           {/* Sankey */}
           <SankeyChart
