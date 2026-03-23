@@ -84,7 +84,7 @@ function getNodeY(index: number): number {
   return startY + index * (NODE_H + gap);
 }
 
-export default function LiveSankeyChart({ current }: { current: CurrentPower }) {
+export default function LiveSankeyChart({ current, glass }: { current: CurrentPower; glass?: boolean }) {
   const flows = useMemo(() => computeLiveFlows(current), [current]);
 
   const solar = Math.max(0, current.solar_w);
@@ -185,9 +185,9 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
           </stop>
         </linearGradient>
 
-        <path d={d} fill={f.color} fillOpacity={0.07} stroke={f.color} strokeOpacity={0.15} strokeWidth={0.5} />
+        <path d={d} fill={f.color} fillOpacity={glass ? 0.15 : 0.07} stroke={f.color} strokeOpacity={glass ? 0.3 : 0.15} strokeWidth={0.5} />
         <path d={d} fill={`url(#${gradId})`} stroke="none" clipPath={`url(#${clipId})`} />
-        <path d={flowLine} fill="none" stroke={f.color} strokeOpacity={0.12}
+        <path d={flowLine} fill="none" stroke={f.color} strokeOpacity={glass ? 0.25 : 0.12}
           strokeWidth={Math.max(3, Math.min(leftH, rightH) * 0.3)} strokeLinecap="round" clipPath={`url(#${clipId})`} />
       </g>
     );
@@ -201,25 +201,26 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
     const textX = side === "left" ? x - 8 : x + NODE_W + 8;
     const anchor = side === "left" ? "end" : "start";
     const centerY = y + NODE_H / 2;
+    const textFilter = glass ? "url(#textShadow)" : undefined;
 
     return (
       <g key={`${side}-${label}`}>
         <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={4}
-          fill={color} fillOpacity={isActive ? 0.8 : 0.15} />
+          fill={color} fillOpacity={isActive ? (glass ? 0.95 : 0.8) : (glass ? 0.25 : 0.15)} />
         <text x={textX} y={centerY - (extra ? 8 : 3)} textAnchor={anchor}
-          fill={color} className="font-semibold" fontSize={11}
-          opacity={isActive ? 1 : 0.4}>
+          fill={color} className="font-semibold" fontSize={12}
+          opacity={isActive ? 1 : 0.5} filter={textFilter}>
           {label}
         </text>
         <text x={textX} y={centerY + (extra ? 4 : 11)} textAnchor={anchor}
-          fill={color} className="font-semibold" fontSize={11}
-          opacity={isActive ? 1 : 0.4}>
+          fill={glass ? "#ffffff" : color} className="font-bold" fontSize={12}
+          opacity={isActive ? 1 : 0.5} filter={textFilter}>
           {formatW(total)}
         </text>
         {extra && (
           <text x={textX} y={centerY + 17} textAnchor={anchor}
             fill={color} className="font-medium" fontSize={10}
-            opacity={0.7}>
+            opacity={0.8} filter={textFilter}>
             {extra}
           </text>
         )}
@@ -241,15 +242,18 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
   else pctColor = "#f87171";
 
   return (
-    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+    <div className={glass ? "" : "bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800"}>
       <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[560px] sm:h-[760px]">
-        {/* Self-powered % centered above chart */}
-        <text x={CHART_W / 2} y={95} textAnchor="middle" fill={pctColor} fontSize={28} fontWeight="800">{selfPoweredPct}%</text>
-        <text x={CHART_W / 2} y={112} textAnchor="middle" className="fill-gray-500" fontSize={9} letterSpacing={1}>SELF-POWERING</text>
-
+        {glass && (
+          <defs>
+            <filter id="textShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#000000" floodOpacity="0.7" />
+            </filter>
+          </defs>
+        )}
         {/* Column headers */}
-        <text x={LEFT_X + NODE_W / 2} y={135} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
-        <text x={RIGHT_X + NODE_W / 2} y={135} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
+        <text x={LEFT_X + NODE_W / 2} y={135} textAnchor="middle" fill={glass ? "rgba(255,255,255,0.5)" : undefined} className={glass ? "font-medium" : "fill-gray-600 font-medium"} fontSize={10} letterSpacing={1}>SOURCES</text>
+        <text x={RIGHT_X + NODE_W / 2} y={135} textAnchor="middle" fill={glass ? "rgba(255,255,255,0.5)" : undefined} className={glass ? "font-medium" : "fill-gray-600 font-medium"} fontSize={10} letterSpacing={1}>CONSUMPTION</text>
 
         {flowPaths}
 

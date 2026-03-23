@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import { useWeather } from "@/hooks/useWeather";
 import BottomTabBar, { type TabId } from "@/components/BottomTabBar";
 import NowTab from "@/components/tabs/NowTab";
 import FlowTab from "@/components/tabs/FlowTab";
@@ -13,6 +14,7 @@ export default function Dashboard() {
   const { user, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>("now");
   const data = useDashboardData();
+  const weather = useWeather();
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -65,6 +67,7 @@ export default function Dashboard() {
             summary={data.summary}
             lastUpdated={data.lastUpdated}
             error={data.error}
+            weather={weather}
           />
         )}
 
