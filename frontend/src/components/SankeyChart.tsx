@@ -265,7 +265,7 @@ function renderSankey(flows: Flow[]) {
       const iconX = isLeft ? x - 22 : x + NODE_W + 8;
       const centerY = n.y + n.height / 2;
       return (
-        <g key={n.label}>
+        <g key={`${n.side}-${n.label}`}>
           <rect x={x} y={n.y} width={NODE_W} height={n.height} rx={4} fill={n.color} fillOpacity={0.8} />
           <text x={textX} y={centerY - 3} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={12}>
             {n.label}

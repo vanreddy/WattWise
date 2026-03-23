@@ -68,18 +68,18 @@ function computeLiveFlows(current: CurrentPower): LiveFlow[] {
 
 // Fixed node positions — all nodes always visible
 const CHART_W = 600;
-const CHART_H = 420;
+const CHART_H = 520;
 const NODE_W = 14;
 const LEFT_X = 130;
 const RIGHT_X = CHART_W - 130;
-const NODE_H = 40;
+const NODE_H = 50;
 
 // Fixed Y positions for each node
 const LEFT_NODES = ["Solar", "Powerwall", "Grid Import"] as const;
 const RIGHT_NODES = ["Home", "Powerwall", "EV", "Grid Export"] as const;
 
 function getNodeY(index: number): number {
-  const startY = 45;
+  const startY = 155;
   const gap = 20;
   return startY + index * (NODE_H + gap);
 }
@@ -101,7 +101,7 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
   // Left node totals
   const leftTotals: Record<string, number> = {
     Solar: solar,
-    Powerwall: isDischarging ? batDischarge : isCharging ? batCharge : 0,
+    Powerwall: isDischarging ? batDischarge : 0,
     "Grid Import": gridImport,
   };
 
@@ -230,17 +230,32 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
   // Battery extra label
   const batteryExtra = `${isCharging ? "▲" : isDischarging ? "▼" : ""} ${batteryPct}%`;
 
+  // Self-powered %
+  const selfPoweredPct = home > 0
+    ? Math.round(Math.max(0, Math.min(100, ((home - gridImport) / home) * 100)))
+    : 100;
+
+  let pctColor: string;
+  if (selfPoweredPct >= 80) pctColor = "#34d399";
+  else if (selfPoweredPct >= 40) pctColor = "#facc15";
+  else pctColor = "#f87171";
+
   return (
     <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
-      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[280px] sm:h-[380px]">
-        <text x={LEFT_X + NODE_W / 2} y={28} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
-        <text x={RIGHT_X + NODE_W / 2} y={28} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
+      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[560px] sm:h-[760px]">
+        {/* Self-powered % centered above chart */}
+        <text x={CHART_W / 2} y={95} textAnchor="middle" fill={pctColor} fontSize={28} fontWeight="800">{selfPoweredPct}%</text>
+        <text x={CHART_W / 2} y={112} textAnchor="middle" className="fill-gray-500" fontSize={9} letterSpacing={1}>SELF-POWERING</text>
+
+        {/* Column headers */}
+        <text x={LEFT_X + NODE_W / 2} y={135} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>SOURCES</text>
+        <text x={RIGHT_X + NODE_W / 2} y={135} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={10} letterSpacing={1}>CONSUMPTION</text>
 
         {flowPaths}
 
         {/* Left nodes — always visible */}
         {renderNode("Solar", solar, getNodeY(0), "left")}
-        {renderNode("Powerwall", isDischarging ? batDischarge : isCharging ? batCharge : 0, getNodeY(1), "left", batteryExtra)}
+        {renderNode("Powerwall", isDischarging ? batDischarge : 0, getNodeY(1), "left", batteryExtra)}
         {renderNode("Grid Import", gridImport, getNodeY(2), "left")}
 
         {/* Right nodes — always visible */}
@@ -248,6 +263,7 @@ export default function LiveSankeyChart({ current }: { current: CurrentPower }) 
         {renderNode("Powerwall", isCharging ? batCharge : 0, getNodeY(1), "right", batteryExtra)}
         {renderNode("EV", ev, getNodeY(2), "right")}
         {renderNode("Grid Export", gridExport, getNodeY(3), "right")}
+
       </svg>
     </div>
   );

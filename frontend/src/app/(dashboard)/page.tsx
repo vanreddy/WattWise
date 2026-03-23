@@ -63,7 +63,6 @@ export default function Dashboard() {
         {activeTab === "now" && (
           <NowTab
             summary={data.summary}
-            alerts={data.alerts}
             lastUpdated={data.lastUpdated}
             error={data.error}
           />
