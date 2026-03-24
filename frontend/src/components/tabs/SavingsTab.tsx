@@ -146,6 +146,33 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
       });
   }, [daily]);
 
+  // E-TOU-D rate schedule by hour (MCE + PG&E)
+  // Summer (Jun-Sep): Peak 4-9pm, Part-Peak 3-4pm & 9-12am, Off-Peak rest
+  // Winter (Oct-May): Peak 4-9pm, Off-Peak rest
+  const rateData = useMemo(() => {
+    if (!isDaily) return [];
+    const dateStr = dateRange.from;
+    const month = new Date(dateStr + "T12:00:00").getMonth(); // 0-indexed
+    const isSummer = month >= 5 && month <= 8; // Jun-Sep
+
+    return Array.from({ length: 24 }, (_, h) => {
+      const label = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+      let rate: number;
+      let tier: string;
+
+      if (isSummer) {
+        if (h >= 16 && h < 21) { rate = 0.42; tier = "Peak"; }
+        else if ((h >= 15 && h < 16) || (h >= 21 && h < 24)) { rate = 0.35; tier = "Part-Peak"; }
+        else { rate = 0.25; tier = "Off-Peak"; }
+      } else {
+        if (h >= 16 && h < 21) { rate = 0.38; tier = "Peak"; }
+        else { rate = 0.28; tier = "Off-Peak"; }
+      }
+
+      return { label, rate: parseFloat(rate.toFixed(2)), tier };
+    });
+  }, [isDaily, dateRange.from]);
+
   const showMultiDayCharts = !isDaily && daily.length > 1;
   const showHourlyCharts = isDaily && hourly.length > 0;
 
@@ -238,6 +265,41 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                     <Bar dataKey="Cost" fill="#ef4444" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+              </div>
+
+              {/* Rate schedule by hour */}
+              <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Rate Schedule ($/kWh)</h2>
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  <BarChart data={rateData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} domain={[0, 0.5]} />
+                    <Tooltip
+                      {...tooltipStyle}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      formatter={(value: any, _name: any, props: any) =>
+                        [`$${Number(value).toFixed(2)}/kWh`, props?.payload?.tier || "Rate"]
+                      }
+                    />
+                    <Bar
+                      dataKey="rate"
+                      radius={[2, 2, 0, 0]}
+                      name="Rate"
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      shape={(props: any) => {
+                        const tier = props.payload?.tier;
+                        const fill = tier === "Peak" ? "#ef4444" : tier === "Part-Peak" ? "#f59e0b" : "#3b82f6";
+                        return <rect {...props} fill={fill} />;
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-4 mt-1 text-[10px]">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />Peak</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Part-Peak</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" />Off-Peak</span>
+                </div>
               </div>
             </>
           )}
