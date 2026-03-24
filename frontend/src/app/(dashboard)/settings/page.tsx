@@ -193,15 +193,22 @@ export default function SettingsPage() {
     }
   }
 
+  const [teslaSuccess, setTeslaSuccess] = useState(false);
+
   async function handleTeslaReauthComplete() {
     setTeslaError(null);
+    setTeslaSuccess(false);
     setTeslaLoading(true);
     setTeslaReauthPhase("completing");
     try {
-      await completeTeslaAuth(teslaRedirectUrl, teslaState, teslaCodeVerifier);
-      refreshUser?.();
+      const result = await completeTeslaAuth(teslaRedirectUrl, teslaState, teslaCodeVerifier);
+      setTeslaSuccess(true);
       setTeslaReauthPhase("idle");
       setTeslaRedirectUrl("");
+      // Delay refresh to show success message
+      setTimeout(() => {
+        refreshUser?.();
+      }, 1500);
     } catch (err) {
       setTeslaError(err instanceof Error ? err.message : "Tesla reconnection failed");
       setTeslaReauthPhase("waiting");
@@ -369,7 +376,13 @@ export default function SettingsPage() {
           )}
 
           {/* Tesla Reconnect Flow */}
-          {teslaReauthPhase === "idle" && (
+          {teslaSuccess && (
+            <div className="bg-green-900/30 border border-green-800/50 text-green-300 text-sm rounded-xl px-4 py-3 text-center">
+              ✓ Tesla reconnected successfully! Data polling will resume shortly.
+            </div>
+          )}
+
+          {teslaReauthPhase === "idle" && !teslaSuccess && (
             <button
               onClick={handleTeslaReconnect}
               disabled={teslaLoading}
