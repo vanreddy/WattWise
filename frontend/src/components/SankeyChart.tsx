@@ -337,9 +337,10 @@ interface Props {
   sankeyFlows?: SankeyFlows | null;
   animated?: boolean;
   liveUnits?: boolean;
+  hideBreakdown?: boolean;
 }
 
-export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated, liveUnits }: Props) {
+export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated, liveUnits, hideBreakdown }: Props) {
   const [selectedNode, setSelectedNode] = useState<{ label: string; side: "left" | "right" } | null>({ label: "Home", side: "right" });
 
   const flows = useMemo(() => {
@@ -414,7 +415,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
       {renderSankey(flows, animated, handleNodeClick, liveUnits ? "kW" : "kWh")}
 
       {/* Detail table for selected node */}
-      {selectedNode && detailRows.length > 0 && (
+      {!hideBreakdown && selectedNode && detailRows.length > 0 && (
         <div className="mt-1 bg-gray-800/40 rounded-xl border border-gray-700/30 p-3 backdrop-blur-sm animate-fade-in-up">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold" style={{ color: nodeColors[selectedNode.label] || "#fff" }}>

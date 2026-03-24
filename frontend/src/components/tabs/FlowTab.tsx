@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useSwipeable } from "react-swipeable";
-import type { DailySummary, HourlyBucket, SankeyFlows, IntervalPoint, SummaryResponse } from "@/lib/api";
+import type { DailySummary, HourlyBucket, SankeyFlows, IntervalPoint, SummaryResponse, CurrentPower } from "@/lib/api";
 import type { WeatherData } from "@/hooks/useWeather";
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
@@ -23,22 +23,85 @@ function WeatherIcon({ condition, size = 28 }: { condition: string; size?: numbe
   return <Sun size={size} className="text-yellow-400" />;
 }
 
-function NowWeather({ weather, lastUpdated }: { weather: WeatherData | null; lastUpdated: Date | null }) {
+function currentToSankeyFlows(c: CurrentPower): SankeyFlows {
+  const solar = Math.max(0, c.solar_w) / 1000;
+  const home = Math.max(0, c.home_w) / 1000;
+  const gridImport = Math.max(0, c.grid_w) / 1000;
+  const gridExport = Math.max(0, -c.grid_w) / 1000;
+  const batCharge = Math.max(0, -c.battery_w) / 1000;
+  const batDischarge = Math.max(0, c.battery_w) / 1000;
+  const ev = Math.max(0, c.vehicle_w) / 1000;
+
+  const solarToHome = Math.min(solar, home);
+  const solarToBat = Math.min(solar - solarToHome, batCharge);
+  const solarToGrid = Math.min(solar - solarToHome - solarToBat, gridExport);
+  const batToHome = Math.min(batDischarge, home - solarToHome);
+  const gridToHome = Math.min(gridImport, home + ev - solarToHome - batToHome);
+  const gridToBat = Math.min(gridImport - gridToHome, batCharge - solarToBat);
+
+  return {
+    solar_to_home: solarToHome,
+    solar_to_battery: solarToBat,
+    solar_to_grid: solarToGrid,
+    battery_to_home: batToHome,
+    battery_to_grid: 0,
+    grid_to_home: gridToHome,
+    grid_to_battery: gridToBat,
+  };
+}
+
+function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | null; lastUpdated: Date | null; summary: SummaryResponse | null }) {
+  const current = summary?.current;
+
+  // Self-powered % from live data
+  const home = current ? Math.max(0, current.home_w) : 0;
+  const gridImport = current ? Math.max(0, current.grid_w) : 0;
+  const solarDirect = current ? Math.min(Math.max(0, current.solar_w), home) : 0;
+  const batDirect = current ? Math.min(Math.max(0, current.battery_w), home - solarDirect) : 0;
+  const selfPoweredPct = home > 0 ? Math.round(((home - gridImport) / home) * 100) : 0;
+  const solarPct = home > 0 ? Math.round((solarDirect / home) * 100) : 0;
+  const batteryPct = home > 0 ? Math.round((batDirect / home) * 100) : 0;
+
+  // Sankey flows from live data
+  const liveFlows = current ? currentToSankeyFlows(current) : null;
+
   return (
-    <div className="flex flex-col items-center gap-6 py-8">
-      {lastUpdated && (
-        <p className="text-xs text-gray-600">
-          Updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-        </p>
-      )}
-      {weather ? (
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-6 w-full max-w-sm text-center space-y-3">
-          <WeatherIcon condition={weather.condition} size={48} />
-          <div className="text-4xl font-bold text-white">{Math.round(weather.temperature)}°F</div>
-          <div className="text-sm text-gray-400 capitalize">{weather.description}</div>
-        </div>
-      ) : (
-        <p className="text-gray-600 text-sm">Weather unavailable</p>
+    <div className="space-y-4">
+      {/* Weather + timestamp */}
+      <div className="flex items-center justify-between px-1">
+        {weather ? (
+          <div className="flex items-center gap-2">
+            <WeatherIcon condition={weather.condition} size={20} />
+            <span className="text-sm text-gray-400">{Math.round(weather.temperature)}°F</span>
+            <span className="text-xs text-gray-600 capitalize">{weather.description}</span>
+          </div>
+        ) : <div />}
+        {lastUpdated && (
+          <p className="text-xs text-gray-600">
+            Updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+          </p>
+        )}
+      </div>
+
+      {/* Self-Powering Ring */}
+      <SelfPoweredRing
+        selfPoweredPct={Math.max(0, Math.min(100, selfPoweredPct))}
+        solarPct={solarPct}
+        batteryPct={batteryPct}
+        label="Self-Powering"
+      />
+
+      {/* Live Sankey */}
+      {liveFlows && (
+        <SankeyChart
+          hourlyData={[]}
+          dailyData={[]}
+          days={0}
+          sankeyFlows={liveFlows}
+          animated
+          liveUnits
+          hideBreakdown
+        />
       )}
     </div>
   );
@@ -182,7 +245,7 @@ export default function FlowTab({
 
       {/* Content */}
       {mode === "now" ? (
-        <NowWeather weather={weather} lastUpdated={lastUpdated} />
+        <NowContent weather={weather} lastUpdated={lastUpdated} summary={summary} />
       ) : (
         <div {...swipeHandlers}>
           <HistoricalContent
