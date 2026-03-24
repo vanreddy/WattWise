@@ -89,7 +89,8 @@ function LandingCarousel({ onNext }: { onNext: () => void }) {
   });
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gray-950" style={{ height: "100dvh" }}>
+    <div className="fixed inset-0 flex items-center justify-center bg-gray-950" style={{ height: "100dvh" }}>
+    <div className="w-full max-w-md h-full flex flex-col">
       {/* Slide track — swipeable area */}
       <div className="flex-1 overflow-hidden relative" {...handlers}>
         {SLIDES.map((s, i) => (
@@ -149,6 +150,7 @@ function LandingCarousel({ onNext }: { onNext: () => void }) {
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 }
