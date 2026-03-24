@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { DateRange } from "@/hooks/useDashboardData";
 
-type Mode = "now" | "daily" | "weekly" | "monthly" | "yearly";
+type Mode = "daily" | "weekly" | "monthly" | "yearly";
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -43,11 +43,6 @@ function formatYearly(dateStr: string): string {
 
 function computeRange(mode: Mode, offset: number): DateRange {
   const now = new Date();
-
-  if (mode === "now") {
-    const ds = toDateStr(now);
-    return { label: "Now", from: ds, to: ds, days: 1 };
-  }
 
   if (mode === "daily") {
     const d = new Date(now);
@@ -95,7 +90,6 @@ function computeRange(mode: Mode, offset: number): DateRange {
 }
 
 const ALL_MODES: { id: Mode; label: string }[] = [
-  { id: "now", label: "Now" },
   { id: "daily", label: "Day" },
   { id: "weekly", label: "Week" },
   { id: "monthly", label: "Month" },
@@ -124,7 +118,6 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
   };
 
   const navigate = (dir: -1 | 1) => {
-    if (mode === "now") return;
     const newOffset = offset + dir;
     if (newOffset > 0) return;
     setOffset(newOffset);
@@ -133,7 +126,6 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
   };
 
   const periodLabel = useMemo(() => {
-    if (mode === "now") return "Live";
     if (mode === "daily") return formatDaily(value.from);
     if (mode === "weekly") return formatWeekly(value.from, value.to);
     if (mode === "yearly") return formatYearly(value.from);
@@ -141,7 +133,6 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
   }, [mode, value]);
 
   const canGoForward = offset < 0;
-  const isNow = mode === "now";
 
   const visibleModes = ALL_MODES.filter(m => availableModes.includes(m.id));
 
@@ -164,31 +155,29 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
         ))}
       </div>
 
-      {/* Period navigation — hidden for "now" mode */}
-      {!isNow && (
-        <div className="flex items-center w-full max-w-sm justify-between">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2.5 rounded-xl text-gray-400 hover:text-white active:bg-gray-800 transition-colors"
-          >
-            <ChevronLeft size={24} />
-          </button>
-          <span className="text-base font-semibold text-gray-200 min-w-[160px] text-center">
-            {periodLabel}
-          </span>
-          <button
-            onClick={() => navigate(1)}
-            disabled={!canGoForward}
-            className={`p-2.5 rounded-xl transition-colors ${
-              canGoForward
-                ? "text-gray-400 hover:text-white active:bg-gray-800"
-                : "text-gray-800 cursor-not-allowed"
-            }`}
-          >
-            <ChevronRight size={24} />
-          </button>
-        </div>
-      )}
+      {/* Period navigation */}
+      <div className="flex items-center w-full max-w-sm justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2.5 rounded-xl text-gray-400 hover:text-white active:bg-gray-800 transition-colors"
+        >
+          <ChevronLeft size={24} />
+        </button>
+        <span className="text-base font-semibold text-gray-200 min-w-[160px] text-center">
+          {periodLabel}
+        </span>
+        <button
+          onClick={() => navigate(1)}
+          disabled={!canGoForward}
+          className={`p-2.5 rounded-xl transition-colors ${
+            canGoForward
+              ? "text-gray-400 hover:text-white active:bg-gray-800"
+              : "text-gray-800 cursor-not-allowed"
+          }`}
+        >
+          <ChevronRight size={24} />
+        </button>
+      </div>
     </div>
   );
 }
