@@ -8,6 +8,8 @@ import {
   unlinkTelegram,
   disconnectTesla,
   changePassword,
+  startTeslaAuth,
+  completeTeslaAuth,
 } from "@/lib/auth";
 
 /* ─── Toggle switch ─── */
@@ -108,6 +110,11 @@ export default function SettingsPage() {
   // Tesla state
   const [teslaError, setTeslaError] = useState<string | null>(null);
   const [teslaLoading, setTeslaLoading] = useState(false);
+  const [teslaReauthPhase, setTeslaReauthPhase] = useState<"idle" | "waiting" | "completing">("idle");
+  const [teslaAuthUrl, setTeslaAuthUrl] = useState("");
+  const [teslaState, setTeslaState] = useState("");
+  const [teslaCodeVerifier, setTeslaCodeVerifier] = useState("");
+  const [teslaRedirectUrl, setTeslaRedirectUrl] = useState("");
 
   // Password state
   const [showPassword, setShowPassword] = useState(false);
@@ -156,6 +163,48 @@ export default function SettingsPage() {
       setConfirmTesla(false);
     } catch (err) {
       setTeslaError(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setTeslaLoading(false);
+    }
+  }
+
+  // ─── Tesla reconnect handlers ───
+  async function handleTeslaReconnect() {
+    setTeslaError(null);
+    setTeslaLoading(true);
+    try {
+      const data = await startTeslaAuth();
+      if ("status" in data && data.status === "already_connected") {
+        refreshUser?.();
+        setTeslaReauthPhase("idle");
+        return;
+      }
+      if ("authorization_url" in data) {
+        setTeslaAuthUrl(data.authorization_url);
+        setTeslaState(data.state);
+        setTeslaCodeVerifier(data.code_verifier);
+        window.open(data.authorization_url, "_blank");
+        setTeslaReauthPhase("waiting");
+      }
+    } catch (err) {
+      setTeslaError(err instanceof Error ? err.message : "Failed to start Tesla auth");
+    } finally {
+      setTeslaLoading(false);
+    }
+  }
+
+  async function handleTeslaReauthComplete() {
+    setTeslaError(null);
+    setTeslaLoading(true);
+    setTeslaReauthPhase("completing");
+    try {
+      await completeTeslaAuth(teslaRedirectUrl, teslaState, teslaCodeVerifier);
+      refreshUser?.();
+      setTeslaReauthPhase("idle");
+      setTeslaRedirectUrl("");
+    } catch (err) {
+      setTeslaError(err instanceof Error ? err.message : "Tesla reconnection failed");
+      setTeslaReauthPhase("waiting");
     } finally {
       setTeslaLoading(false);
     }
@@ -319,10 +368,55 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {!isTeslaConnected && (
-            <p className="text-xs text-gray-600">
-              To reconnect, run the Tesla OAuth flow from the server CLI.
-            </p>
+          {/* Tesla Reconnect Flow */}
+          {teslaReauthPhase === "idle" && (
+            <button
+              onClick={handleTeslaReconnect}
+              disabled={teslaLoading}
+              className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all"
+            >
+              {teslaLoading ? "Starting..." : "Reconnect Tesla"}
+            </button>
+          )}
+
+          {teslaReauthPhase === "waiting" && (
+            <div className="space-y-3">
+              <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 space-y-2">
+                <p className="text-sm text-gray-400">
+                  After signing into Tesla in the new tab, copy the full URL from your browser and paste it below.
+                </p>
+                <p className="text-xs text-gray-600">
+                  It will look like: https://auth.tesla.com/void/callback?code=...
+                </p>
+              </div>
+              <textarea
+                placeholder="Paste the redirect URL here..."
+                value={teslaRedirectUrl}
+                onChange={(e) => setTeslaRedirectUrl(e.target.value)}
+                rows={3}
+                className="w-full bg-gray-900/80 border border-gray-700/50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-yellow-500/70 resize-none"
+              />
+              <button
+                onClick={handleTeslaReauthComplete}
+                disabled={teslaLoading || !teslaRedirectUrl.trim()}
+                className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all"
+              >
+                {teslaLoading ? "Connecting..." : "Complete Reconnection"}
+              </button>
+              <button
+                onClick={() => window.open(teslaAuthUrl, "_blank")}
+                className="w-full text-gray-500 hover:text-gray-300 text-xs py-1"
+              >
+                Open Tesla login again
+              </button>
+            </div>
+          )}
+
+          {teslaReauthPhase === "completing" && (
+            <div className="text-center text-gray-500 text-sm py-4">
+              <span className="inline-block w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mr-2" />
+              Reconnecting to Tesla...
+            </div>
           )}
         </section>
 
