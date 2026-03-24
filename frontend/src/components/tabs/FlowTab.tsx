@@ -112,9 +112,18 @@ function NowContent({ summary, lastUpdated, error, weather }: {
   const current = summary.current;
   const home = Math.max(0, current.home_w);
   const gridImport = Math.max(0, current.grid_w);
+  const solar = Math.max(0, current.solar_w);
+  const batDischarge = current.battery_w < 0 ? Math.abs(current.battery_w) : 0;
+  const selfPowered = Math.max(0, home - gridImport);
   const selfPoweredPct = home > 0
-    ? Math.round(Math.max(0, Math.min(100, ((home - gridImport) / home) * 100)))
+    ? Math.round(Math.max(0, Math.min(100, (selfPowered / home) * 100)))
     : 100;
+
+  // Split self-powered into solar vs battery contributions
+  const solarToHome = Math.min(solar, home);
+  const batteryToHome = Math.min(batDischarge, Math.max(0, home - solarToHome));
+  const solarPctNow = home > 0 ? (solarToHome / home) * 100 : 0;
+  const batteryPctNow = home > 0 ? (batteryToHome / home) * 100 : 0;
 
   // Convert live watts to SankeyFlows (in kW) for the chart
   const liveFlows = currentToSankeyFlows(current);
@@ -132,8 +141,8 @@ function NowContent({ summary, lastUpdated, error, weather }: {
       {/* Weather */}
       {weather && <WeatherBar weather={weather} />}
 
-      {/* Self-Powering Ring with live indicator */}
-      <SelfPoweredRing selfPoweredPct={selfPoweredPct} label="Self-Powering" live />
+      {/* Self-Powering Ring with live indicator and solar/battery split */}
+      <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPctNow} batteryPct={batteryPctNow} label="Self-Powering" live />
 
       {/* Sankey — live watts with flowing animation */}
       <SankeyChart

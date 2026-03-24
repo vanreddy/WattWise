@@ -92,15 +92,15 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
 
           {hasSplit ? (
             <>
-              {/* Solar segment (yellow) — animates first */}
+              {/* Solar segment (yellow) — animates first, round start cap */}
               {solarLen > 0.5 && (
                 <path
                   d={ARC_PATH}
                   fill="none"
                   stroke={SOLAR_COLOR}
                   strokeWidth="14"
-                  strokeLinecap="butt"
-                  strokeDasharray={solarDasharray}
+                  strokeLinecap="round"
+                  strokeDasharray={`${solarLen} ${HALF_CIRC}`}
                   strokeDashoffset={solarDashoffset}
                   style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)" }}
                 />
