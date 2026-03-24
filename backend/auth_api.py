@@ -416,7 +416,13 @@ async def tesla_oauth_start(request: Request, user: dict = Depends(get_current_u
     loader, dumper = _make_cache_callbacks(account_id)
     with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
         if tesla.authorized:
-            return {"status": "already_connected", "message": "Tesla is already connected"}
+            # Verify the token actually works (it might be expired)
+            try:
+                tesla.fetch_token()
+                tesla.battery_list()  # quick API call to confirm
+                return {"status": "already_connected", "message": "Tesla is already connected"}
+            except Exception:
+                pass  # Token expired/invalid — proceed to re-auth
 
         state = tesla.new_state()
         code_verifier = tesla.new_code_verifier()
