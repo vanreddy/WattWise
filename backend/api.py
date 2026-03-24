@@ -8,7 +8,6 @@ GET /alerts   — alert history
 GET /reports  — report history
 """
 
-import asyncio
 import json
 import logging
 from datetime import date, datetime, time, timedelta, timezone
@@ -290,43 +289,6 @@ async def intervals(
     ]
 
 
-def _fetch_tesla_calendar_history(end_date_iso: str, tesla_email: str = None, account_id: UUID = None) -> dict:
-    """Synchronous Tesla API call — returns calendar_history energy data."""
-    from backend.poller import _get_tesla_client
-    with _get_tesla_client(tesla_email, account_id) as tesla:
-        if not tesla.authorized:
-            raise RuntimeError("Tesla not authorized")
-        products = tesla.battery_list() + tesla.solar_list()
-        if not products:
-            raise RuntimeError("No energy sites found")
-        site = products[0]
-        return site.get_calendar_history_data(
-            kind="energy", period="day", end_date=end_date_iso,
-        )
-
-
-def _sum_tesla_flows(series: list[dict]) -> dict[str, float]:
-    """Sum Tesla calendar_history energy entries into Sankey flows (Wh → kWh)."""
-    totals = {
-        "solar_to_home": 0.0,
-        "solar_to_battery": 0.0,
-        "solar_to_grid": 0.0,
-        "battery_to_home": 0.0,
-        "battery_to_grid": 0.0,
-        "grid_to_home": 0.0,
-        "grid_to_battery": 0.0,
-    }
-    for entry in series:
-        totals["solar_to_home"] += entry.get("consumer_energy_imported_from_solar", 0)
-        totals["solar_to_battery"] += entry.get("battery_energy_imported_from_solar", 0)
-        totals["solar_to_grid"] += entry.get("grid_energy_exported_from_solar", 0)
-        totals["battery_to_home"] += entry.get("consumer_energy_imported_from_battery", 0)
-        totals["battery_to_grid"] += entry.get("grid_energy_exported_from_battery", 0)
-        totals["grid_to_home"] += entry.get("consumer_energy_imported_from_grid", 0)
-        totals["grid_to_battery"] += entry.get("battery_energy_imported_from_grid", 0)
-    # Convert Wh → kWh
-    return {k: v / 1000 for k, v in totals.items()}
-
 
 @router.get("/sankey")
 async def sankey(
@@ -336,7 +298,7 @@ async def sankey(
     to_date: Optional[str] = Query(default=None, alias="to"),
     user: dict = Depends(get_current_user),
 ):
-    """Sankey flow allocations from Tesla metered energy data."""
+    """Sankey flow allocations from polled interval data (single source of truth)."""
     pool = request.app.state.pool
     account_id = UUID(user["account_id"])
     today = datetime.now(LOCAL_TZ).date()
@@ -351,27 +313,8 @@ async def sankey(
         start_day = today
         end_day = today
 
-    # Try Tesla calendar_history API (metered energy — most accurate)
-    try:
-        # Get tesla_email for this account
-        acct_row = await pool.fetchrow("SELECT tesla_email FROM accounts WHERE id = $1", account_id)
-        tesla_email = acct_row["tesla_email"] if acct_row else None
-
-        # Fetch each day's calendar_history and combine
-        all_series = []
-        d = start_day
-        while d <= end_day:
-            end_iso = datetime.combine(d, time(23, 59, 59), tzinfo=LOCAL_TZ).isoformat()
-            data = await asyncio.to_thread(_fetch_tesla_calendar_history, end_iso, tesla_email, account_id)
-            series = data.get("time_series", data.get("response", {}).get("time_series", []))
-            all_series.extend(series)
-            d += timedelta(days=1)
-
-        flows = _sum_tesla_flows(all_series)
-        logger.info("Sankey: used Tesla metered data for %s to %s", start_day, end_day)
-    except Exception:
-        logger.exception("Tesla calendar_history failed, falling back to polled data")
-        flows = await _sankey_from_polled(pool, start_day, end_day + timedelta(days=1), account_id)
+    # All charts use the same data source: tesla_intervals table
+    flows = await _sankey_from_polled(pool, start_day, end_day + timedelta(days=1), account_id)
 
     return {
         "flows": {k: round(v, 2) for k, v in flows.items()},
