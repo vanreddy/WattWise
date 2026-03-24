@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   selfPoweredPct: number; // 0–100
@@ -16,21 +16,34 @@ const BATTERY_COLOR = "#34d399";
 const TRACK_COLOR = "#374151";
 
 const ARC_PATH = "M 20 130 A 110 110 0 0 1 240 130";
-const HALF_CIRC = Math.PI * 110; // semi-circle length
+const HALF_CIRC = Math.PI * 110; // semi-circle length ≈ 345.6
 
 export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryPct = 0, label = "Self-Powered", glass, live }: Props) {
   const pct = Math.max(0, Math.min(100, selfPoweredPct));
-
   const hasSplit = solarPct > 0 || batteryPct > 0;
 
-  // For split mode: two overlapping arcs using dasharray
-  const solarLen = (solarPct / 100) * HALF_CIRC;
-  const batteryLen = (batteryPct / 100) * HALF_CIRC;
-  const batteryOffset = solarLen; // battery starts where solar ends
+  // Animate on mount: start from 0 and transition to target
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimated(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
-  // For single color mode
+  // Solar: draws from left, length = solarPct portion of arc
+  // Use dashoffset to hide it initially, then animate to 0
+  const solarLen = (solarPct / 100) * HALF_CIRC;
+  const solarDasharray = `${solarLen} ${HALF_CIRC}`;
+  const solarDashoffset = animated ? 0 : solarLen; // start hidden, animate to visible
+
+  // Battery: draws after solar
+  // dasharray = [gap for solar] [battery length] [rest hidden]
+  const batteryLen = (batteryPct / 100) * HALF_CIRC;
+  const batteryDasharray = `0 ${solarLen} ${batteryLen} ${HALF_CIRC}`;
+
+  // Single color mode
   const singleColor = pct >= 80 ? BATTERY_COLOR : pct >= 40 ? SOLAR_COLOR : "#f87171";
-  const singleOffset = HALF_CIRC * (1 - pct / 100);
+  const singleLen = (pct / 100) * HALF_CIRC;
+  const singleDashoffset = animated ? 0 : singleLen;
 
   return (
     <div className={glass ? "flex flex-col items-center justify-center" : "bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center"}>
@@ -45,7 +58,7 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
 
           {hasSplit ? (
             <>
-              {/* Solar segment — starts from left */}
+              {/* Solar segment (yellow) — starts from left */}
               {solarLen > 0.5 && (
                 <path
                   d={ARC_PATH}
@@ -53,12 +66,12 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
                   stroke={SOLAR_COLOR}
                   strokeWidth="14"
                   strokeLinecap="butt"
-                  strokeDasharray={`${solarLen} ${HALF_CIRC}`}
-                  strokeDashoffset={0}
-                  style={{ transition: "stroke-dasharray 0.8s ease" }}
+                  strokeDasharray={solarDasharray}
+                  strokeDashoffset={solarDashoffset}
+                  style={{ transition: "stroke-dashoffset 1s ease-out" }}
                 />
               )}
-              {/* Battery segment — starts after solar */}
+              {/* Battery segment (green) — starts after solar */}
               {batteryLen > 0.5 && (
                 <path
                   d={ARC_PATH}
@@ -66,22 +79,22 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
                   stroke={BATTERY_COLOR}
                   strokeWidth="14"
                   strokeLinecap="butt"
-                  strokeDasharray={`${batteryLen} ${HALF_CIRC}`}
-                  strokeDashoffset={-batteryOffset}
-                  style={{ transition: "stroke-dasharray 0.8s ease, stroke-dashoffset 0.8s ease" }}
+                  strokeDasharray={batteryDasharray}
+                  style={{ transition: "stroke-dasharray 1s ease-out" }}
                 />
               )}
             </>
           ) : (
+            /* Single color arc */
             <path
               d={ARC_PATH}
               fill="none"
               stroke={singleColor}
               strokeWidth="14"
               strokeLinecap="round"
-              strokeDasharray={HALF_CIRC}
-              strokeDashoffset={singleOffset}
-              style={{ transition: "stroke-dashoffset 0.8s ease, stroke 0.8s ease" }}
+              strokeDasharray={`${singleLen} ${HALF_CIRC}`}
+              strokeDashoffset={singleDashoffset}
+              style={{ transition: "stroke-dashoffset 1s ease-out, stroke 0.8s ease" }}
             />
           )}
         </svg>
