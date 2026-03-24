@@ -70,12 +70,16 @@ def fetch_history(days: int) -> List[Dict]:
             power_data = site.get_calendar_history_data(
                 kind="power", end_date=end_str
             )
+            if isinstance(power_data, str):
+                power_data = json.loads(power_data)
             power_ts = power_data.get("response", power_data).get("time_series", [])
 
             # SOE data (battery state of charge, ~15-min intervals)
             soe_data = site.get_calendar_history_data(
                 kind="soe", end_date=end_str
             )
+            if isinstance(soe_data, str):
+                soe_data = json.loads(soe_data)
             soe_ts = soe_data.get("response", soe_data).get("time_series", [])
 
             # Build SOE lookup by timestamp
@@ -131,9 +135,13 @@ def _fetch_one_day(site, day_offset: int) -> List[Dict]:
     end_str = end_of_day.isoformat()
 
     power_data = site.get_calendar_history_data(kind="power", end_date=end_str)
+    if isinstance(power_data, str):
+        power_data = json.loads(power_data)
     power_ts = power_data.get("response", power_data).get("time_series", [])
 
     soe_data = site.get_calendar_history_data(kind="soe", end_date=end_str)
+    if isinstance(soe_data, str):
+        soe_data = json.loads(soe_data)
     soe_ts = soe_data.get("response", soe_data).get("time_series", [])
 
     soe_map = {e["timestamp"]: e.get("soe", 0) for e in soe_ts}

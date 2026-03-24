@@ -52,10 +52,7 @@ async def _load_cache_from_db(pool: asyncpg.Pool, account_id: UUID | None = None
             "SELECT value FROM kv_store WHERE key = $1 AND account_id = $2",
             TESLA_CACHE_KEY, account_id,
         )
-        cache = row if row else {}
-        # Handle double-encoded JSON (string within string)
-        while isinstance(cache, str):
-            cache = json.loads(cache)
+        cache = _ensure_dict(row)
         _token_caches[str(account_id)] = cache
         return cache
     else:
@@ -80,29 +77,41 @@ async def _load_cache_from_db(pool: asyncpg.Pool, account_id: UUID | None = None
         return cache
 
 
+def _ensure_dict(val) -> dict:
+    """Ensure a value is a dict, handling double-encoded JSON strings."""
+    if val is None:
+        return {}
+    while isinstance(val, str):
+        val = json.loads(val)
+    return val if isinstance(val, dict) else {}
+
+
 async def _save_cache_to_db(pool: asyncpg.Pool, account_id: UUID | None = None) -> None:
     """Persist Tesla token cache to kv_store table."""
     cache_key = str(account_id) if account_id else "__global__"
-    cache = _token_caches.get(cache_key, {})
+    cache = _ensure_dict(_token_caches.get(cache_key, {}))
+
+    # asyncpg needs a JSON string for JSONB columns
+    cache_json = json.dumps(cache)
 
     if account_id:
         await pool.execute(
             """
             INSERT INTO kv_store (key, value, updated_at, account_id)
-            VALUES ($1, $2, NOW(), $3)
+            VALUES ($1, $2::jsonb, NOW(), $3)
             ON CONFLICT (key) WHERE account_id = $3
-            DO UPDATE SET value = $2, updated_at = NOW()
+            DO UPDATE SET value = $2::jsonb, updated_at = NOW()
             """,
-            TESLA_CACHE_KEY, json.dumps(cache), account_id,
+            TESLA_CACHE_KEY, cache_json, account_id,
         )
     else:
         await pool.execute(
             """
             INSERT INTO kv_store (key, value, updated_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+            VALUES ($1, $2::jsonb, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = $2::jsonb, updated_at = NOW()
             """,
-            TESLA_CACHE_KEY, json.dumps(cache),
+            TESLA_CACHE_KEY, cache_json,
         )
     logger.debug("Saved Tesla token cache to DB for %s", cache_key)
 
