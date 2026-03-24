@@ -128,6 +128,11 @@ function NowContent({ summary, lastUpdated, error, weather }: {
   // Convert live watts to SankeyFlows (in kW) for the chart
   const liveFlows = currentToSankeyFlows(current);
 
+  // Debug: check if flows have data
+  if (typeof window !== "undefined") {
+    console.log("[NowContent] liveFlows:", liveFlows, "current:", current);
+  }
+
   return (
     <div className="space-y-4">
       {/* Status bar */}
