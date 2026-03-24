@@ -67,19 +67,25 @@ def fetch_history(days: int) -> List[Dict]:
             logger.info("Fetching %s (Pacific) ...", target.strftime("%Y-%m-%d"))
 
             # Power data (5-min intervals): solar, battery, grid power
-            power_data = site.get_calendar_history_data(
+            def _parse(raw):
+                if isinstance(raw, str):
+                    if not raw.strip():
+                        return {}
+                    try:
+                        raw = json.loads(raw)
+                    except (json.JSONDecodeError, ValueError):
+                        return {}
+                return raw if isinstance(raw, dict) else {}
+
+            power_data = _parse(site.get_calendar_history_data(
                 kind="power", end_date=end_str
-            )
-            if isinstance(power_data, str):
-                power_data = json.loads(power_data)
+            ))
             power_ts = power_data.get("response", power_data).get("time_series", [])
 
             # SOE data (battery state of charge, ~15-min intervals)
-            soe_data = site.get_calendar_history_data(
+            soe_data = _parse(site.get_calendar_history_data(
                 kind="soe", end_date=end_str
-            )
-            if isinstance(soe_data, str):
-                soe_data = json.loads(soe_data)
+            ))
             soe_ts = soe_data.get("response", soe_data).get("time_series", [])
 
             # Build SOE lookup by timestamp
@@ -134,14 +140,20 @@ def _fetch_one_day(site, day_offset: int) -> List[Dict]:
     end_of_day = target.replace(hour=23, minute=59, second=59)
     end_str = end_of_day.isoformat()
 
-    power_data = site.get_calendar_history_data(kind="power", end_date=end_str)
-    if isinstance(power_data, str):
-        power_data = json.loads(power_data)
+    def _parse_response(raw):
+        if isinstance(raw, str):
+            if not raw.strip():
+                return {}
+            try:
+                raw = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                return {}
+        return raw if isinstance(raw, dict) else {}
+
+    power_data = _parse_response(site.get_calendar_history_data(kind="power", end_date=end_str))
     power_ts = power_data.get("response", power_data).get("time_series", [])
 
-    soe_data = site.get_calendar_history_data(kind="soe", end_date=end_str)
-    if isinstance(soe_data, str):
-        soe_data = json.loads(soe_data)
+    soe_data = _parse_response(site.get_calendar_history_data(kind="soe", end_date=end_str))
     soe_ts = soe_data.get("response", soe_data).get("time_series", [])
 
     soe_map = {e["timestamp"]: e.get("soe", 0) for e in soe_ts}
@@ -255,15 +267,22 @@ async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30)
 
             site = products[0]
 
-            for day_offset in range(days, 0, -1):
+            for day_offset in range(1, days + 1):
                 target = datetime.now(LOCAL_TZ) - timedelta(days=day_offset)
                 logger.info("Backfill account %s: fetching %s ...", acct_key, target.strftime("%Y-%m-%d"))
 
-                intervals = _fetch_one_day(site, day_offset)
-                await _insert_intervals_for_account(pool, intervals, account_id)
-                await _aggregate_day_for_account(pool, day_offset, account_id)
+                try:
+                    intervals = _fetch_one_day(site, day_offset)
+                except Exception as day_err:
+                    logger.warning("Backfill %s: skipping %s — %s", acct_key, target.strftime("%Y-%m-%d"), day_err)
+                    _backfill_progress[acct_key]["days_fetched"] = day_offset
+                    continue
 
-                fetched = days - day_offset + 1
+                if intervals:
+                    await _insert_intervals_for_account(pool, intervals, account_id)
+                    await _aggregate_day_for_account(pool, day_offset, account_id)
+
+                fetched = day_offset
                 _backfill_progress[acct_key]["days_fetched"] = fetched
                 logger.info("Backfill account %s: %d/%d days done", acct_key, fetched, days)
 
