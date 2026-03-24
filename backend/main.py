@@ -142,30 +142,12 @@ async def lifespan(app: FastAPI):
     scheduler.start()
 
     import asyncio
-    from backend.backfill import backfill_account
-
-    # Simple startup gap-fill: backfill last 2 days for all accounts
-    async def _startup_fill():
-        await asyncio.sleep(10)  # Let poller run first
-        logger.info("Startup gap-fill: backfilling last 2 days for all accounts...")
-        try:
-            accounts = await pool.fetch("SELECT id FROM accounts")
-            for acct in accounts:
-                try:
-                    await backfill_account(pool, acct["id"], days=2, include_today=True)
-                    logger.info("Startup gap-fill: done for account %s", acct["id"])
-                except Exception:
-                    logger.exception("Startup gap-fill: failed for account %s", acct["id"])
-        except Exception:
-            logger.exception("Startup gap-fill: task failed")
-
-    gap_fill_task = asyncio.create_task(_startup_fill())
 
     # Telegram bot listener (long-polling for /start commands)
     bot_task = asyncio.create_task(run_bot_polling(pool))
 
     # Keep references alive for the duration of the app
-    app.state.background_tasks = [gap_fill_task, bot_task]
+    app.state.background_tasks = [bot_task]
 
     logger.info("SelfPower started — poller, daily, weekly jobs + gap-fill + Telegram bot")
 
