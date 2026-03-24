@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     # Dedup tesla_intervals and add unique constraint (idempotent)
     try:
         from datetime import date, timedelta
-        from aggregator import aggregate_day
+        from backend.aggregator import aggregate_day
 
         # Check if unique index already exists
         idx_exists = await pool.fetchval("""
@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
 
     # Backfill any gaps from downtime — fetch last 2 days for all accounts in background
     import asyncio
-    from backfill import backfill_account
+    from backend.backfill import backfill_account
 
     async def _fill_gaps():
         try:
