@@ -58,10 +58,10 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  // Tick-up numbers
-  const displayPct = useTickUp(pct, 1200, 50);
-  const displaySolar = useTickUp(Math.round(solarPct), 900, 100);
-  const displayBattery = useTickUp(Math.round(batteryPct), 700, 1100);
+  // Tick-up numbers — synced with arc transition durations
+  const displayPct = useTickUp(pct, 1000, 50);       // matches solar arc: 1s from 50ms
+  const displaySolar = useTickUp(Math.round(solarPct), 1000, 50);
+  const displayBattery = useTickUp(Math.round(batteryPct), 800, 1100); // matches battery arc: 0.8s from 1100ms
 
   // Solar arc
   const solarLen = (solarPct / 100) * HALF_CIRC;

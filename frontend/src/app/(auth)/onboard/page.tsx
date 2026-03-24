@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useSwipeable } from "react-swipeable";
 import {
   registerPrimary,
   startTeslaAuth,
   completeTeslaAuth,
   linkTelegram,
 } from "@/lib/auth";
+import { RingVisual, FlowVisual, InsightsVisual, SavingsVisual } from "@/components/landing/LandingVisuals";
 
 /* ─── Step indicators ─── */
-const STEPS = ["Welcome", "Account", "Tesla", "Telegram"] as const;
+const STEPS = ["Account", "Tesla", "Telegram"] as const;
 
 function StepBar({ current }: { current: number }) {
   return (
@@ -37,30 +39,117 @@ function StepBar({ current }: { current: number }) {
   );
 }
 
-/* ─── Step 0: Splash ─── */
-function SplashStep({ onNext }: { onNext: () => void }) {
+/* ─── Slide data ─── */
+const SLIDES = [
+  {
+    heading: ["Maximize ", "self-powering", ""],
+    description: "Minimize your dependence on the grid by intelligently optimizing your solar and powerwall.",
+    Visual: RingVisual,
+  },
+  {
+    heading: ["Track your ", "energy flow", ""],
+    description: "Track solar, powerwall, and grid flowing through your home in real time.",
+    Visual: FlowVisual,
+  },
+  {
+    heading: ["", "AI", " suggestions to optimize your energy"],
+    description: "Smart recommendations and alerts that optimize your energy automatically.",
+    Visual: InsightsVisual,
+  },
+  {
+    heading: ["", "Lower bills", " for electricity"],
+    description: "Know exactly how much you save with solar and powerwall every day.",
+    Visual: SavingsVisual,
+  },
+];
+
+/* ─── Step 0: Landing Carousel ─── */
+function LandingCarousel({ onNext }: { onNext: () => void }) {
+  const [slide, setSlide] = useState(0);
+  const [autoPlay, setAutoPlay] = useState(true);
+
+  const goTo = useCallback((idx: number) => {
+    setSlide(Math.max(0, Math.min(SLIDES.length - 1, idx)));
+    setAutoPlay(false);
+  }, []);
+
+  // Auto-advance every 5s
+  useEffect(() => {
+    if (!autoPlay) return;
+    const interval = setInterval(() => {
+      setSlide((s) => (s + 1) % SLIDES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [autoPlay]);
+
+  const handlers = useSwipeable({
+    onSwipedLeft: () => goTo(slide + 1),
+    onSwipedRight: () => goTo(slide - 1),
+    delta: 50,
+    trackMouse: true,
+  });
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
-      {/* Logo */}
-      <div className="space-y-4">
-        <img src="/logo.svg" alt="SelfPower" className="h-20 mx-auto rounded-xl" />
+    <div className="fixed inset-0 flex flex-col bg-gray-950" style={{ height: "100dvh" }}>
+      {/* Slide track — swipeable area */}
+      <div className="flex-1 overflow-hidden relative" {...handlers}>
+        {SLIDES.map((s, i) => (
+          <div
+            key={i}
+            className="absolute inset-0 flex flex-col px-8 transition-all duration-500 ease-out"
+            style={{
+              transform: `translateX(${(i - slide) * 100}%)`,
+              opacity: i === slide ? 1 : 0.3,
+            }}
+          >
+            {/* Text — top */}
+            <div className="pt-12 sm:pt-16 space-y-3">
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white leading-tight">
+                {s.heading[0]}<span className="text-green-400">{s.heading[1]}</span>{s.heading[2]}
+              </h1>
+              <p className="text-base text-gray-400 leading-relaxed max-w-xs">
+                {s.description}
+              </p>
+            </div>
+            {/* Visual — center fill */}
+            <div className="flex-1 flex items-center justify-center">
+              <s.Visual active={slide === i} />
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="max-w-xs space-y-3 text-gray-400 text-sm">
-        <p>Monitor your solar production, battery, and grid usage in real time.</p>
-        <p>Get intelligent alerts and daily reports via Telegram.</p>
+      {/* Pagination dots + buttons */}
+      <div className="px-6 pb-8 pt-4 space-y-5" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
+        {/* Dots */}
+        <div className="flex justify-center gap-2">
+          {SLIDES.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              className={`rounded-full transition-all duration-300 ${
+                i === slide ? "w-6 h-2 bg-yellow-500" : "w-2 h-2 bg-gray-700"
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Buttons */}
+        <div className="flex gap-3">
+          <a
+            href="/login"
+            className="flex-1 text-center border border-gray-600 text-gray-100 rounded-xl py-3.5 font-semibold text-sm hover:bg-gray-900 transition-colors"
+          >
+            Log in
+          </a>
+          <button
+            onClick={onNext}
+            className="flex-1 bg-yellow-500 text-gray-950 rounded-xl py-3.5 font-bold text-sm hover:bg-yellow-400 transition-colors shadow-lg shadow-yellow-500/20"
+          >
+            Get Started
+          </button>
+        </div>
       </div>
-
-      <button
-        onClick={onNext}
-        className="bg-yellow-500 text-gray-950 font-bold rounded-lg px-8 py-3 text-base hover:bg-yellow-400 transition-colors"
-      >
-        Get Started
-      </button>
-
-      <a href="/login" className="text-gray-600 hover:text-gray-400 text-xs">
-        Already have an account? Sign in
-      </a>
     </div>
   );
 }
@@ -441,11 +530,16 @@ export default function OnboardPage() {
     window.location.href = "/setup";
   }
 
+  // Step 0 = landing carousel (full screen, no chrome)
+  if (step === 0) {
+    return <LandingCarousel onNext={() => setStep(1)} />;
+  }
+
+  // Steps 1–3 = registration flow
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 px-4 py-8">
-      {step > 0 && <StepBar current={step} />}
+      <StepBar current={step - 1} />
 
-      {step === 0 && <SplashStep onNext={() => setStep(1)} />}
       {step === 1 && <AccountStep onNext={() => setStep(2)} />}
       {step === 2 && <TeslaStep onNext={() => setStep(3)} />}
       {step === 3 && <TelegramStep onFinish={handleFinish} />}
