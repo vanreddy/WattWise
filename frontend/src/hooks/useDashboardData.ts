@@ -84,7 +84,7 @@ export function useDashboardData(): DashboardData {
         if (res.ok) {
           const data = await res.json();
           setBackfillDays(data.days_in_db || 0);
-          if (data.status === "done" || data.days_in_db >= 30) {
+          if (data.status === "done") {
             setBackfillActive(false);
             window.history.replaceState({}, "", "/");
           }

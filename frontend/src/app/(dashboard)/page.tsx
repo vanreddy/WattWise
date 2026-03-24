@@ -53,8 +53,8 @@ export default function Dashboard() {
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 flex items-center gap-3 mb-4">
           <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
           <p className="text-sm text-yellow-400">
-            Loading historical data ({data.backfillDays} of 30 days)
-            &mdash; 30-day view will unlock when complete
+            Loading historical data ({data.backfillDays} days so far)
+            &mdash; more history will appear as it downloads
           </p>
         </div>
       )}
