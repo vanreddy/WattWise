@@ -6,12 +6,11 @@ import {
   registerPrimary,
   startTeslaAuth,
   completeTeslaAuth,
-  linkTelegram,
 } from "@/lib/auth";
 import { RingVisual, FlowVisual, InsightsVisual, SavingsVisual } from "@/components/landing/LandingVisuals";
 
 /* ─── Step indicators ─── */
-const STEPS = ["Account", "Tesla", "Telegram"] as const;
+const STEPS = ["Account", "Tesla"] as const;
 
 function StepBar({ current }: { current: number }) {
   return (
@@ -420,108 +419,6 @@ function TeslaStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-/* ─── Step 3: Connect Telegram ─── */
-function TelegramStep({ onFinish }: { onFinish: () => void }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      await linkTelegram(code);
-      setSuccess(true);
-      setTimeout(() => onFinish(), 1500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to link Telegram");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="w-full max-w-sm mx-auto space-y-5">
-      <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold">Connect Telegram</h2>
-        <p className="text-gray-500 text-sm">
-          Get daily reports and real-time alerts via Telegram
-        </p>
-      </div>
-
-      {error && (
-        <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
-          {error}
-        </div>
-      )}
-
-      {success ? (
-        <div className="bg-green-900/30 border border-green-800 text-green-300 text-sm rounded px-3 py-2 text-center">
-          Telegram connected! Setting up your account...
-        </div>
-      ) : (
-        <>
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
-            <ol className="text-sm text-gray-500 list-decimal list-inside space-y-2">
-              <li>
-                Open{" "}
-                <a
-                  href="https://t.me/watt_wise_bot"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-yellow-500 hover:text-yellow-400"
-                >
-                  @watt_wise_bot
-                </a>{" "}
-                in Telegram
-              </li>
-              <li>
-                Send{" "}
-                <code className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">
-                  /start
-                </code>
-              </li>
-              <li>Enter the 6-digit code below</li>
-            </ol>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="text"
-              required
-              inputMode="numeric"
-              pattern="\d{6}"
-              maxLength={6}
-              placeholder="6-digit code"
-              value={code}
-              onChange={(e) =>
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm text-center tracking-[0.3em] text-lg font-mono focus:outline-none focus:border-yellow-500"
-            />
-            <button
-              type="submit"
-              disabled={loading || code.length !== 6}
-              className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
-            >
-              {loading ? "Verifying..." : "Connect Telegram"}
-            </button>
-          </form>
-
-          <button
-            onClick={onFinish}
-            className="w-full text-gray-600 hover:text-gray-400 text-xs py-1"
-          >
-            Skip for now — you can connect later in Settings
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
 /* ─── Main onboarding page ─── */
 export default function OnboardPage() {
   const [step, setStep] = useState(0);
@@ -535,14 +432,13 @@ export default function OnboardPage() {
     return <LandingCarousel onNext={() => setStep(1)} />;
   }
 
-  // Steps 1–3 = registration flow
+  // Steps 1–2 = registration flow
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 px-4 py-8">
       <StepBar current={step - 1} />
 
       {step === 1 && <AccountStep onNext={() => setStep(2)} />}
-      {step === 2 && <TeslaStep onNext={() => setStep(3)} />}
-      {step === 3 && <TelegramStep onFinish={handleFinish} />}
+      {step === 2 && <TeslaStep onNext={handleFinish} />}
     </div>
   );
 }
