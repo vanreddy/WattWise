@@ -211,6 +211,13 @@ async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_em
         """
         INSERT INTO tesla_intervals (ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (account_id, ts) DO UPDATE SET
+            solar_w = EXCLUDED.solar_w,
+            home_w = EXCLUDED.home_w,
+            grid_w = EXCLUDED.grid_w,
+            battery_w = EXCLUDED.battery_w,
+            battery_pct = EXCLUDED.battery_pct,
+            vehicle_w = EXCLUDED.vehicle_w
         """,
         ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id,
     )

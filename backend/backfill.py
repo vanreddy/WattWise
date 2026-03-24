@@ -201,7 +201,7 @@ async def _insert_intervals_for_account(
         await pool.execute(
             """INSERT INTO tesla_intervals (ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-               ON CONFLICT DO NOTHING""",
+               ON CONFLICT (account_id, ts) DO NOTHING""",
             ts, iv["solar_w"], iv["home_w"], iv["grid_w"],
             iv["battery_w"], iv["battery_pct"], iv["vehicle_w"], account_id,
         )

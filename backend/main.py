@@ -45,6 +45,33 @@ async def lifespan(app: FastAPI):
         )
     """)
 
+    # Dedup tesla_intervals and add unique constraint (idempotent)
+    await pool.execute("""
+        DELETE FROM tesla_intervals a
+        USING tesla_intervals b
+        WHERE a.account_id = b.account_id
+          AND a.ts = b.ts
+          AND a.ctid > b.ctid
+    """)
+    await pool.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_tesla_intervals_account_ts
+        ON tesla_intervals(account_id, ts)
+    """)
+    logger.info("Dedup migration complete — unique constraint on tesla_intervals(account_id, ts)")
+
+    # Re-aggregate last 7 days for all accounts after dedup
+    from aggregator import aggregate_day
+    from datetime import date, timedelta
+    accounts = await pool.fetch("SELECT id FROM accounts")
+    for acct in accounts:
+        for day_offset in range(7):
+            day = date.today() - timedelta(days=day_offset)
+            try:
+                await aggregate_day(pool, day, acct["id"])
+            except Exception:
+                logger.warning("Re-aggregate failed for %s day %s", acct["id"], day)
+    logger.info("Re-aggregated last 7 days for %d accounts after dedup", len(accounts))
+
     # Load Tesla token cache from DB before poller starts
     await _load_cache_from_db(pool)
 
