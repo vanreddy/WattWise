@@ -105,6 +105,19 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Dedup migration failed — app will continue without it")
 
+    # Fix legacy PK on tesla_intervals (ts only → should be account_id, ts)
+    try:
+        has_old_pk = await pool.fetchval("""
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'tesla_intervals'::regclass
+              AND conname = 'tesla_intervals_pkey'
+        """)
+        if has_old_pk:
+            await pool.execute("ALTER TABLE tesla_intervals DROP CONSTRAINT tesla_intervals_pkey")
+            logger.info("Dropped legacy tesla_intervals_pkey (ts only)")
+    except Exception:
+        logger.exception("PK fix check failed — continuing")
+
     # Load Tesla token cache from DB before poller starts
     await _load_cache_from_db(pool)
 
