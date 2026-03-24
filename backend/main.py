@@ -121,11 +121,13 @@ async def lifespan(app: FastAPI):
     # Load Tesla token cache from DB before poller starts
     await _load_cache_from_db(pool)
 
+    from datetime import datetime as dt_cls
     scheduler = AsyncIOScheduler()
 
-    # Tesla poller — every 5 minutes
+    # Tesla poller — every 5 minutes, fire immediately on startup
     scheduler.add_job(
         poll_and_check, "interval", minutes=5, args=[pool], id="poller",
+        next_run_time=dt_cls.now(),
     )
 
     # Daily aggregation — 6:50am
