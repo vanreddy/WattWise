@@ -109,8 +109,25 @@ async def lifespan(app: FastAPI):
 
     scheduler.start()
 
-    # Telegram bot listener (long-polling for /start commands)
+    # Backfill any gaps from downtime — fetch last 2 days for all accounts in background
     import asyncio
+    from backfill import backfill_account
+
+    async def _fill_gaps():
+        try:
+            accounts = await pool.fetch("SELECT id FROM accounts")
+            for acct in accounts:
+                try:
+                    await backfill_account(pool, acct["id"], days=2)
+                    logger.info("Gap-fill complete for account %s", acct["id"])
+                except Exception:
+                    logger.exception("Gap-fill failed for account %s", acct["id"])
+        except Exception:
+            logger.exception("Gap-fill startup task failed")
+
+    asyncio.create_task(_fill_gaps())
+
+    # Telegram bot listener (long-polling for /start commands)
     bot_task = asyncio.create_task(run_bot_polling(pool))
 
     logger.info("WattWise started — poller, daily, weekly jobs + Telegram bot listener")
