@@ -151,7 +151,7 @@ function computeFlowsFromDaily(data: DailySummary[]): Flow[] {
   return flows;
 }
 
-function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
+export function convertSankeyFlowsToFlows(sf: SankeyFlows): Flow[] {
   const mapping: [keyof SankeyFlows, string, string, string][] = [
     ["solar_to_home", "Solar", "Home", "#facc15"],
     ["solar_to_battery", "Solar", "Powerwall", "#facc15"],
@@ -175,7 +175,7 @@ interface NodeLayout {
   side: "left" | "right";
 }
 
-function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: string, side: "left" | "right") => void, unit = "kWh") {
+export function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: string, side: "left" | "right") => void, unit = "kWh") {
   if (flows.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] sm:h-[400px] text-gray-500 text-sm">

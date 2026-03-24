@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { convertSankeyFlowsToFlows, renderSankey } from "@/components/SankeyChart";
+import type { SankeyFlows } from "@/lib/api";
 
 /* ═══════════════════════════════════════════════
    Shared constants
@@ -96,104 +98,35 @@ export function RingVisual({ active }: { active: boolean }) {
 }
 
 /* ═══════════════════════════════════════════════
-   Slide 1 — Sankey-style Flow (no kW labels)
+   Slide 1 — Real SankeyChart with mock data
    ═══════════════════════════════════════════════ */
 
-interface SankeyNode { label: string; color: string; h: number; y: number }
+const MOCK_SANKEY: SankeyFlows = {
+  solar_to_home: 30.2,
+  solar_to_battery: 14.4,
+  solar_to_grid: 11.3,
+  battery_to_home: 16.5,
+  battery_to_grid: 0,
+  grid_to_home: 2.0,
+  grid_to_battery: 0,
+};
 
 export function FlowVisual({ active }: { active: boolean }) {
-  const [drawn, setDrawn] = useState(false);
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (!active) { setDrawn(false); return; }
-    const t = setTimeout(() => setDrawn(true), 300);
+    if (!active) { setShow(false); return; }
+    const t = setTimeout(() => setShow(true), 200);
     return () => clearTimeout(t);
   }, [active]);
 
-  const W = 360, H = 240, NW = 12, LX = 70, RX = W - 70;
-  const cx = W / 2;
+  if (!show) return <div className="flex-1" />;
 
-  // Source nodes (left)
-  const sources: SankeyNode[] = [
-    { label: "Solar", color: SOLAR, h: 60, y: 30 },
-    { label: "Powerwall", color: BATTERY, h: 35, y: 105 },
-    { label: "Grid", color: GRID, h: 15, y: 155 },
-  ];
-
-  // Sink nodes (right)
-  const sinks: SankeyNode[] = [
-    { label: "Home", color: HOME, h: 50, y: 30 },
-    { label: "EV", color: EV, h: 30, y: 95 },
-    { label: "Grid", color: GRID, h: 20, y: 140 },
-    { label: "Powerwall", color: BATTERY, h: 10, y: 175 },
-  ];
-
-  // Flows: [srcIdx, sinkIdx, thickness, color, delay]
-  const flows: [number, number, number, string, number][] = [
-    [0, 0, 28, SOLAR, 0],       // solar → home
-    [0, 1, 16, SOLAR, 0.1],     // solar → EV
-    [0, 2, 10, SOLAR, 0.2],     // solar → grid export
-    [0, 3, 6, SOLAR, 0.25],     // solar → powerwall charge
-    [1, 0, 20, BATTERY, 0.3],   // powerwall → home
-    [1, 1, 10, BATTERY, 0.35],  // powerwall → EV
-    [2, 0, 8, GRID, 0.45],      // grid → home
-  ];
+  const flows = convertSankeyFlowsToFlows(MOCK_SANKEY);
 
   return (
-    <div className="flex items-center justify-center h-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-sm sm:max-w-md">
-        {/* Labels */}
-        <text x={LX + NW / 2} y={18} textAnchor="middle" className="fill-gray-600" fontSize="9" letterSpacing="1">SOURCES</text>
-        <text x={RX + NW / 2} y={18} textAnchor="middle" className="fill-gray-600" fontSize="9" letterSpacing="1">SINKS</text>
-
-        {/* Flow bands */}
-        {flows.map(([si, di, thick, color, delay], i) => {
-          const s = sources[si];
-          const d = sinks[di];
-          const sy = s.y + s.h / 2;
-          const dy = d.y + d.h / 2;
-          const x0 = LX + NW;
-          const x1 = RX;
-          const halfT = thick / 2;
-
-          const bandPath = `
-            M ${x0} ${sy - halfT}
-            C ${cx} ${sy - halfT}, ${cx} ${dy - halfT}, ${x1} ${dy - halfT}
-            L ${x1} ${dy + halfT}
-            C ${cx} ${dy + halfT}, ${cx} ${sy + halfT}, ${x0} ${sy + halfT}
-            Z
-          `;
-
-          return (
-            <path
-              key={i}
-              d={bandPath}
-              fill={color}
-              fillOpacity={drawn ? 0.15 : 0}
-              stroke={color}
-              strokeOpacity={drawn ? 0.25 : 0}
-              strokeWidth={0.5}
-              style={{ transition: `fill-opacity 0.8s ease-out ${delay}s, stroke-opacity 0.8s ease-out ${delay}s` }}
-            />
-          );
-        })}
-
-        {/* Source nodes */}
-        {sources.map((n) => (
-          <g key={`s-${n.label}`}>
-            <rect x={LX} y={n.y} width={NW} height={n.h} rx={4} fill={n.color} />
-            <text x={LX - 6} y={n.y + n.h / 2 + 4} textAnchor="end" fill={n.color} fontSize="10" fontWeight="600">{n.label}</text>
-          </g>
-        ))}
-
-        {/* Sink nodes */}
-        {sinks.map((n) => (
-          <g key={`d-${n.label}`}>
-            <rect x={RX} y={n.y} width={NW} height={n.h} rx={4} fill={n.color} />
-            <text x={RX + NW + 6} y={n.y + n.h / 2 + 4} fill={n.color} fontSize="10" fontWeight="600">{n.label}</text>
-          </g>
-        ))}
-      </svg>
+    <div className="flex items-center justify-center h-full px-0 -mx-4">
+      {renderSankey(flows, true)}
     </div>
   );
 }
