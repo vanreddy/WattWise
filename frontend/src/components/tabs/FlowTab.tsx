@@ -65,9 +65,21 @@ function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | 
   // Sankey flows from live data
   const liveFlows = current ? currentToSankeyFlows(current) : null;
 
+  // Battery status
+  const batteryChargePct = current?.battery_pct ?? 0;
+  const batteryW = current?.battery_w ?? 0;
+  const isCharging = batteryW < -50;
+  const isDischarging = batteryW > 50;
+  const batteryStatus = isCharging ? "Charging" : isDischarging ? "Discharging" : "Idle";
+  const batteryStatusColor = isCharging ? "text-green-400" : isDischarging ? "text-yellow-400" : "text-gray-500";
+  const batteryIcon = isCharging ? "⚡" : isDischarging ? "▼" : "—";
+
+  // Timestamp from the actual data point
+  const dataTs = current?.ts ? new Date(current.ts) : null;
+
   return (
     <div className="space-y-4">
-      {/* Weather + timestamp */}
+      {/* Weather + data timestamp */}
       <div className="flex items-center justify-between px-1">
         {weather ? (
           <div className="flex items-center gap-2">
@@ -76,9 +88,9 @@ function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | 
             <span className="text-xs text-gray-600 capitalize">{weather.description}</span>
           </div>
         ) : <div />}
-        {lastUpdated && (
+        {dataTs && (
           <p className="text-xs text-gray-600">
-            Updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            Live · {dataTs.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
           </p>
         )}
       </div>
@@ -90,6 +102,36 @@ function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | 
         batteryPct={batteryPct}
         label="Self-Powering"
       />
+
+      {/* Powerwall Battery Tile */}
+      <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-300">Powerwall</p>
+            <p className={`text-xs ${batteryStatusColor} flex items-center gap-1`}>
+              <span>{batteryIcon}</span> {batteryStatus}
+              {(isCharging || isDischarging) && (
+                <span className="text-gray-500 ml-1">
+                  {(Math.abs(batteryW) / 1000).toFixed(1)} kW
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-green-400">{Math.round(batteryChargePct)}%</p>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="mt-2 w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${batteryChargePct}%`,
+              background: batteryChargePct > 20 ? "#34d399" : "#f87171",
+            }}
+          />
+        </div>
+      </div>
 
       {/* Live Sankey */}
       {liveFlows && (
