@@ -320,14 +320,14 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
 
   const sourceLegend = [
     { label: "Solar", color: colors.solar.stroke },
-    { label: "Grid Import", color: colors.grid_import.stroke },
-    { label: "Powerwall Discharge", color: colors.battery_discharge.stroke },
+    { label: "Grid", color: colors.grid_import.stroke },
+    { label: "Powerwall", color: colors.battery_discharge.stroke },
   ];
   const consumptionLegend = [
     { label: "Home", color: colors.home.stroke },
     { label: "EV", color: colors.ev.stroke },
-    { label: "Grid Export", color: colors.grid_export.stroke },
-    { label: "Powerwall Charge", color: colors.battery_charge.stroke },
+    { label: "Grid", color: colors.grid_export.stroke },
+    { label: "Powerwall", color: colors.battery_charge.stroke },
   ];
 
   const LegendRow = ({ items, label }: { items: typeof sourceLegend; label: string }) => (
@@ -384,14 +384,14 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
 
           {/* Sources — stacked above zero */}
           <Area type="monotone" dataKey="solar" stackId="src" stroke="none" fill={colors.solar.fill} name="Solar" connectNulls={false} />
-          <Area type="monotone" dataKey="grid_import" stackId="src" stroke="none" fill={colors.grid_import.fill} name="Grid Import" connectNulls={false} />
-          <Area type="monotone" dataKey="battery_discharge" stackId="src" stroke="none" fill={colors.battery_discharge.fill} name="Powerwall Discharge" connectNulls={false} />
+          <Area type="monotone" dataKey="grid_import" stackId="src" stroke="none" fill={colors.grid_import.fill} name="Grid" connectNulls={false} />
+          <Area type="monotone" dataKey="battery_discharge" stackId="src" stroke="none" fill={colors.battery_discharge.fill} name="Powerwall" connectNulls={false} />
 
           {/* Consumption — stacked below zero */}
           <Area type="monotone" dataKey="home" stackId="sink" stroke="none" fill={colors.home.fill} name="Home" connectNulls={false} />
           <Area type="monotone" dataKey="ev" stackId="sink" stroke="none" fill={colors.ev.fill} name="EV" connectNulls={false} />
-          <Area type="monotone" dataKey="grid_export" stackId="sink" stroke="none" fill={colors.grid_export.fill} name="Grid Export" connectNulls={false} />
-          <Area type="monotone" dataKey="battery_charge" stackId="sink" stroke="none" fill={colors.battery_charge.fill} name="Powerwall Charge" connectNulls={false} />
+          <Area type="monotone" dataKey="grid_export" stackId="sink" stroke="none" fill={colors.grid_export.fill} name="Grid" connectNulls={false} />
+          <Area type="monotone" dataKey="battery_charge" stackId="sink" stroke="none" fill={colors.battery_charge.fill} name="Powerwall" connectNulls={false} />
 
           {/* Pulsing "Now" dot — single-day only */}
           {!isMultiDay && nowIndex >= 0 && (
