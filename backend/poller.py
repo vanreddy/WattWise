@@ -52,7 +52,10 @@ async def _load_cache_from_db(pool: asyncpg.Pool, account_id: UUID | None = None
             "SELECT value FROM kv_store WHERE key = $1 AND account_id = $2",
             TESLA_CACHE_KEY, account_id,
         )
-        cache = (json.loads(row) if isinstance(row, str) else row) if row else {}
+        cache = row if row else {}
+        # Handle double-encoded JSON (string within string)
+        while isinstance(cache, str):
+            cache = json.loads(cache)
         _token_caches[str(account_id)] = cache
         return cache
     else:
@@ -63,7 +66,9 @@ async def _load_cache_from_db(pool: asyncpg.Pool, account_id: UUID | None = None
         )
         cache = {}
         if row:
-            cache = json.loads(row) if isinstance(row, str) else row
+            cache = row
+            while isinstance(cache, str):
+                cache = json.loads(cache)
         elif CACHE_PATH.exists():
             try:
                 with open(CACHE_PATH, encoding="utf-8") as f:
