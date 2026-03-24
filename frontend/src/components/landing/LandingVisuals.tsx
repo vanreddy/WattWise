@@ -62,7 +62,7 @@ export function RingVisual({ active }: { active: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-1">
       <span className="text-sm font-semibold text-gray-400 tracking-wide">Self-Powered</span>
-      <div className="relative w-64 h-44 sm:w-80 sm:h-56">
+      <div className="relative w-80 h-56 sm:w-96 sm:h-68">
         <svg viewBox="0 0 300 170" className="w-full h-full">
           <path d={ARC} fill="none" stroke={TRACK} strokeWidth="16" strokeLinecap="round" />
           <path
@@ -141,7 +141,7 @@ export function FlowVisual({ active }: { active: boolean }) {
 
   return (
     <div className="flex items-center justify-center h-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-xs sm:max-w-sm">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-sm sm:max-w-md">
         {/* Labels */}
         <text x={LX + NW / 2} y={18} textAnchor="middle" className="fill-gray-600" fontSize="9" letterSpacing="1">SOURCES</text>
         <text x={RX + NW / 2} y={18} textAnchor="middle" className="fill-gray-600" fontSize="9" letterSpacing="1">SINKS</text>
