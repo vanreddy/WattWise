@@ -96,12 +96,20 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   const useIntervals = !!(intervalData && intervalData.length > 0);
 
   const totalEnergy = useMemo(() => {
+    // Use backend-computed _kwh fields for accuracy (same source as Sankey)
+    if (data.length > 0 && data[0].solar_kwh !== undefined) {
+      let total = 0;
+      for (const d of data) {
+        total += (d.solar_kwh || 0) + (d.grid_import_kwh || 0) + (d.battery_discharge_kwh || 0);
+      }
+      return total;
+    }
+    // Fallback: compute from interval data
     if (useIntervals) {
       let total = 0;
       for (const d of intervalData!) {
         total += (Math.max(0, d.solar_w) + Math.max(0, d.grid_w) + Math.max(0, d.battery_w)) / 1000;
       }
-      // Each interval is 5 min = 5/60 hours
       return total * (5 / 60);
     }
     let total = 0;

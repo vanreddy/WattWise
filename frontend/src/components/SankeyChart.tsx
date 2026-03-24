@@ -342,20 +342,6 @@ interface Props {
 export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated, liveUnits }: Props) {
   const [selectedNode, setSelectedNode] = useState<{ label: string; side: "left" | "right" } | null>({ label: "Home", side: "right" });
 
-  const totalEnergy = useMemo(() => {
-    if (hourlyData.length > 0) {
-      let total = 0;
-      for (const d of hourlyData) {
-        total += (Math.max(0, d.solar_w_avg) + Math.max(0, d.grid_w_avg) + Math.max(0, d.battery_w_avg)) / 1000;
-      }
-      return total;
-    }
-    if (dailyData.length > 0) {
-      return dailyData.reduce((s, d) => s + d.solar_generated_kwh + d.total_import_kwh, 0);
-    }
-    return 0;
-  }, [hourlyData, dailyData]);
-
   const flows = useMemo(() => {
     if (sankeyFlows) {
       return convertSankeyFlowsToFlows(sankeyFlows);
@@ -368,6 +354,21 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
     }
     return [];
   }, [sankeyFlows, hourlyData, dailyData]);
+
+  // Derive totals from flows (same source as the diagram) for consistency
+  const totalEnergy = useMemo(() => {
+    if (flows.length === 0) return 0;
+    // Sum all source-side flows (unique source nodes)
+    const sourceTotal = flows.reduce((sum, f) => sum + f.value, 0) / 2;
+    // Actually: sum values of left-side nodes only
+    const sourceNodes = new Map<string, number>();
+    const sinkNodes = new Map<string, number>();
+    for (const f of flows) {
+      sourceNodes.set(f.from, (sourceNodes.get(f.from) || 0) + f.value);
+      sinkNodes.set(f.to, (sinkNodes.get(f.to) || 0) + f.value);
+    }
+    return Array.from(sourceNodes.values()).reduce((a, b) => a + b, 0);
+  }, [flows]);
 
   const unit = liveUnits ? "kW" : "kWh";
   const title = liveUnits ? "Live Energy Flow" : days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
