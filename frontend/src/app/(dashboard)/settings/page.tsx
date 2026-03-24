@@ -129,6 +129,7 @@ export default function SettingsPage() {
   // Confirmation modals
   const [confirmTesla, setConfirmTesla] = useState(false);
   const [confirmTelegram, setConfirmTelegram] = useState(false);
+  const [teslaSuccess, setTeslaSuccess] = useState(false);
 
   if (isLoading) {
     return (
@@ -192,8 +193,6 @@ export default function SettingsPage() {
       setTeslaLoading(false);
     }
   }
-
-  const [teslaSuccess, setTeslaSuccess] = useState(false);
 
   async function handleTeslaReauthComplete() {
     setTeslaError(null);
