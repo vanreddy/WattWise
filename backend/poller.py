@@ -209,6 +209,12 @@ async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_em
     wc_list = status.get("wall_connectors", [])
     vehicle_w = sum(float(wc.get("wall_connector_power", 0)) for wc in wc_list)
 
+    # Sanity check before insert
+    from backend.data_sanity_checks import validate_interval
+    issues = validate_interval(ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w)
+    if issues:
+        logger.warning("Poller sanity issues for %s at %s:\n  %s", account_id, ts, "\n  ".join(issues))
+
     await pool.execute(
         """
         INSERT INTO tesla_intervals (ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id)

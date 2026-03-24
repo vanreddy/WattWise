@@ -390,6 +390,13 @@ async def _sankey_from_polled(pool, start_day: date, end_day: date, account_id: 
         remain_bat_chg = max(0, bat_charge - solar_to_bat)
         flows["grid_to_battery"] += min(grid_left, remain_bat_chg)
 
+    # Sanity check flow conservation
+    from backend.data_sanity_checks import validate_sankey_flows
+    flow_issues = validate_sankey_flows(flows)
+    if flow_issues:
+        logger.warning("Sankey flow issues for %s (%s to %s):\n  %s",
+                        account_id, start_day, end_day, "\n  ".join(flow_issues))
+
     return flows
 
 

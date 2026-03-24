@@ -175,6 +175,13 @@ async def aggregate_day(pool: asyncpg.Pool, day: date, account_id: UUID | None =
         "battery_peak_coverage_pct": battery_coverage,
         "battery_depletion_hour": battery_depletion_hour,
     }
+
+    # Sanity check the aggregated summary
+    from backend.data_sanity_checks import validate_daily_summary
+    issues = validate_daily_summary(summary, len(rows))
+    if issues:
+        logger.warning("Aggregation sanity issues for %s/%s:\n  %s", account_id, day, "\n  ".join(issues))
+
     return summary
 
 
