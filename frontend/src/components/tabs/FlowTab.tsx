@@ -9,6 +9,40 @@ import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSele
 import SelfPoweredRing from "@/components/SelfPoweredRing";
 import SankeyChart from "@/components/SankeyChart";
 import HourlyChart from "@/components/HourlyChart";
+import { Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudDrizzle, Wind } from "lucide-react";
+
+/* ─── Now mode: weather only ─── */
+
+function WeatherIcon({ condition, size = 28 }: { condition: string; size?: number }) {
+  if (condition === "thunderstorm") return <CloudLightning size={size} className="text-yellow-400" />;
+  if (condition === "rain") return <CloudRain size={size} className="text-blue-400" />;
+  if (condition === "snow") return <CloudSnow size={size} className="text-blue-200" />;
+  if (condition === "fog") return <Wind size={size} className="text-gray-400" />;
+  if (condition === "cloudy") return <Cloud size={size} className="text-gray-400" />;
+  if (condition === "partly_cloudy") return <Cloud size={size} className="text-gray-300" />;
+  return <Sun size={size} className="text-yellow-400" />;
+}
+
+function NowWeather({ weather, lastUpdated }: { weather: WeatherData | null; lastUpdated: Date | null }) {
+  return (
+    <div className="flex flex-col items-center gap-6 py-8">
+      {lastUpdated && (
+        <p className="text-xs text-gray-600">
+          Updated {lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        </p>
+      )}
+      {weather ? (
+        <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-6 w-full max-w-sm text-center space-y-3">
+          <WeatherIcon condition={weather.condition} size={48} />
+          <div className="text-4xl font-bold text-white">{Math.round(weather.temperature)}°F</div>
+          <div className="text-sm text-gray-400 capitalize">{weather.description}</div>
+        </div>
+      ) : (
+        <p className="text-gray-600 text-sm">Weather unavailable</p>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   daily: DailySummary[];
@@ -141,22 +175,26 @@ export default function FlowTab({
           value={dateRange}
           onChange={handlePeriodChange}
           onModeChange={handleModeChange}
-          modes={["daily", "weekly", "monthly", "yearly"]}
+          modes={["now", "daily", "weekly", "monthly", "yearly"]}
           defaultMode="daily"
         />
       </div>
 
       {/* Content */}
-      <div {...swipeHandlers}>
-        <HistoricalContent
-          daily={daily}
-          hourly={hourly}
-          intervalData={intervalData}
-          sankeyFlows={sankeyFlows}
-          dateRange={dateRange}
-          swipeDir={swipeDir}
-        />
-      </div>
+      {mode === "now" ? (
+        <NowWeather weather={weather} lastUpdated={lastUpdated} />
+      ) : (
+        <div {...swipeHandlers}>
+          <HistoricalContent
+            daily={daily}
+            hourly={hourly}
+            intervalData={intervalData}
+            sankeyFlows={sankeyFlows}
+            dateRange={dateRange}
+            swipeDir={swipeDir}
+          />
+        </div>
+      )}
     </div>
   );
 }

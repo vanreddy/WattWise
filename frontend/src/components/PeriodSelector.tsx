@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { DateRange } from "@/hooks/useDashboardData";
 
-type Mode = "daily" | "weekly" | "monthly" | "yearly";
+type Mode = "now" | "daily" | "weekly" | "monthly" | "yearly";
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -43,6 +43,11 @@ function formatYearly(dateStr: string): string {
 
 function computeRange(mode: Mode, offset: number): DateRange {
   const now = new Date();
+
+  if (mode === "now") {
+    const ds = toDateStr(now);
+    return { label: "Now", from: ds, to: ds, days: 0 };
+  }
 
   if (mode === "daily") {
     const d = new Date(now);
@@ -90,6 +95,7 @@ function computeRange(mode: Mode, offset: number): DateRange {
 }
 
 const ALL_MODES: { id: Mode; label: string }[] = [
+  { id: "now", label: "Now" },
   { id: "daily", label: "Day" },
   { id: "weekly", label: "Week" },
   { id: "monthly", label: "Month" },
@@ -155,8 +161,8 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
         ))}
       </div>
 
-      {/* Period navigation */}
-      <div className="flex items-center w-full max-w-sm justify-between">
+      {/* Period navigation — hidden for Now mode */}
+      {mode !== "now" && <div className="flex items-center w-full max-w-sm justify-between">
         <button
           onClick={() => navigate(-1)}
           className="p-2.5 rounded-xl text-gray-400 hover:text-white active:bg-gray-800 transition-colors"
@@ -177,7 +183,7 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
         >
           <ChevronRight size={24} />
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
