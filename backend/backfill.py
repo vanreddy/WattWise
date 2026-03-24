@@ -254,15 +254,14 @@ async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30,
         with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
             logger.info("Backfill %s: authorized=%s, cache keys=%s", acct_key, tesla.authorized, list(loader().keys())[:5])
             if not tesla.authorized:
-                # Token may need refresh — try fetching a new one
-                try:
-                    tesla.fetch_token()
-                    logger.info("Backfill %s: token refreshed successfully", acct_key)
-                except Exception as refresh_err:
-                    logger.error("Backfill %s: token refresh failed: %s", acct_key, refresh_err)
-                    raise RuntimeError(f"Tesla not authorized — token refresh failed: {refresh_err}")
+                raise RuntimeError("Tesla not authorized — re-authenticate via Settings page")
 
-            products = tesla.battery_list() + tesla.solar_list()
+            # Try an API call — if the token is expired, this will attempt auto-refresh
+            try:
+                products = tesla.battery_list() + tesla.solar_list()
+            except Exception as api_err:
+                logger.error("Backfill %s: Tesla API call failed (token likely expired): %s", acct_key, api_err)
+                raise RuntimeError(f"Tesla token expired — re-authenticate via Settings: {api_err}")
             if not products:
                 raise RuntimeError("No energy sites found")
 

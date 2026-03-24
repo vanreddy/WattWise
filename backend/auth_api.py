@@ -418,8 +418,7 @@ async def tesla_oauth_start(request: Request, user: dict = Depends(get_current_u
         if tesla.authorized:
             # Verify the token actually works (it might be expired)
             try:
-                tesla.fetch_token()
-                tesla.battery_list()  # quick API call to confirm
+                tesla.battery_list()  # quick API call to confirm token works
                 return {"status": "already_connected", "message": "Tesla is already connected"}
             except Exception:
                 pass  # Token expired/invalid — proceed to re-auth
