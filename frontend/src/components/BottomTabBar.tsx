@@ -6,7 +6,7 @@ export type TabId = "flow" | "savings" | "optimize";
 
 const TABS: { id: TabId; label: string; icon: typeof GitBranch }[] = [
   { id: "flow", label: "Flow", icon: GitBranch },
-  { id: "savings", label: "Savings", icon: DollarSign },
+  { id: "savings", label: "Impact", icon: DollarSign },
   { id: "optimize", label: "Optimize", icon: Lightbulb },
 ];
 
