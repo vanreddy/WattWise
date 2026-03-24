@@ -196,7 +196,9 @@ async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_em
             site_info["site_name"], site_info["energy_site_id"], account_id,
         )
 
-    ts = datetime.now(timezone.utc)
+    # Round to nearest 5-minute mark so poller timestamps align with backfill data
+    now = datetime.now(timezone.utc)
+    ts = now.replace(minute=(now.minute // 5) * 5, second=0, microsecond=0)
     solar_w = float(status.get("solar_power", 0))
     home_w = float(status.get("load_power", 0))
     grid_w = float(status.get("grid_power", 0))
