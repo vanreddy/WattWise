@@ -357,15 +357,17 @@ export default function SettingsPage() {
                 <span className="text-gray-500">Tesla Connection</span>
                 <p className="text-xs text-gray-600 mt-0.5">
                   {isTeslaConnected
-                    ? "Polling active"
+                    ? "Connected — polling active"
                     : "Disconnected — no data collection"}
                 </p>
               </div>
-              <Toggle
-                on={isTeslaConnected}
-                disabled={teslaLoading || (!isTeslaConnected && user.role !== "primary")}
-                onChange={handleTeslaToggle}
-              />
+              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                isTeslaConnected
+                  ? "bg-green-900/30 text-green-400"
+                  : "bg-red-900/30 text-red-400"
+              }`}>
+                {isTeslaConnected ? "Active" : "Offline"}
+              </span>
             </div>
           </div>
 

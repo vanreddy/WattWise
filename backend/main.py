@@ -45,6 +45,25 @@ async def lifespan(app: FastAPI):
         )
     """)
 
+    # Fix kv_store: replace single-column PK with composite (key, account_id)
+    try:
+        pk_col_count = await pool.fetchval("""
+            SELECT COUNT(*) FROM information_schema.key_column_usage
+            WHERE table_name = 'kv_store'
+              AND constraint_name = 'kv_store_pkey'
+        """)
+        if pk_col_count == 1:
+            logger.info("Fixing kv_store PK: key-only -> (key, account_id)")
+            await pool.execute("ALTER TABLE kv_store DROP CONSTRAINT kv_store_pkey")
+            # account_id can be NULL for legacy global keys, so we use a unique index instead
+            await pool.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_kv_store_key_account
+                ON kv_store(key, account_id)
+            """)
+            logger.info("kv_store PK fix complete")
+    except Exception:
+        logger.exception("kv_store PK fix failed — continuing")
+
     # Dedup tesla_intervals and add unique constraint (idempotent)
     try:
         from datetime import date, timedelta

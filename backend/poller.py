@@ -99,7 +99,7 @@ async def _save_cache_to_db(pool: asyncpg.Pool, account_id: UUID | None = None) 
             """
             INSERT INTO kv_store (key, value, updated_at, account_id)
             VALUES ($1, $2::jsonb, NOW(), $3)
-            ON CONFLICT (key) WHERE account_id = $3
+            ON CONFLICT (key, account_id)
             DO UPDATE SET value = $2::jsonb, updated_at = NOW()
             """,
             TESLA_CACHE_KEY, cache_json, account_id,
