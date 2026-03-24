@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useEffect, useState } from "react";
 import {
   Zap,
   BatteryWarning,
@@ -288,10 +289,67 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+/* ─── Sticky suggestions (persist for 7 days) ─ */
+
+const STICKY_KEY = "selfpower_suggestions";
+const STICKY_DAYS = 7;
+
+interface StickyEntry {
+  suggestion: Suggestion;
+  firstSeen: number; // epoch ms
+}
+
+function useStickysuggestions(current: Suggestion[]): Suggestion[] {
+  const [sticky, setSticky] = useState<StickyEntry[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STICKY_KEY) || "[]") as StickyEntry[];
+      setSticky(stored);
+    } catch { /* ignore */ }
+  }, []);
+
+  return useMemo(() => {
+    const now = Date.now();
+    const cutoff = now - STICKY_DAYS * 24 * 60 * 60 * 1000;
+    const currentIds = new Set(current.map(s => s.id));
+
+    // Merge: current suggestions + stored ones still within 7 days
+    const merged = new Map<string, StickyEntry>();
+
+    // Add stored entries that are still within 7 days
+    for (const entry of sticky) {
+      if (entry.firstSeen > cutoff) {
+        merged.set(entry.suggestion.id, entry);
+      }
+    }
+
+    // Add/update current suggestions
+    for (const s of current) {
+      if (!merged.has(s.id)) {
+        merged.set(s.id, { suggestion: s, firstSeen: now });
+      } else {
+        // Update suggestion content but keep firstSeen
+        const existing = merged.get(s.id)!;
+        merged.set(s.id, { ...existing, suggestion: s });
+      }
+    }
+
+    // Persist to localStorage
+    const entries = [...merged.values()];
+    try {
+      localStorage.setItem(STICKY_KEY, JSON.stringify(entries));
+    } catch { /* ignore */ }
+
+    return entries.map(e => e.suggestion);
+  }, [current, sticky]);
+}
+
 /* ─── Component ─────────────────────────────── */
 
 export default function OptimizeTab({ summary, daily, alerts, user }: Props) {
-  const rulesSuggestions = generateRulesBasedSuggestions(daily, user);
+  const rawRulesSuggestions = generateRulesBasedSuggestions(daily, user);
+  const rulesSuggestions = useStickysuggestions(rawRulesSuggestions);
   const realtimeSuggestions = generateRealtimeSuggestions(summary, daily);
 
   // Most recent daily summary with AI narrative
