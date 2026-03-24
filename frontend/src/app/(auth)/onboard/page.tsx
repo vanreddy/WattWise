@@ -14,22 +14,27 @@ const STEPS = ["Account", "Tesla"] as const;
 
 function StepBar({ current }: { current: number }) {
   return (
-    <div className="flex items-center justify-center gap-2 mb-8">
+    <div className="flex items-center justify-center gap-3 mb-10">
       {STEPS.map((label, i) => (
-        <div key={label} className="flex items-center gap-2">
-          <div
-            className={`
-              h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold
-              ${i < current ? "bg-green-500 text-white" : ""}
-              ${i === current ? "bg-yellow-500 text-gray-950" : ""}
-              ${i > current ? "bg-gray-800 text-gray-500" : ""}
-            `}
-          >
-            {i < current ? "\u2713" : i + 1}
+        <div key={label} className="flex items-center gap-3">
+          <div className="flex flex-col items-center gap-1.5">
+            <div
+              className={`
+                h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300
+                ${i < current ? "bg-green-500 text-white shadow-lg shadow-green-500/30" : ""}
+                ${i === current ? "bg-yellow-500 text-gray-950 shadow-lg shadow-yellow-500/30 scale-110" : ""}
+                ${i > current ? "bg-gray-800/80 text-gray-500" : ""}
+              `}
+            >
+              {i < current ? "\u2713" : i + 1}
+            </div>
+            <span className={`text-[10px] font-medium ${i <= current ? "text-gray-300" : "text-gray-600"}`}>
+              {label}
+            </span>
           </div>
           {i < STEPS.length - 1 && (
             <div
-              className={`w-8 h-0.5 ${i < current ? "bg-green-500" : "bg-gray-800"}`}
+              className={`w-12 h-0.5 rounded-full -mt-5 ${i < current ? "bg-green-500" : "bg-gray-800"} transition-colors duration-300`}
             />
           )}
         </div>
@@ -199,75 +204,47 @@ function AccountStep({
     }
   }
 
+  const inputCls = "w-full bg-gray-900/80 border border-gray-700/50 rounded-xl px-4 py-3 text-sm transition-all duration-200 focus:outline-none focus:border-yellow-500/70 focus:bg-gray-900";
+
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-sm mx-auto space-y-5">
-      <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold">Create Your Account</h2>
+    <form onSubmit={handleSubmit} className="w-full max-w-sm mx-auto space-y-6 animate-fade-in-up">
+      <div className="text-center space-y-2">
+        <h2 className="text-2xl font-bold tracking-tight">Create Your Account</h2>
         <p className="text-gray-500 text-sm">
           Set up your SelfPower login credentials
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+        <div className="bg-red-900/30 border border-red-800/50 text-red-300 text-sm rounded-xl px-4 py-3">
           {error}
         </div>
       )}
 
       <div className="space-y-3">
-        <input
-          type="email"
-          placeholder="Email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
-        />
-        <input
-          type="password"
-          placeholder="Confirm password"
-          required
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
-        />
+        <input type="email" placeholder="Email" required value={email}
+          onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+        <input type="password" placeholder="Password (min 6 characters)" required value={password}
+          onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+        <input type="password" placeholder="Confirm password" required value={confirm}
+          onChange={(e) => setConfirm(e.target.value)} className={inputCls} />
 
-        <div className="border-t border-gray-800 pt-3 space-y-3">
-          <p className="text-xs text-gray-500">Tesla Account Email</p>
-          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={sameEmail}
-              onChange={(e) => setSameEmail(e.target.checked)}
-              className="accent-yellow-500"
-            />
+        <div className="border-t border-gray-800/50 pt-4 space-y-3">
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Tesla Account Email</p>
+          <label className="flex items-center gap-2.5 text-sm text-gray-400 cursor-pointer">
+            <input type="checkbox" checked={sameEmail}
+              onChange={(e) => setSameEmail(e.target.checked)} className="accent-yellow-500 w-4 h-4 rounded" />
             Same as login email
           </label>
           {!sameEmail && (
-            <input
-              type="email"
-              placeholder="Tesla account email"
-              required
-              value={teslaEmail}
-              onChange={(e) => setTeslaEmail(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500"
-            />
+            <input type="email" placeholder="Tesla account email" required value={teslaEmail}
+              onChange={(e) => setTeslaEmail(e.target.value)} className={inputCls} />
           )}
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+      <button type="submit" disabled={loading}
+        className="w-full bg-yellow-500 text-gray-950 font-bold rounded-xl py-3.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all duration-200 active:scale-[0.98] shadow-lg shadow-yellow-500/20"
       >
         {loading ? "Creating account..." : "Continue"}
       </button>
@@ -329,44 +306,54 @@ function TeslaStep({ onNext }: { onNext: () => void }) {
   }
 
   return (
-    <div className="w-full max-w-sm mx-auto space-y-5">
-      <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold">Connect Tesla</h2>
+    <div className="w-full max-w-sm mx-auto space-y-6 animate-fade-in-up">
+      <div className="text-center space-y-2">
+        <h2 className="text-2xl font-bold tracking-tight">Connect Tesla</h2>
         <p className="text-gray-500 text-sm">
           Link your Tesla account to start monitoring energy data
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+        <div className="bg-red-900/30 border border-red-800/50 text-red-300 text-sm rounded-xl px-4 py-3">
           {error}
         </div>
       )}
 
       {siteName && (
-        <div className="bg-green-900/30 border border-green-800 text-green-300 text-sm rounded px-3 py-2 text-center">
+        <div className="bg-green-900/30 border border-green-800/50 text-green-300 text-sm rounded-xl px-4 py-3 text-center">
           Connected to &ldquo;{siteName}&rdquo;
         </div>
       )}
 
       {phase === "init" && (
-        <div className="space-y-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
-            <p className="text-sm text-gray-400">
+        <div className="space-y-5">
+          <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-5 space-y-4">
+            <p className="text-sm text-gray-400 leading-relaxed">
               This will open Tesla&rsquo;s login page in a new tab. After signing in:
             </p>
-            <ol className="text-sm text-gray-500 list-decimal list-inside space-y-1">
-              <li>Sign in with your Tesla credentials</li>
-              <li>Authorize SelfPower to access your energy data</li>
-              <li>Copy the redirect URL from your browser</li>
-              <li>Paste it back here</li>
+            <ol className="text-sm text-gray-500 space-y-2.5">
+              <li className="flex gap-3 items-start">
+                <span className="bg-gray-800 text-gray-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                Sign in with your Tesla credentials
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="bg-gray-800 text-gray-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                Authorize SelfPower to access your energy data
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="bg-gray-800 text-gray-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                Copy the redirect URL from your browser
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="bg-gray-800 text-gray-400 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">4</span>
+                Paste it back here
+              </li>
             </ol>
           </div>
 
-          <button
-            onClick={handleStartAuth}
-            disabled={loading}
-            className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+          <button onClick={handleStartAuth} disabled={loading}
+            className="w-full bg-yellow-500 text-gray-950 font-bold rounded-xl py-3.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all duration-200 active:scale-[0.98] shadow-lg shadow-yellow-500/20"
           >
             {loading ? "Starting..." : "Connect Tesla Account"}
           </button>
@@ -374,9 +361,9 @@ function TeslaStep({ onNext }: { onNext: () => void }) {
       )}
 
       {phase === "waiting" && (
-        <form onSubmit={handleComplete} className="space-y-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2">
-            <p className="text-sm text-gray-400">
+        <form onSubmit={handleComplete} className="space-y-5">
+          <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-5 space-y-2">
+            <p className="text-sm text-gray-400 leading-relaxed">
               After signing into Tesla, copy the full URL from your browser&rsquo;s
               address bar and paste it below.
             </p>
@@ -385,27 +372,19 @@ function TeslaStep({ onNext }: { onNext: () => void }) {
             </p>
           </div>
 
-          <textarea
-            required
-            placeholder="Paste the redirect URL here..."
-            value={redirectUrl}
-            onChange={(e) => setRedirectUrl(e.target.value)}
-            rows={3}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2.5 text-sm font-mono text-xs focus:outline-none focus:border-yellow-500 resize-none"
+          <textarea required placeholder="Paste the redirect URL here..."
+            value={redirectUrl} onChange={(e) => setRedirectUrl(e.target.value)} rows={3}
+            className="w-full bg-gray-900/80 border border-gray-700/50 rounded-xl px-4 py-3 text-sm font-mono text-xs focus:outline-none focus:border-yellow-500/70 resize-none transition-all duration-200"
           />
 
-          <button
-            type="submit"
-            disabled={loading || !redirectUrl.trim()}
-            className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50"
+          <button type="submit" disabled={loading || !redirectUrl.trim()}
+            className="w-full bg-yellow-500 text-gray-950 font-bold rounded-xl py-3.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all duration-200 active:scale-[0.98] shadow-lg shadow-yellow-500/20"
           >
             {loading ? "Connecting..." : "Complete Connection"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => window.open(authUrl, "_blank")}
-            className="w-full text-gray-500 hover:text-gray-300 text-xs py-1"
+          <button type="button" onClick={() => window.open(authUrl, "_blank")}
+            className="w-full text-gray-500 hover:text-gray-300 text-xs py-1 transition-colors"
           >
             Open Tesla login again
           </button>
@@ -413,7 +392,8 @@ function TeslaStep({ onNext }: { onNext: () => void }) {
       )}
 
       {phase === "completing" && !siteName && (
-        <div className="text-center text-gray-500 text-sm py-4">
+        <div className="text-center text-gray-500 text-sm py-8">
+          <span className="inline-block w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mr-2" />
           Connecting to Tesla...
         </div>
       )}
@@ -436,11 +416,13 @@ export default function OnboardPage() {
 
   // Steps 1–2 = registration flow
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 px-4 py-8">
-      <StepBar current={step - 1} />
+    <div className="min-h-screen bg-gray-950 text-gray-100 flex items-start justify-center">
+      <div className="w-full max-w-md px-6 py-10 sm:py-16">
+        <StepBar current={step - 1} />
 
-      {step === 1 && <AccountStep onNext={() => setStep(2)} />}
-      {step === 2 && <TeslaStep onNext={handleFinish} />}
+        {step === 1 && <AccountStep onNext={() => setStep(2)} />}
+        {step === 2 && <TeslaStep onNext={handleFinish} />}
+      </div>
     </div>
   );
 }
