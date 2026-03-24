@@ -215,7 +215,7 @@ async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_em
     if issues:
         logger.warning("Poller sanity issues for %s at %s:\n  %s", account_id, ts, "\n  ".join(issues))
 
-    await pool.execute(
+    result = await pool.execute(
         """
         INSERT INTO tesla_intervals (ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -230,9 +230,15 @@ async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_em
         ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id,
     )
 
+    # Verify the row actually exists
+    verify = await pool.fetchval(
+        "SELECT COUNT(*) FROM tesla_intervals WHERE account_id = $1 AND ts = $2",
+        account_id, ts,
+    )
     logger.info(
-        "Polled %s: solar=%.0fW home=%.0fW grid=%.0fW battery=%.0fW(%.0f%%) ev=%.0fW",
+        "Polled %s: solar=%.0fW home=%.0fW grid=%.0fW battery=%.0fW(%.0f%%) ev=%.0fW [insert=%s, verify=%s, account=%s]",
         tesla_email or "default", solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w,
+        result, verify, account_id,
     )
 
     return {
