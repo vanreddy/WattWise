@@ -231,8 +231,15 @@ async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30)
         loader, dumper = _make_cache_callbacks(account_id)
 
         with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
+            logger.info("Backfill %s: authorized=%s, cache keys=%s", acct_key, tesla.authorized, list(loader().keys())[:5])
             if not tesla.authorized:
-                raise RuntimeError("Tesla not authorized for this account")
+                # Token may need refresh — try fetching a new one
+                try:
+                    tesla.fetch_token()
+                    logger.info("Backfill %s: token refreshed successfully", acct_key)
+                except Exception as refresh_err:
+                    logger.error("Backfill %s: token refresh failed: %s", acct_key, refresh_err)
+                    raise RuntimeError(f"Tesla not authorized — token refresh failed: {refresh_err}")
 
             products = tesla.battery_list() + tesla.solar_list()
             if not products:
