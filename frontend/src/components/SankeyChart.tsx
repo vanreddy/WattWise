@@ -28,6 +28,11 @@ const nodeColors: Record<string, string> = {
   "Grid Export": "#fb923c",
 };
 
+const displayNames: Record<string, string> = {
+  "Grid Import": "Grid",
+  "Grid Export": "Grid",
+};
+
 // SVG icon paths (16x16 viewBox)
 const NODE_ICONS: Record<string, string> = {
   Solar: "M8 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 1zm3.7 2.3a.5.5 0 0 1 0 .7l-.7.7a.5.5 0 1 1-.7-.7l.7-.7a.5.5 0 0 1 .7 0zM14 8a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1A.5.5 0 0 1 14 8zM4.3 3.3a.5.5 0 0 1 .7 0l.7.7a.5.5 0 0 1-.7.7l-.7-.7a.5.5 0 0 1 0-.7zM3.5 8a.5.5 0 0 0-.5-.5H2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5zm8.5 3a4 4 0 1 1-8 0 4 4 0 0 1 8 0z",
@@ -304,10 +309,10 @@ function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: s
             <rect x={isLeft ? x - 80 : x - 10} y={n.y - 5} width={100 + NODE_W} height={n.height + 10} fill="transparent" />
           )}
           <rect x={x} y={n.y} width={NODE_W} height={n.height} rx={4} fill={n.color} fillOpacity={0.8} />
-          <text x={textX} y={centerY - 3} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={12}>
-            {n.label}
+          <text x={textX} y={centerY - 4} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={14}>
+            {displayNames[n.label] || n.label}
           </text>
-          <text x={textX} y={centerY + 12} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={12}>
+          <text x={textX} y={centerY + 13} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={14}>
             {formatKwh(n.total)}
           </text>
         </g>
@@ -374,7 +379,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
       : flows.filter(f => f.to === label);
     const total = relevant.reduce((s, f) => s + f.value, 0);
     return relevant.map(f => ({
-      target: side === "left" ? f.to : f.from,
+      target: displayNames[side === "left" ? f.to : f.from] || (side === "left" ? f.to : f.from),
       value: f.value,
       pct: total > 0 ? (f.value / total) * 100 : 0,
       color: side === "left" ? nodeColors[f.to] || "#6b7280" : nodeColors[f.from] || "#6b7280",
@@ -410,7 +415,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
         <div className="mt-1 bg-gray-800/60 rounded-lg border border-gray-700/50 p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold" style={{ color: nodeColors[selectedNode.label] || "#fff" }}>
-              {selectedNode.label} {selectedNode.side === "left" ? "→" : "←"}
+              {displayNames[selectedNode.label] || selectedNode.label} {selectedNode.side === "left" ? "→" : "←"}
             </h3>
             <button onClick={() => setSelectedNode(null)} className="text-gray-500 hover:text-gray-300 p-0.5">
               <X size={14} />
