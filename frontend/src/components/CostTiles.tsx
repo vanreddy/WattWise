@@ -84,7 +84,7 @@ export default function CostTiles({ data, days }: Props) {
             {fmt(animatedSavings)}
           </p>
           <span className="text-xs sm:text-sm text-gray-500 mt-1">
-            solar + battery + export credits
+            solar + powerwall + export credits
           </span>
         </div>
       </div>

@@ -196,7 +196,7 @@ function generateRealtimeSuggestions(
       icon: <BatteryWarning size={20} />,
       iconBg: "bg-emerald-500/20 text-emerald-400",
       title: "Powerwall ran out early yesterday",
-      description: `Your battery depleted at ${formatted} — before the evening peak ended at 9 PM. Consider reserving 15-20% battery for peak hours, or reducing mid-day export to keep more stored energy.`,
+      description: `Your Powerwall depleted at ${formatted} — before the evening peak ended at 9 PM. Consider reserving 15-20% for peak hours, or reducing mid-day export to keep more stored energy.`,
       savings: null,
       priority: "medium",
     });

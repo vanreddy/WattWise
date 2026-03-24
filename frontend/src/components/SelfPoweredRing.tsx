@@ -142,11 +142,11 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
               </span>
               <span className="text-[11px] sm:text-xs text-gray-500 flex items-center gap-1 tabular-nums">
                 <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: BATTERY_COLOR }} />
-                {displayBattery}% battery
+                {displayBattery}% powerwall
               </span>
             </div>
           ) : (
-            <span className={`text-xs sm:text-sm ${glass ? "text-white/40" : "text-gray-500"}`}>solar + battery</span>
+            <span className={`text-xs sm:text-sm ${glass ? "text-white/40" : "text-gray-500"}`}>solar + powerwall</span>
           )}
         </div>
       </div>

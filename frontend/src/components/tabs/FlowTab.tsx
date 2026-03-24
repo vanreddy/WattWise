@@ -113,7 +113,7 @@ function NowContent({ summary, lastUpdated, error, weather }: {
   const home = Math.max(0, current.home_w);
   const gridImport = Math.max(0, current.grid_w);
   const solar = Math.max(0, current.solar_w);
-  const batDischarge = current.battery_w < 0 ? Math.abs(current.battery_w) : 0;
+  const batDischarge = Math.max(0, current.battery_w); // positive = discharging
   const selfPowered = Math.max(0, home - gridImport);
   const selfPoweredPct = home > 0
     ? Math.round(Math.max(0, Math.min(100, (selfPowered / home) * 100)))

@@ -197,7 +197,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
         return {
           label: formatHour(h.hour),
           "Self-Power": parseFloat((solarDirectUse * avgRate).toFixed(1)),
-          Battery: parseFloat((h.battery_discharge_kwh * avgRate).toFixed(1)),
+          Powerwall: parseFloat((h.battery_discharge_kwh * avgRate).toFixed(1)),
           "Export Credits": parseFloat((h.grid_export_kwh * avgRate * 0.25).toFixed(1)),
         };
       });
@@ -220,7 +220,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
       return {
         label: formatDay(d.day),
         "Self-Power": parseFloat((ts * 0.6).toFixed(1)),
-        Battery: parseFloat((ts * 0.4).toFixed(1)),
+        Powerwall: parseFloat((ts * 0.4).toFixed(1)),
         "Export Credits": parseFloat(d.export_credit.toFixed(1)),
       };
     });
@@ -261,11 +261,11 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
     let max = 0;
     const check = (v: number) => { if (v > max) max = v; };
     if (showHourlyCharts) {
-      for (const d of hourlySavingsData) check((d["Self-Power"] || 0) + (d.Battery || 0) + (d["Export Credits"] || 0));
+      for (const d of hourlySavingsData) check((d["Self-Power"] || 0) + (d.Powerwall || 0) + (d["Export Credits"] || 0));
       for (const d of hourlyCostData) check(d.Cost);
     }
     if (showMultiDayCharts) {
-      for (const d of savingsData) check((d["Self-Power"] || 0) + (d.Battery || 0) + (d["Export Credits"] || 0));
+      for (const d of savingsData) check((d["Self-Power"] || 0) + (d.Powerwall || 0) + (d["Export Credits"] || 0));
       for (const d of costData) check((d.Peak || 0) + (d["Part-Peak"] || 0) + (d["Off-Peak"] || 0));
     }
     return Math.ceil(max * 1.1 * 10) / 10;
@@ -302,7 +302,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
 
           <div className="grid grid-cols-3 gap-2">
             <MiniTile label="Solar" value={totals.solarSavings} color="text-green-400" dotColor="#166534" />
-            <MiniTile label="Battery" value={totals.batterySavings} color="text-green-400" dotColor="#4ade80" />
+            <MiniTile label="Powerwall" value={totals.batterySavings} color="text-green-400" dotColor="#4ade80" />
             <MiniTile label="Export Credits" value={totals.exportCredits} color="text-gray-400" dotColor="#6b7280" />
           </div>
 
@@ -318,7 +318,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                   <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
                   <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
                   <Bar dataKey="Self-Power" stackId="s" fill="#166534" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Battery" stackId="s" fill="#4ade80" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Powerwall" stackId="s" fill="#4ade80" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="Export Credits" stackId="s" fill="#6b7280" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
