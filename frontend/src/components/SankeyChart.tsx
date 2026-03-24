@@ -322,7 +322,7 @@ function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: s
   return (
     <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[340px] sm:h-[420px]">
       <text x={LEFT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>SOURCES</text>
-      <text x={RIGHT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>CONSUMPTION</text>
+      <text x={RIGHT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>SINKS</text>
       {flowPaths}
       {renderNodes(leftInfo, LEFT_X)}
       {renderNodes(rightInfo, RIGHT_X)}
@@ -406,7 +406,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
         {flows.length > 0 && (
           <div className="flex gap-3 sm:gap-4 text-[10px]">
             <span className="text-emerald-400">Sources: {formatKwh(totalEnergy, unit)}</span>
-            <span className="text-blue-400">Consumption: {formatKwh(totalEnergy, unit)}</span>
+            <span className="text-blue-400">Sinks: {formatKwh(totalEnergy, unit)}</span>
           </div>
         )}
       </div>

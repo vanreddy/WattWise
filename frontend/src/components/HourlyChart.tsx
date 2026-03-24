@@ -41,7 +41,7 @@ function CustomTooltip({ active, payload, label }: any) {
       )}
       {sinks.length > 0 && (
         <div>
-          <span className="text-gray-500">Consumption</span>
+          <span className="text-gray-500">Sinks</span>
           {sinks.map((p: any) => (
             <div key={p.dataKey} className="flex justify-between gap-4">
               <span style={{ color: p.stroke }}>{p.name}</span>
@@ -358,7 +358,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
         </h2>
         <div className="flex gap-3 sm:gap-4 text-[10px]">
           <span className="text-emerald-400">↑ Sources: {fmtKwh(totalEnergy)}</span>
-          <span className="text-blue-400">↓ Consumption: {fmtKwh(totalEnergy)}</span>
+          <span className="text-blue-400">↓ Sinks: {fmtKwh(totalEnergy)}</span>
         </div>
       </div>
 
@@ -402,7 +402,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
 
       {/* Consumption legend — centered below chart */}
       <div className="flex justify-center mt-3 sm:mt-1">
-        <LegendRow items={consumptionLegend} label="Consumption ↓" />
+        <LegendRow items={consumptionLegend} label="Sinks ↓" />
       </div>
     </div>
   );

@@ -253,7 +253,7 @@ export default function LiveSankeyChart({ current, glass }: { current: CurrentPo
         )}
         {/* Column headers */}
         <text x={LEFT_X + NODE_W / 2} y={135} textAnchor="middle" fill={glass ? "rgba(255,255,255,0.5)" : undefined} className={glass ? "font-medium" : "fill-gray-600 font-medium"} fontSize={10} letterSpacing={1}>SOURCES</text>
-        <text x={RIGHT_X + NODE_W / 2} y={135} textAnchor="middle" fill={glass ? "rgba(255,255,255,0.5)" : undefined} className={glass ? "font-medium" : "fill-gray-600 font-medium"} fontSize={10} letterSpacing={1}>CONSUMPTION</text>
+        <text x={RIGHT_X + NODE_W / 2} y={135} textAnchor="middle" fill={glass ? "rgba(255,255,255,0.5)" : undefined} className={glass ? "font-medium" : "fill-gray-600 font-medium"} fontSize={10} letterSpacing={1}>SINKS</text>
 
         {flowPaths}
 
