@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useSwipeable } from "react-swipeable";
-import type { DailySummary, HourlyBucket, SankeyFlows, IntervalPoint, SummaryResponse } from "@/lib/api";
+import type { DailySummary, HourlyBucket, SankeyFlows, IntervalPoint, SummaryResponse, CurrentPower } from "@/lib/api";
 import type { WeatherData } from "@/hooks/useWeather";
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
@@ -24,6 +24,43 @@ interface Props {
   lastUpdated: Date | null;
   error: string | null;
   weather: WeatherData | null;
+}
+
+/* ─── Convert live watts to SankeyFlows ─── */
+
+function currentToSankeyFlows(c: CurrentPower): SankeyFlows {
+  const solar = Math.max(0, c.solar_w) / 1000;
+  const gridImport = Math.max(0, c.grid_w) / 1000;
+  const gridExport = Math.max(0, -c.grid_w) / 1000;
+  const batDischarge = Math.max(0, c.battery_w) / 1000;
+  const batCharge = Math.max(0, -c.battery_w) / 1000;
+  const home = Math.max(0, c.home_w - c.vehicle_w) / 1000;
+  const ev = Math.max(0, c.vehicle_w) / 1000;
+
+  const homePlusEv = home + ev;
+  const solarToLoad = Math.min(solar, homePlusEv);
+  let solarLeft = solar - solarToLoad;
+  const solarToBat = Math.min(batCharge, solarLeft);
+  solarLeft -= solarToBat;
+  const solarToGrid = Math.min(gridExport, solarLeft);
+
+  const remainDemand = Math.max(0, homePlusEv - solarToLoad);
+  const batToLoad = Math.min(batDischarge, remainDemand);
+
+  const remainDemand2 = Math.max(0, remainDemand - batToLoad);
+  const gridToHome = Math.min(gridImport, remainDemand2);
+  const gridLeft = gridImport - gridToHome;
+  const gridToBat = Math.min(gridLeft, Math.max(0, batCharge - solarToBat));
+
+  return {
+    solar_to_home: solarToLoad,
+    solar_to_battery: solarToBat,
+    solar_to_grid: solarToGrid,
+    battery_to_home: batToLoad,
+    battery_to_grid: 0,
+    grid_to_home: gridToHome,
+    grid_to_battery: gridToBat,
+  };
 }
 
 /* ─── Weather components (from NowTab) ─── */
@@ -66,15 +103,11 @@ function WeatherBar({ weather }: { weather: WeatherData }) {
 
 /* ─── Now mode content ─── */
 
-function NowContent({ summary, lastUpdated, error, weather, hourly, daily, sankeyFlows, dateRange }: {
+function NowContent({ summary, lastUpdated, error, weather }: {
   summary: SummaryResponse;
   lastUpdated: Date | null;
   error: string | null;
   weather: WeatherData | null;
-  hourly: HourlyBucket[];
-  daily: DailySummary[];
-  sankeyFlows: SankeyFlows | null;
-  dateRange: DateRange;
 }) {
   const current = summary.current;
   const home = Math.max(0, current.home_w);
@@ -82,6 +115,9 @@ function NowContent({ summary, lastUpdated, error, weather, hourly, daily, sanke
   const selfPoweredPct = home > 0
     ? Math.round(Math.max(0, Math.min(100, ((home - gridImport) / home) * 100)))
     : 100;
+
+  // Convert live watts to SankeyFlows (in kW) for the chart
+  const liveFlows = currentToSankeyFlows(current);
 
   return (
     <div className="space-y-4">
@@ -99,13 +135,14 @@ function NowContent({ summary, lastUpdated, error, weather, hourly, daily, sanke
       {/* Self-Powering Ring with live indicator */}
       <SelfPoweredRing selfPoweredPct={selfPoweredPct} label="Self-Powering" live />
 
-      {/* Sankey — same as Today but with flowing animation */}
+      {/* Sankey — live watts with flowing animation */}
       <SankeyChart
-        hourlyData={hourly}
-        dailyData={daily}
-        days={dateRange.days}
-        sankeyFlows={sankeyFlows}
+        hourlyData={[]}
+        dailyData={[]}
+        days={1}
+        sankeyFlows={liveFlows}
         animated
+        liveUnits
       />
     </div>
   );
@@ -242,10 +279,6 @@ export default function FlowTab({
           lastUpdated={lastUpdated}
           error={error}
           weather={weather}
-          hourly={hourly}
-          daily={daily}
-          sankeyFlows={sankeyFlows}
-          dateRange={dateRange}
         />
       ) : (
         <div {...swipeHandlers}>

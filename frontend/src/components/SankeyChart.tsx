@@ -43,8 +43,8 @@ const NODE_ICONS: Record<string, string> = {
   "Grid Export": "M13 2.5a1.5 1.5 0 0 1 3 0v11a1.5 1.5 0 0 1-3 0v-11zm-5 2a1.5 1.5 0 0 1 3 0v9a1.5 1.5 0 0 1-3 0v-9zm-5 3a1.5 1.5 0 0 1 3 0v6a1.5 1.5 0 0 1-3 0v-6z",
 };
 
-function formatKwh(v: number): string {
-  return `${v.toFixed(1)} kWh`;
+function formatKwh(v: number, unit = "kWh"): string {
+  return `${v.toFixed(1)} ${unit}`;
 }
 
 function computeFlowsFromHourly(data: HourlyBucket[]): Flow[] {
@@ -175,7 +175,7 @@ interface NodeLayout {
   side: "left" | "right";
 }
 
-function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: string, side: "left" | "right") => void) {
+function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: string, side: "left" | "right") => void, unit = "kWh") {
   if (flows.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] sm:h-[400px] text-gray-500 text-sm">
@@ -313,7 +313,7 @@ function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (label: s
             {displayNames[n.label] || n.label}
           </text>
           <text x={textX} y={centerY + 13} textAnchor={anchor} fill={n.color} className="font-semibold" fontSize={14}>
-            {formatKwh(n.total)}
+            {formatKwh(n.total, unit)}
           </text>
         </g>
       );
@@ -336,9 +336,10 @@ interface Props {
   days: number;
   sankeyFlows?: SankeyFlows | null;
   animated?: boolean;
+  liveUnits?: boolean;
 }
 
-export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated }: Props) {
+export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, animated, liveUnits }: Props) {
   const [selectedNode, setSelectedNode] = useState<{ label: string; side: "left" | "right" } | null>({ label: "Home", side: "right" });
 
   const totalEnergy = useMemo(() => {
@@ -368,7 +369,8 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
     return [];
   }, [sankeyFlows, hourlyData, dailyData]);
 
-  const title = days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
+  const unit = liveUnits ? "kW" : "kWh";
+  const title = liveUnits ? "Live Energy Flow" : days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
 
   // Compute detail rows for selected node
   const detailRows = useMemo(() => {
@@ -403,12 +405,12 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
         </h2>
         {flows.length > 0 && (
           <div className="flex gap-3 sm:gap-4 text-[10px]">
-            <span className="text-emerald-400">Sources: {formatKwh(totalEnergy)}</span>
-            <span className="text-blue-400">Consumption: {formatKwh(totalEnergy)}</span>
+            <span className="text-emerald-400">Sources: {formatKwh(totalEnergy, unit)}</span>
+            <span className="text-blue-400">Consumption: {formatKwh(totalEnergy, unit)}</span>
           </div>
         )}
       </div>
-      {renderSankey(flows, animated, handleNodeClick)}
+      {renderSankey(flows, animated, handleNodeClick, liveUnits ? "kW" : "kWh")}
 
       {/* Detail table for selected node */}
       {selectedNode && detailRows.length > 0 && (
@@ -433,7 +435,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
               {detailRows.map(row => (
                 <tr key={row.target} className="border-b border-gray-700/30 last:border-0">
                   <td className="py-1.5 font-medium" style={{ color: row.color }}>{row.target}</td>
-                  <td className="text-right py-1.5 text-gray-300">{formatKwh(row.value)}</td>
+                  <td className="text-right py-1.5 text-gray-300">{formatKwh(row.value, unit)}</td>
                   <td className="text-right py-1.5 text-gray-400">{row.pct.toFixed(0)}%</td>
                 </tr>
               ))}
