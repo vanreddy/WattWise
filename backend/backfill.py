@@ -225,10 +225,11 @@ async def _aggregate_day_for_account(
         logger.exception("Failed to aggregate %s for account %s", target_day, account_id)
 
 
-async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30) -> None:
+async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30, include_today: bool = False) -> None:
     """Backfill N days of Tesla history for a specific account.
 
     Updates _backfill_progress in-memory so the frontend can poll status.
+    If include_today=True, also fetches today's partial data (offset 0).
     """
     acct_key = str(account_id)
     _backfill_progress[acct_key] = {
@@ -267,7 +268,8 @@ async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30)
 
             site = products[0]
 
-            for day_offset in range(1, days + 1):
+            start_offset = 0 if include_today else 1
+            for day_offset in range(start_offset, days + 1):
                 target = datetime.now(LOCAL_TZ) - timedelta(days=day_offset)
                 logger.info("Backfill account %s: fetching %s ...", acct_key, target.strftime("%Y-%m-%d"))
 
