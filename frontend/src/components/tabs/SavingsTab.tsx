@@ -238,7 +238,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
           {/* === Hourly charts (daily mode) === */}
           {showHourlyCharts && (
             <>
-              <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Self-Power Savings</h2>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <BarChart data={hourlySavingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
@@ -254,7 +254,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Costs</h2>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <BarChart data={hourlyCostData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
@@ -268,7 +268,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
               </div>
 
               {/* Rate schedule by hour */}
-              <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Rate Schedule</h2>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <BarChart data={rateData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
@@ -307,7 +307,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
           {/* === Multi-day charts (weekly/monthly/yearly) === */}
           {showMultiDayCharts && (
             <>
-              <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Self-Power Savings</h2>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <BarChart data={savingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
@@ -323,7 +323,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
                 <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Cost Breakdown</h2>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <BarChart data={costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>

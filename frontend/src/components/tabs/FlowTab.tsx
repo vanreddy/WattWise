@@ -81,7 +81,7 @@ function WeatherIcon({ condition }: { condition: string }) {
 
 function WeatherBar({ weather }: { weather: WeatherData }) {
   return (
-    <div className="bg-gray-900 rounded-xl px-4 py-3 border border-gray-800 flex items-center justify-between">
+    <div className="card-elevated rounded-2xl px-4 py-3 border border-gray-800/50 flex items-center justify-between">
       <div className="flex items-center gap-3">
         <WeatherIcon condition={weather.condition} />
         <span className="text-xl font-semibold text-white">{weather.temperature}°F</span>

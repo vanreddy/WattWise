@@ -343,7 +343,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
   );
 
   return (
-    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+    <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
       <style>{`
         @keyframes pulse-dot {
           0%, 100% { r: 5; opacity: 1; }

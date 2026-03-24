@@ -25,10 +25,10 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[70vh]">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5">
-        <div className="flex flex-col items-center gap-2">
-          <img src="/icon.svg" alt="SelfPower" className="h-14 w-14 rounded-lg" />
-          <h2 className="text-2xl font-bold">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-6 animate-fade-in-up">
+        <div className="flex flex-col items-center gap-3">
+          <img src="/icon.svg" alt="SelfPower" className="h-16 w-16 rounded-2xl shadow-lg shadow-black/30" />
+          <h2 className="text-2xl font-bold tracking-tight">
             <span className="text-white">Self</span>
             <span className="text-green-400">Power</span>
           </h2>
@@ -36,7 +36,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm rounded px-3 py-2">
+          <div className="bg-red-900/30 border border-red-800/50 text-red-300 text-sm rounded-xl px-4 py-3 animate-scale-in">
             {error}
           </div>
         )}
@@ -48,7 +48,7 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+            className="w-full bg-gray-900 border border-gray-700/50 rounded-xl px-4 py-3 text-sm transition-all duration-200 focus:outline-none"
           />
           <input
             type="password"
@@ -56,21 +56,21 @@ export default function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+            className="w-full bg-gray-900 border border-gray-700/50 rounded-xl px-4 py-3 text-sm transition-all duration-200 focus:outline-none"
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-yellow-500 text-gray-950 font-semibold rounded py-2 text-sm hover:bg-yellow-400 disabled:opacity-50"
+          className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all duration-200 active:scale-[0.98] shadow-lg shadow-yellow-500/20"
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
 
         <p className="text-center text-gray-600 text-xs">
           New to SelfPower?{" "}
-          <a href="/onboard" className="text-yellow-500 hover:text-yellow-400">
+          <a href="/onboard" className="text-yellow-500 hover:text-yellow-400 transition-colors">
             Get started
           </a>
         </p>

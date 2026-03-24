@@ -148,15 +148,15 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
   return (
     <div className="flex flex-col items-center gap-3 relative px-2">
       {/* Segmented control */}
-      <div className="w-full max-w-sm bg-gray-800/60 rounded-2xl p-1 flex">
+      <div className="w-full max-w-sm bg-gray-800/40 rounded-2xl p-1 flex backdrop-blur-sm border border-gray-700/20">
         {visibleModes.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => handleModeChange(id)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               mode === id
-                ? "bg-gray-700 text-white shadow-md"
-                : "text-gray-500 active:bg-gray-800"
+                ? "bg-gray-700 text-white shadow-lg shadow-black/30"
+                : "text-gray-500 hover:text-gray-300 active:bg-gray-800"
             }`}
           >
             {label}

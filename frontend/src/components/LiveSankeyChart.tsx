@@ -242,7 +242,7 @@ export default function LiveSankeyChart({ current, glass }: { current: CurrentPo
   else pctColor = "#f87171";
 
   return (
-    <div className={glass ? "" : "bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800"}>
+    <div className={glass ? "" : "card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50"}>
       <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[560px] sm:h-[760px]">
         {glass && (
           <defs>

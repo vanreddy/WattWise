@@ -46,7 +46,7 @@ export default function SelfPoweredRing({ selfPoweredPct, solarPct = 0, batteryP
   const singleDashoffset = animated ? 0 : singleLen;
 
   return (
-    <div className={glass ? "flex flex-col items-center justify-center" : "bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center"}>
+    <div className={glass ? "flex flex-col items-center justify-center" : "card-elevated rounded-2xl p-3 sm:p-4 border border-gray-800/50 flex flex-col items-center justify-center"}>
       <h2 className={`text-sm font-semibold mb-1 ${glass ? "text-white/60" : "text-gray-400"} flex items-center gap-2 justify-center`}>
         {live && <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" /></span>}
         {label}

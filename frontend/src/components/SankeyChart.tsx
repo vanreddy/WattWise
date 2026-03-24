@@ -397,7 +397,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
   };
 
   return (
-    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
+    <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 mb-1">
         <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
           <GitBranch size={14} className="text-purple-400" />
@@ -414,7 +414,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
 
       {/* Detail table for selected node */}
       {selectedNode && detailRows.length > 0 && (
-        <div className="mt-1 bg-gray-800/60 rounded-lg border border-gray-700/50 p-3">
+        <div className="mt-1 bg-gray-800/40 rounded-xl border border-gray-700/30 p-3 backdrop-blur-sm animate-fade-in-up">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold" style={{ color: nodeColors[selectedNode.label] || "#fff" }}>
               {displayNames[selectedNode.label] || selectedNode.label} {selectedNode.side === "left" ? "→" : "←"}

@@ -45,7 +45,7 @@ export default function CostTiles({ data, days }: Props) {
   return (
     <>
       {/* Solar Savings */}
-      <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center text-center">
+      <div className="card-elevated rounded-2xl p-3 sm:p-4 border border-gray-800/50 flex flex-col items-center justify-center text-center">
         <h2 className="text-sm font-semibold text-gray-400 mb-1">Solar Savings</h2>
         <div className="flex-1 flex flex-col items-center justify-center py-4 sm:py-6">
           <Sun size={24} className="text-green-400 mb-3" />
@@ -59,7 +59,7 @@ export default function CostTiles({ data, days }: Props) {
       </div>
 
       {/* Grid Costs */}
-      <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 flex flex-col items-center justify-center text-center">
+      <div className="card-elevated rounded-2xl p-3 sm:p-4 border border-gray-800/50 flex flex-col items-center justify-center text-center">
         <h2 className="text-sm font-semibold text-gray-400 mb-1">Grid Costs</h2>
         <div className="flex-1 flex flex-col items-center justify-center py-4 sm:py-6">
           <Zap size={24} className="text-red-400 mb-3" />

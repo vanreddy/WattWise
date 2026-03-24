@@ -17,7 +17,7 @@ interface Props {
 
 export default function BottomTabBar({ activeTab, onTabChange }: Props) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-900/90 backdrop-blur-xl border-t border-gray-800/50 pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id;
@@ -25,12 +25,12 @@ export default function BottomTabBar({ activeTab, onTabChange }: Props) {
             <button
               key={id}
               onClick={() => onTabChange(id)}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors ${
-                active ? "text-blue-400" : "text-gray-500"
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-all duration-200 ${
+                active ? "text-blue-400 scale-105" : "text-gray-500 active:scale-95"
               }`}
             >
               <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
-              <span className={`text-[10px] font-medium ${active ? "text-blue-400" : "text-gray-500"}`}>
+              <span className={`text-[10px] font-semibold tracking-wide ${active ? "text-blue-400" : "text-gray-500"}`}>
                 {label}
               </span>
             </button>
