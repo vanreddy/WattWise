@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSwipeable } from "react-swipeable";
 import {
   BarChart,
@@ -12,10 +12,10 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { Sun, Zap } from "lucide-react";
 import type { DailySummary, HourlyBucket } from "@/lib/api";
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
-import CostTiles from "@/components/CostTiles";
 
 interface Props {
   daily: DailySummary[];
@@ -24,7 +24,39 @@ interface Props {
   setDateRange: (range: DateRange) => void;
 }
 
-function fmt(v: number): string {
+/* ─── Tick-up hook ─── */
+
+function useTickUp(target: number, duration = 1000, delay = 0): number {
+  const [value, setValue] = useState(0);
+  const startTime = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target <= 0) { setValue(0); return; }
+    const timeout = setTimeout(() => {
+      const tick = (ts: number) => {
+        if (!startTime.current) startTime.current = ts;
+        const progress = Math.min((ts - startTime.current) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setValue(eased * target);
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      startTime.current = null;
+      requestAnimationFrame(tick);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [target, duration, delay]);
+
+  return value;
+}
+
+/* ─── Formatters ─── */
+
+function fmtBig(v: number): string {
+  if (v >= 100) return `$${Math.round(v)}`;
+  return `$${v.toFixed(2)}`;
+}
+
+function fmtSmall(v: number): string {
   return `$${v.toFixed(1)}`;
 }
 
@@ -37,6 +69,40 @@ function formatHour(hour: string): string {
   const d = new Date(hour);
   return d.toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
 }
+
+/* ─── Small tile ─── */
+
+function MiniTile({ label, value, color, dotColor }: { label: string; value: number; color: string; dotColor: string }) {
+  const animated = useTickUp(value, 800, 200);
+  return (
+    <div className="card-elevated rounded-2xl p-3 border border-gray-800/50 flex flex-col items-center text-center">
+      <span className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-1">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+        {label}
+      </span>
+      <span className={`text-lg sm:text-xl font-bold tabular-nums ${color}`}>
+        {fmtSmall(animated)}
+      </span>
+    </div>
+  );
+}
+
+/* ─── Big hero tile ─── */
+
+function HeroTile({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
+  const animated = useTickUp(value, 1200, 100);
+  return (
+    <div className="card-elevated rounded-2xl p-4 border border-gray-800/50 flex flex-col items-center text-center">
+      <h2 className="text-sm font-semibold text-gray-400 mb-2">{label}</h2>
+      <div className="mb-1">{icon}</div>
+      <p className={`text-3xl sm:text-5xl font-bold tabular-nums ${color}`}>
+        {fmtBig(animated)}
+      </p>
+    </div>
+  );
+}
+
+/* ─── Main component ─── */
 
 export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: Props) {
   const [mode, setMode] = useState<Mode>("daily");
@@ -74,18 +140,69 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
 
   const isDaily = mode === "daily" || dateRange.days === 1;
 
-  // Compute average rate from daily data for hourly cost estimation
-  const avgRate = useMemo(() => {
-    let totalImport = 0;
-    let totalCost = 0;
+  /* ─── Compute all totals ─── */
+
+  const totals = useMemo(() => {
+    if (daily.length === 0) return {
+      solarSavings: 0, batterySavings: 0, exportCredits: 0, totalSavings: 0,
+      peakCost: 0, partPeakCost: 0, offPeakCost: 0, totalGridCost: 0,
+    };
+
+    let totalImportKwh = 0, totalCost = 0, solarSelfConsumedKwh = 0, exportCredit = 0;
+    let peakCost = 0, partPeakCost = 0, offPeakCost = 0;
+
     for (const d of daily) {
-      totalImport += d.total_import_kwh;
+      totalImportKwh += d.total_import_kwh;
       totalCost += d.total_cost;
+      solarSelfConsumedKwh += d.solar_self_consumed_kwh;
+      exportCredit += d.export_credit;
+      peakCost += d.peak_cost;
+      partPeakCost += d.part_peak_cost;
+      offPeakCost += d.off_peak_cost;
     }
+
+    const avgRate = totalImportKwh > 0 ? totalCost / totalImportKwh : 0.33;
+    const totalSelfPowerSavings = solarSelfConsumedKwh * avgRate;
+    const solarDirect = totalSelfPowerSavings * 0.6;
+    const batterySavings = totalSelfPowerSavings * 0.4;
+
+    return {
+      solarSavings: solarDirect,
+      batterySavings,
+      exportCredits: exportCredit,
+      totalSavings: solarDirect + batterySavings + exportCredit,
+      peakCost,
+      partPeakCost,
+      offPeakCost,
+      totalGridCost: totalCost,
+    };
+  }, [daily]);
+
+  /* ─── Average rate ─── */
+
+  const avgRate = useMemo(() => {
+    let totalImport = 0, totalCost = 0;
+    for (const d of daily) { totalImport += d.total_import_kwh; totalCost += d.total_cost; }
     return totalImport > 0 ? totalCost / totalImport : 0.33;
   }, [daily]);
 
-  // Hourly chart data for daily mode (sorted ascending by hour)
+  /* ─── Chart data ─── */
+
+  const hourlySavingsData = useMemo(() => {
+    if (!isDaily || hourly.length === 0) return [];
+    return [...hourly]
+      .sort((a, b) => new Date(a.hour).getTime() - new Date(b.hour).getTime())
+      .map((h) => {
+        const solarDirectUse = Math.max(0, h.solar_kwh - h.grid_export_kwh - h.battery_charge_kwh);
+        return {
+          label: formatHour(h.hour),
+          "Self-Power": parseFloat((solarDirectUse * avgRate).toFixed(1)),
+          Battery: parseFloat((h.battery_discharge_kwh * avgRate).toFixed(1)),
+          "Export Credits": parseFloat((h.grid_export_kwh * avgRate * 0.25).toFixed(1)),
+        };
+      });
+  }, [isDaily, hourly, avgRate]);
+
   const hourlyCostData = useMemo(() => {
     if (!isDaily || hourly.length === 0) return [];
     return [...hourly]
@@ -96,70 +213,35 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
       }));
   }, [isDaily, hourly, avgRate]);
 
-  const hourlySavingsData = useMemo(() => {
-    if (!isDaily || hourly.length === 0) return [];
-    return [...hourly]
-      .sort((a, b) => new Date(a.hour).getTime() - new Date(b.hour).getTime())
-      .map((h) => {
-        const solarDirectUse = Math.max(0, h.solar_kwh - h.grid_export_kwh - h.battery_charge_kwh);
-        const solarSavings = solarDirectUse * avgRate;
-        const batterySavings = h.battery_discharge_kwh * avgRate;
-        const exportCredits = h.grid_export_kwh * avgRate * 0.25;
-        return {
-          label: formatHour(h.hour),
-          "Self-Power": parseFloat(solarSavings.toFixed(1)),
-          Battery: parseFloat(batterySavings.toFixed(1)),
-          "Export Credits": parseFloat(exportCredits.toFixed(1)),
-        };
-      });
-  }, [isDaily, hourly, avgRate]);
-
-  // Multi-day chart data (sorted ascending by date)
-  const costData = useMemo(() => {
-    return [...daily]
-      .sort((a, b) => a.day.localeCompare(b.day))
-      .map((d) => ({
-        label: formatDay(d.day),
-        Peak: parseFloat(d.peak_cost.toFixed(1)),
-        "Part-Peak": parseFloat(d.part_peak_cost.toFixed(1)),
-        "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
-      }));
-  }, [daily]);
-
   const savingsData = useMemo(() => {
-    return [...daily]
-      .sort((a, b) => a.day.localeCompare(b.day))
-      .map((d) => {
-        const rate = d.total_import_kwh > 0 ? d.total_cost / d.total_import_kwh : 0.33;
-        const totalSavings = d.solar_self_consumed_kwh * rate;
-        const exportCredit = d.export_credit;
-        const solarRatio = 0.6;
-        const solarDirect = totalSavings * solarRatio;
-        const batterySavings = totalSavings * (1 - solarRatio);
-
-        return {
-          label: formatDay(d.day),
-          "Self-Power": parseFloat(solarDirect.toFixed(1)),
-          Battery: parseFloat(batterySavings.toFixed(1)),
-          "Export Credits": parseFloat(exportCredit.toFixed(1)),
-        };
-      });
+    return [...daily].sort((a, b) => a.day.localeCompare(b.day)).map((d) => {
+      const rate = d.total_import_kwh > 0 ? d.total_cost / d.total_import_kwh : 0.33;
+      const ts = d.solar_self_consumed_kwh * rate;
+      return {
+        label: formatDay(d.day),
+        "Self-Power": parseFloat((ts * 0.6).toFixed(1)),
+        Battery: parseFloat((ts * 0.4).toFixed(1)),
+        "Export Credits": parseFloat(d.export_credit.toFixed(1)),
+      };
+    });
   }, [daily]);
 
-  // E-TOU-D rate schedule by hour (MCE + PG&E)
-  // Summer (Jun-Sep): Peak 4-9pm, Part-Peak 3-4pm & 9-12am, Off-Peak rest
-  // Winter (Oct-May): Peak 4-9pm, Off-Peak rest
+  const costData = useMemo(() => {
+    return [...daily].sort((a, b) => a.day.localeCompare(b.day)).map((d) => ({
+      label: formatDay(d.day),
+      Peak: parseFloat(d.peak_cost.toFixed(1)),
+      "Part-Peak": parseFloat(d.part_peak_cost.toFixed(1)),
+      "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
+    }));
+  }, [daily]);
+
   const rateData = useMemo(() => {
     if (!isDaily) return [];
-    const dateStr = dateRange.from;
-    const month = new Date(dateStr + "T12:00:00").getMonth(); // 0-indexed
-    const isSummer = month >= 5 && month <= 8; // Jun-Sep
-
+    const month = new Date(dateRange.from + "T12:00:00").getMonth();
+    const isSummer = month >= 5 && month <= 8;
     return Array.from({ length: 24 }, (_, h) => {
       const label = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-      let rate: number;
-      let tier: string;
-
+      let rate: number, tier: string;
       if (isSummer) {
         if (h >= 16 && h < 21) { rate = 0.42; tier = "Peak"; }
         else if ((h >= 15 && h < 16) || (h >= 21 && h < 24)) { rate = 0.35; tier = "Part-Peak"; }
@@ -168,7 +250,6 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
         if (h >= 16 && h < 21) { rate = 0.38; tier = "Peak"; }
         else { rate = 0.28; tier = "Off-Peak"; }
       }
-
       return { label, rate: parseFloat(rate.toFixed(2)), tier };
     });
   }, [isDaily, dateRange.from]);
@@ -176,170 +257,150 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
   const showMultiDayCharts = !isDaily && daily.length > 1;
   const showHourlyCharts = isDaily && hourly.length > 0;
 
-  // Compute shared Y-axis max for normalized axes
   const sharedMax = useMemo(() => {
     let max = 0;
+    const check = (v: number) => { if (v > max) max = v; };
     if (showHourlyCharts) {
-      for (const d of hourlySavingsData) {
-        const total = (d["Self-Power"] || 0) + (d.Battery || 0) + (d["Export Credits"] || 0);
-        if (total > max) max = total;
-      }
-      for (const d of hourlyCostData) {
-        if (d.Cost > max) max = d.Cost;
-      }
+      for (const d of hourlySavingsData) check((d["Self-Power"] || 0) + (d.Battery || 0) + (d["Export Credits"] || 0));
+      for (const d of hourlyCostData) check(d.Cost);
     }
     if (showMultiDayCharts) {
-      for (const d of savingsData) {
-        const total = (d["Self-Power"] || 0) + (d.Battery || 0) + (d["Export Credits"] || 0);
-        if (total > max) max = total;
-      }
-      for (const d of costData) {
-        const total = (d.Peak || 0) + (d["Part-Peak"] || 0) + (d["Off-Peak"] || 0);
-        if (total > max) max = total;
-      }
+      for (const d of savingsData) check((d["Self-Power"] || 0) + (d.Battery || 0) + (d["Export Credits"] || 0));
+      for (const d of costData) check((d.Peak || 0) + (d["Part-Peak"] || 0) + (d["Off-Peak"] || 0));
     }
-    return Math.ceil(max * 1.1 * 10) / 10; // 10% headroom, round to 1 decimal
+    return Math.ceil(max * 1.1 * 10) / 10;
   }, [showHourlyCharts, showMultiDayCharts, hourlySavingsData, hourlyCostData, savingsData, costData]);
 
   const tooltipStyle = {
     contentStyle: { backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 },
     labelStyle: { color: "#9ca3af" },
   };
-
   const chartHeight = 220;
 
   return (
     <div className="space-y-4">
-      {/* Period selector — sticky while scrolling */}
+      {/* Period selector */}
       <div className="sticky top-0 z-20 bg-gray-950 pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4">
-        <PeriodSelector
-          value={dateRange}
-          onChange={handlePeriodChange}
-          onModeChange={handleModeChange}
-        />
+        <PeriodSelector value={dateRange} onChange={handlePeriodChange} onModeChange={handleModeChange} />
       </div>
 
       <div
         {...swipeHandlers}
         className={`transition-transform duration-300 ease-out ${
-          swipeDir === "left"
-            ? "-translate-x-2"
-            : swipeDir === "right"
-              ? "translate-x-2"
-              : "translate-x-0"
+          swipeDir === "left" ? "-translate-x-2" : swipeDir === "right" ? "translate-x-2" : "translate-x-0"
         }`}
       >
         <div className="space-y-4">
-          {/* Cost tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <CostTiles data={daily} days={dateRange.days} />
+
+          {/* ═══ SAVINGS SECTION ═══ */}
+          <HeroTile
+            label="Self-Power Savings"
+            value={totals.totalSavings}
+            icon={<Sun size={24} className="text-green-400" />}
+            color="text-green-400"
+          />
+
+          <div className="grid grid-cols-3 gap-2">
+            <MiniTile label="Solar" value={totals.solarSavings} color="text-green-400" dotColor="#166534" />
+            <MiniTile label="Battery" value={totals.batterySavings} color="text-green-400" dotColor="#4ade80" />
+            <MiniTile label="Export Credits" value={totals.exportCredits} color="text-gray-400" dotColor="#6b7280" />
           </div>
 
-          {/* === Hourly charts (daily mode) === */}
-          {showHourlyCharts && (
-            <>
-              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Self-Power Savings</h2>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={hourlySavingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                    <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
-                    <Tooltip {...tooltipStyle} formatter={(value: number) => fmt(value)} />
-                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
-                    <Bar dataKey="Self-Power" stackId="savings" fill="#166534" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Battery" stackId="savings" fill="#4ade80" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Export Credits" stackId="savings" fill="#6b7280" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+          {/* Savings chart */}
+          {(showHourlyCharts || showMultiDayCharts) && (
+            <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
+              <h2 className="text-sm font-semibold text-gray-400 mb-2">Savings Breakdown</h2>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={showHourlyCharts ? hourlySavingsData : savingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
+                  <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
+                  <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
+                  <Bar dataKey="Self-Power" stackId="s" fill="#166534" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Battery" stackId="s" fill="#4ade80" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Export Credits" stackId="s" fill="#6b7280" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
-              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Costs</h2>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={hourlyCostData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                    <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
-                    <Tooltip {...tooltipStyle} formatter={(value: number) => fmt(value)} />
+          {/* ═══ GRID COSTS SECTION ═══ */}
+          <HeroTile
+            label="Grid Costs"
+            value={totals.totalGridCost}
+            icon={<Zap size={24} className="text-red-400" />}
+            color="text-red-400"
+          />
+
+          <div className="grid grid-cols-3 gap-2">
+            <MiniTile label="Peak" value={totals.peakCost} color="text-red-400" dotColor="#ef4444" />
+            <MiniTile label="Part-Peak" value={totals.partPeakCost} color="text-red-300" dotColor="#f87171" />
+            <MiniTile label="Off-Peak" value={totals.offPeakCost} color="text-red-200" dotColor="#fca5a5" />
+          </div>
+
+          {/* Cost chart */}
+          {(showHourlyCharts || showMultiDayCharts) && (
+            <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
+              <h2 className="text-sm font-semibold text-gray-400 mb-2">Cost Breakdown</h2>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={showHourlyCharts ? hourlyCostData : costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
+                  <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
+                  {showHourlyCharts ? (
                     <Bar dataKey="Cost" fill="#ef4444" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Rate schedule by hour */}
-              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Rate Schedule</h2>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={rateData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                    <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} domain={[0, 0.5]} />
-                    <Tooltip
-                      {...tooltipStyle}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      formatter={(value: any, _name: any, props: any) =>
-                        [`$${Number(value).toFixed(2)}/kWh`, props?.payload?.tier || "Rate"]
-                      }
-                    />
-                    <Bar
-                      dataKey="rate"
-                      radius={[2, 2, 0, 0]}
-                      name="Rate"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      shape={(props: any) => {
-                        const tier = props.payload?.tier;
-                        const fill = tier === "Peak" ? "#ef4444" : tier === "Part-Peak" ? "#f59e0b" : "#3b82f6";
-                        return <rect {...props} fill={fill} />;
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex justify-center gap-4 mt-1 text-[10px]">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />Peak</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Part-Peak</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" />Off-Peak</span>
-                </div>
-              </div>
-            </>
+                  ) : (
+                    <>
+                      <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
+                      <Bar dataKey="Peak" stackId="c" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="Part-Peak" stackId="c" fill="#f87171" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="Off-Peak" stackId="c" fill="#fca5a5" radius={[2, 2, 0, 0]} />
+                    </>
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
 
-          {/* === Multi-day charts (weekly/monthly/yearly) === */}
-          {showMultiDayCharts && (
-            <>
-              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Self-Power Savings</h2>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={savingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                    <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
-                    <Tooltip {...tooltipStyle} formatter={(value: number) => fmt(value)} />
-                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
-                    <Bar dataKey="Self-Power" stackId="savings" fill="#166534" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Battery" stackId="savings" fill="#4ade80" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Export Credits" stackId="savings" fill="#6b7280" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+          {/* Rate schedule (daily only) */}
+          {showHourlyCharts && (
+            <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
+              <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Rate Schedule</h2>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={rateData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
+                  <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} domain={[0, 0.5]} />
+                  <Tooltip
+                    {...tooltipStyle}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    formatter={(value: any, _name: any, props: any) =>
+                      [`$${Number(value).toFixed(2)}/kWh`, props?.payload?.tier || "Rate"]
+                    }
+                  />
+                  <Bar
+                    dataKey="rate"
+                    radius={[2, 2, 0, 0]}
+                    name="Rate"
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    shape={(props: any) => {
+                      const tier = props.payload?.tier;
+                      const fill = tier === "Peak" ? "#ef4444" : tier === "Part-Peak" ? "#f59e0b" : "#3b82f6";
+                      return <rect {...props} fill={fill} />;
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex justify-center gap-4 mt-1 text-[10px]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />Peak</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Part-Peak</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" />Off-Peak</span>
               </div>
-
-              <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Cost Breakdown</h2>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                    <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
-                    <Tooltip {...tooltipStyle} formatter={(value: number) => fmt(value)} />
-                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
-                    <Bar dataKey="Peak" stackId="cost" fill="#ef4444" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Part-Peak" stackId="cost" fill="#f87171" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="Off-Peak" stackId="cost" fill="#fca5a5" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </>
+            </div>
           )}
+
         </div>
       </div>
     </div>
