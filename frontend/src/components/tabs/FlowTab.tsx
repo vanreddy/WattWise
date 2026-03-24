@@ -200,6 +200,7 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
           dailyData={daily}
           days={dateRange.days}
           sankeyFlows={sankeyFlows}
+          animated
         />
 
         <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />
