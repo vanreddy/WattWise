@@ -290,10 +290,10 @@ async def intervals(
     ]
 
 
-def _fetch_tesla_calendar_history(end_date_iso: str) -> dict:
+def _fetch_tesla_calendar_history(end_date_iso: str, tesla_email: str = None, account_id: UUID = None) -> dict:
     """Synchronous Tesla API call — returns calendar_history energy data."""
     from backend.poller import _get_tesla_client
-    with _get_tesla_client() as tesla:
+    with _get_tesla_client(tesla_email, account_id) as tesla:
         if not tesla.authorized:
             raise RuntimeError("Tesla not authorized")
         products = tesla.battery_list() + tesla.solar_list()
@@ -353,15 +353,16 @@ async def sankey(
 
     # Try Tesla calendar_history API (metered energy — most accurate)
     try:
-        from backend.poller import _load_cache_from_db
-        await _load_cache_from_db(pool)
+        # Get tesla_email for this account
+        acct_row = await pool.fetchrow("SELECT tesla_email FROM accounts WHERE id = $1", account_id)
+        tesla_email = acct_row["tesla_email"] if acct_row else None
 
         # Fetch each day's calendar_history and combine
         all_series = []
         d = start_day
         while d <= end_day:
             end_iso = datetime.combine(d, time(23, 59, 59), tzinfo=LOCAL_TZ).isoformat()
-            data = await asyncio.to_thread(_fetch_tesla_calendar_history, end_iso)
+            data = await asyncio.to_thread(_fetch_tesla_calendar_history, end_iso, tesla_email, account_id)
             series = data.get("time_series", data.get("response", {}).get("time_series", []))
             all_series.extend(series)
             d += timedelta(days=1)
