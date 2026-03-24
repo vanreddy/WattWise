@@ -257,19 +257,29 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
   const showMultiDayCharts = !isDaily && daily.length > 1;
   const showHourlyCharts = isDaily && hourly.length > 0;
 
-  const sharedMax = useMemo(() => {
+  const savingsMax = useMemo(() => {
     let max = 0;
     const check = (v: number) => { if (v > max) max = v; };
     if (showHourlyCharts) {
       for (const d of hourlySavingsData) check((d["Self-Power"] || 0) + (d.Powerwall || 0) + (d["Export Credits"] || 0));
-      for (const d of hourlyCostData) check(d.Cost);
     }
     if (showMultiDayCharts) {
       for (const d of savingsData) check((d["Self-Power"] || 0) + (d.Powerwall || 0) + (d["Export Credits"] || 0));
+    }
+    return Math.ceil(max * 1.1 * 10) / 10;
+  }, [showHourlyCharts, showMultiDayCharts, hourlySavingsData, savingsData]);
+
+  const costMax = useMemo(() => {
+    let max = 0;
+    const check = (v: number) => { if (v > max) max = v; };
+    if (showHourlyCharts) {
+      for (const d of hourlyCostData) check(d.Cost);
+    }
+    if (showMultiDayCharts) {
       for (const d of costData) check((d.Peak || 0) + (d["Part-Peak"] || 0) + (d["Off-Peak"] || 0));
     }
     return Math.ceil(max * 1.1 * 10) / 10;
-  }, [showHourlyCharts, showMultiDayCharts, hourlySavingsData, hourlyCostData, savingsData, costData]);
+  }, [showHourlyCharts, showMultiDayCharts, hourlyCostData, costData]);
 
   const tooltipStyle = {
     contentStyle: { backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 },
@@ -314,7 +324,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                 <BarChart data={showHourlyCharts ? hourlySavingsData : savingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                  <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <YAxis domain={[0, savingsMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
                   <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
                   <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
                   <Bar dataKey="Self-Power" stackId="s" fill="#166534" radius={[0, 0, 0, 0]} />
@@ -347,7 +357,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
                 <BarChart data={showHourlyCharts ? hourlyCostData : costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                  <YAxis domain={[0, sharedMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <YAxis domain={[0, costMax || 1]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
                   <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
                   {showHourlyCharts ? (
                     <Bar dataKey="Cost" fill="#ef4444" radius={[2, 2, 0, 0]} />
