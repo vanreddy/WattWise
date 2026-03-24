@@ -314,7 +314,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
     battery_discharge: { stroke: "#34d399", fill: "#34d399b3" },
     home:              { stroke: "#60a5fa", fill: "#60a5fab3" },
     ev:                { stroke: "#a78bfa", fill: "#a78bfab3" },
-    grid_export:       { stroke: "#fb923c", fill: "#fb923cb3" },
+    grid_export:       { stroke: "#f87171", fill: "#f87171b3" },
     battery_charge:    { stroke: "#2dd4bf", fill: "#2dd4bfb3" },
   };
 

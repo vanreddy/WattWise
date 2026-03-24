@@ -25,7 +25,7 @@ const nodeColors: Record<string, string> = {
   Powerwall: "#34d399",
   Home: "#60a5fa",
   EV: "#a78bfa",
-  "Grid Export": "#fb923c",
+  "Grid Export": "#f87171",
 };
 
 const displayNames: Record<string, string> = {
