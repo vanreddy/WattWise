@@ -128,27 +128,25 @@ async def lifespan(app: FastAPI):
 
     scheduler.start()
 
-    # Backfill any gaps from downtime — fetch last 2 days for all accounts in background
     import asyncio
     from backend.backfill import backfill_account
 
-    async def _fill_gaps():
-        logger.info("Gap-fill: starting 2-day backfill for all accounts...")
+    # Simple startup gap-fill: backfill last 2 days for all accounts
+    async def _startup_fill():
+        await asyncio.sleep(10)  # Let poller run first
+        logger.info("Startup gap-fill: backfilling last 2 days for all accounts...")
         try:
             accounts = await pool.fetch("SELECT id FROM accounts")
-            logger.info("Gap-fill: found %d accounts", len(accounts))
             for acct in accounts:
                 try:
-                    logger.info("Gap-fill: backfilling account %s", acct["id"])
                     await backfill_account(pool, acct["id"], days=2, include_today=True)
-                    logger.info("Gap-fill: complete for account %s", acct["id"])
+                    logger.info("Startup gap-fill: done for account %s", acct["id"])
                 except Exception:
-                    logger.exception("Gap-fill: failed for account %s", acct["id"])
+                    logger.exception("Startup gap-fill: failed for account %s", acct["id"])
         except Exception:
-            logger.exception("Gap-fill: startup task failed")
+            logger.exception("Startup gap-fill: task failed")
 
-    # Store references to prevent garbage collection
-    gap_fill_task = asyncio.create_task(_fill_gaps())
+    gap_fill_task = asyncio.create_task(_startup_fill())
 
     # Telegram bot listener (long-polling for /start commands)
     bot_task = asyncio.create_task(run_bot_polling(pool))

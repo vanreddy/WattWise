@@ -468,8 +468,12 @@ async def tesla_oauth_complete(body: TeslaCompleteRequest, request: Request, use
         logger.exception("Tesla OAuth exchange failed: %s", exc)
         raise HTTPException(status_code=400, detail=f"Tesla authentication failed: {exc}")
 
-    # Save token cache to DB
+    # Save token cache to DB and verify in-memory cache is updated
+    cache_key = str(account_id)
+    logger.info("Tesla OAuth: in-memory cache keys after fetch_token: %s", list(_token_caches.keys()))
+    logger.info("Tesla OAuth: cache for %s has %d bytes", cache_key, len(str(_token_caches.get(cache_key, {}))))
     await _save_cache_to_db(pool, account_id)
+    logger.info("Tesla OAuth: token saved to DB for account %s", account_id)
 
     # Update account with site metadata
     await pool.execute(
@@ -509,3 +513,21 @@ async def backfill_status(request: Request, user: dict = Depends(get_current_use
         **status,
         "days_in_db": days_in_db or 0,
     }
+
+
+# --------------- Manual backfill trigger ---------------
+
+@router.post("/account/backfill/trigger")
+async def trigger_backfill(request: Request, user: dict = Depends(get_current_user)):
+    """Manually trigger a backfill for the current account."""
+    import asyncio
+    account_id = UUID(user["account_id"])
+    pool = request.app.state.pool
+
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    days = min(int(body.get("days", 3)), 365)
+    include_today = body.get("include_today", True)
+
+    asyncio.create_task(backfill_account(pool, account_id, days=days, include_today=include_today))
+
+    return {"status": "started", "days": days, "include_today": include_today}
