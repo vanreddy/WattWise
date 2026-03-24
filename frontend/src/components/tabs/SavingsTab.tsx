@@ -269,7 +269,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
 
               {/* Rate schedule by hour */}
               <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
-                <h2 className="text-sm font-semibold text-gray-400 mb-2">Rate Schedule ($/kWh)</h2>
+                <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Rate Schedule</h2>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <BarChart data={rateData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
