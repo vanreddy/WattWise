@@ -38,9 +38,12 @@ async def summary(request: Request, user: dict = Depends(get_current_user)):
     pool = request.app.state.pool
     account_id = UUID(user["account_id"])
 
-    # Latest interval
+    # Latest interval with actual data (skip zero rows from incomplete polls)
     latest = await pool.fetchrow(
-        "SELECT * FROM tesla_intervals WHERE account_id = $1 ORDER BY ts DESC LIMIT 1",
+        """SELECT * FROM tesla_intervals
+           WHERE account_id = $1
+             AND (solar_w != 0 OR home_w != 0 OR grid_w != 0 OR battery_w != 0)
+           ORDER BY ts DESC LIMIT 1""",
         account_id,
     )
 
