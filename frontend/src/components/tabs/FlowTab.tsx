@@ -518,20 +518,11 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySumm
       <h3 className="text-sm font-semibold text-gray-300 mb-1">
         Energy Flow by {groupBy === "month" ? "Month" : "Day"}
       </h3>
-      <div className="flex justify-between text-[10px] text-gray-500 mb-3">
-        <div className="flex gap-2 items-center">
-          <span className="text-gray-400 font-medium">Sources ↑</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#facc15" }} /> Solar</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
-        </div>
-        <div className="flex gap-2 items-center">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#a78bfa" }} /> EV</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
-          <span className="text-gray-400 font-medium">Sinks ↓</span>
-        </div>
+      <div className="flex justify-center gap-3 text-[10px] text-gray-500 mb-2">
+        <span className="text-gray-400 font-medium">Sources ↑</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#facc15" }} /> Solar</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
       </div>
       <ResponsiveContainer width="100%" height={350}>
         <AreaChart data={chartData} margin={{ top: 10, right: 40, bottom: 0, left: 40 }} stackOffset="sign">
@@ -552,6 +543,13 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySumm
           <Area type="monotone" dataKey="batteryCharge" stackId="sink" stroke="#34d399" fill="#34d399" fillOpacity={0.15} strokeWidth={2} name="Powerwall Charge" />
         </AreaChart>
       </ResponsiveContainer>
+      <div className="flex justify-center gap-3 text-[10px] text-gray-500 mt-2">
+        <span className="text-gray-400 font-medium">Sinks ↓</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#a78bfa" }} /> EV</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
+      </div>
     </div>
   );
 }
