@@ -402,7 +402,8 @@ export default function FlowTab({
     onSwipedLeft: () => navigate(-1),
     onSwipedRight: () => navigate(1),
     trackMouse: false,
-    delta: 50,
+    delta: 40,
+    preventScrollOnSwipe: true,
   });
 
   const handleModeChange = (newMode: Mode) => {
