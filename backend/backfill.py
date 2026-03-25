@@ -95,19 +95,31 @@ def _fetch_one_day(site, day_offset: int) -> List[Dict]:
 async def _insert_intervals_for_account(
     pool: asyncpg.Pool, intervals: List[Dict], account_id: UUID,
 ) -> int:
-    """Insert intervals for a specific account. Returns count inserted."""
-    count = 0
+    """Batch insert intervals for a specific account. Returns count inserted."""
+    if not intervals:
+        return 0
+
+    # Build rows for batch insert
+    rows = []
     for iv in intervals:
-        ts = datetime.fromisoformat(iv["ts"])
-        await pool.execute(
+        rows.append((
+            datetime.fromisoformat(iv["ts"]),
+            iv["solar_w"], iv["home_w"], iv["grid_w"],
+            iv["battery_w"], iv["battery_pct"], iv["vehicle_w"],
+            account_id,
+        ))
+
+    # Use a single connection for the batch to avoid pool contention
+    async with pool.acquire() as conn:
+        # Batch insert using executemany — much faster than individual executes
+        await conn.executemany(
             """INSERT INTO tesla_intervals (ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT (account_id, ts) DO NOTHING""",
-            ts, iv["solar_w"], iv["home_w"], iv["grid_w"],
-            iv["battery_w"], iv["battery_pct"], iv["vehicle_w"], account_id,
+            rows,
         )
-        count += 1
-    return count
+
+    return len(rows)
 
 
 async def _aggregate_day_for_account(

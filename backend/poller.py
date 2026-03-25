@@ -8,6 +8,7 @@ Tesla token caches from kv_store.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -285,15 +286,12 @@ async def check_solar_surplus_alert(
     return True
 
 
-async def poll_and_check(pool: asyncpg.Pool) -> None:
-    """Poll all accounts."""
-    accounts = await pool.fetch("SELECT id, tesla_email FROM accounts")
+MAX_CONCURRENT_POLLS = 10  # concurrency limit for parallel polling
 
-    if not accounts:
-        logger.warning("No accounts found in DB — nothing to poll")
-        return
 
-    for acct in accounts:
+async def _poll_one_account(pool: asyncpg.Pool, acct, sem: asyncio.Semaphore) -> None:
+    """Poll a single account with semaphore-limited concurrency."""
+    async with sem:
         try:
             await _load_cache_from_db(pool, acct["id"])
             data = await poll_once(pool, acct["id"], acct["tesla_email"])
@@ -301,6 +299,18 @@ async def poll_and_check(pool: asyncpg.Pool) -> None:
                 await check_solar_surplus_alert(pool, data, acct["id"])
         except Exception:
             logger.exception("Error polling account %s (%s)", acct["id"], acct["tesla_email"])
+
+
+async def poll_and_check(pool: asyncpg.Pool) -> None:
+    """Poll all accounts in parallel (up to MAX_CONCURRENT_POLLS at a time)."""
+    accounts = await pool.fetch("SELECT id, tesla_email FROM accounts")
+
+    if not accounts:
+        logger.warning("No accounts found in DB — nothing to poll")
+        return
+
+    sem = asyncio.Semaphore(MAX_CONCURRENT_POLLS)
+    await asyncio.gather(*[_poll_one_account(pool, acct, sem) for acct in accounts])
 
 
 # --- CLI for first-time auth ---
