@@ -224,6 +224,24 @@ export default function SettingsPage() {
                 {user.energy_site_id || "—"}
               </span>
             </div>
+            {user.zip_code && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Location</span>
+                <span>{user.zip_code}</span>
+              </div>
+            )}
+            {user.solar_capacity_kw && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Solar Capacity</span>
+                <span>{user.solar_capacity_kw} kW</span>
+              </div>
+            )}
+            {user.rate_plan_name && (
+              <div className="flex justify-between items-start">
+                <span className="text-gray-500 shrink-0">Rate Plan</span>
+                <span className="text-right text-xs text-gray-300 ml-4">{user.rate_plan_name}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <div>
                 <span className="text-gray-500">Tesla Connection</span>

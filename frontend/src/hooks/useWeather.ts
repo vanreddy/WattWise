@@ -49,17 +49,19 @@ function getTimeOfDay(isDay: boolean): TimeOfDay {
   return isDay ? "day" : "night";
 }
 
-// Alamo, CA coordinates
-const LAT = 37.85;
-const LON = -122.03;
+// Default coordinates (Alamo, CA) — overridden by user profile lat/lon
+const DEFAULT_LAT = 37.85;
+const DEFAULT_LON = -122.03;
 
-export function useWeather(): WeatherData | null {
+export function useWeather(lat?: number | null, lon?: number | null): WeatherData | null {
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const useLat = lat ?? DEFAULT_LAT;
+  const useLon = lon ?? DEFAULT_LON;
 
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FLos_Angeles`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${useLat}&longitude=${useLon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FLos_Angeles`;
         const res = await fetch(url);
         if (!res.ok) return;
         const data = await res.json();
@@ -91,7 +93,7 @@ export function useWeather(): WeatherData | null {
     // Refresh every 15 minutes
     const id = setInterval(fetchWeather, 15 * 60 * 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [useLat, useLon]);
 
   return weather;
 }

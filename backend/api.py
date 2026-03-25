@@ -559,24 +559,93 @@ async def reports(
 async def rates(
     request: Request,
     for_date: Optional[str] = Query(default=None, alias="date"),
+    user: dict = Depends(get_current_user),
 ):
-    """Return current TOU rate schedule. Optionally pass ?date= to get rates for a specific date's season."""
+    """Return TOU rate schedule from stored Tesla tariff, falling back to hardcoded rates."""
+    pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
+
     if for_date:
         dt = datetime.fromisoformat(for_date + "T12:00:00")
         summer = is_summer(dt)
     else:
         summer = is_summer(datetime.now(LOCAL_TZ))
 
-    # Build hourly rate schedule for a representative day
+    # Try to load stored tariff from account
+    tariff_json = await pool.fetchval(
+        "SELECT tariff_content FROM accounts WHERE id = $1", account_id
+    )
+
+    if tariff_json:
+        tariff = json.loads(tariff_json) if isinstance(tariff_json, str) else tariff_json
+        energy_charges = tariff.get("energy_charges", {})
+        season_key = "Summer" if summer else "Winter"
+        season_rates = energy_charges.get(season_key, {})
+
+        # Map Tesla rate keys to our format
+        mapped_rates = {}
+        if "ON_PEAK" in season_rates:
+            mapped_rates["peak"] = round(season_rates["ON_PEAK"], 5)
+        if "PARTIAL_PEAK" in season_rates:
+            mapped_rates["part_peak"] = round(season_rates["PARTIAL_PEAK"], 5)
+        if "OFF_PEAK" in season_rates:
+            mapped_rates["off_peak"] = round(season_rates["OFF_PEAK"], 5)
+
+        # Build hourly schedule from Tesla TOU periods
+        seasons = tariff.get("seasons", {})
+        season_def = seasons.get(season_key, {})
+        tou_periods = season_def.get("tou_periods", {})
+
+        schedule = []
+        for h in range(24):
+            period = "off_peak"
+            for period_name, windows in tou_periods.items():
+                for w in windows:
+                    if w.get("fromHour", 0) <= h < w.get("toHour", 0):
+                        if period_name == "ON_PEAK":
+                            period = "peak"
+                        elif period_name == "PARTIAL_PEAK":
+                            period = "part_peak"
+                        elif period_name == "OFF_PEAK":
+                            period = "off_peak"
+            rate = mapped_rates.get(period, mapped_rates.get("off_peak", 0.30))
+            schedule.append({"hour": h, "period": period, "rate": round(rate, 3)})
+
+        # Get export rate from sell_tariff if available
+        export_rate = EXPORT_RATE
+        sell_tariff = tariff.get("sell_tariff", {})
+        if sell_tariff:
+            sell_charges = sell_tariff.get("energy_charges", {})
+            # Average the sell rates for a rough export rate
+            all_sell = []
+            for month_charges in sell_charges.values():
+                if isinstance(month_charges, dict):
+                    all_sell.extend(month_charges.values())
+            if all_sell:
+                export_rate = round(sum(all_sell) / len(all_sell), 5)
+
+        return {
+            "season": "summer" if summer else "winter",
+            "plan_name": tariff.get("name"),
+            "utility": tariff.get("utility"),
+            "source": "tesla",
+            "winter_rates": {k: round(v, 5) for k, v in (json.loads(tariff_json) if isinstance(tariff_json, str) else tariff_json).get("energy_charges", {}).get("Winter", {}).items()} if energy_charges.get("Winter") else WINTER_RATES,
+            "summer_rates": {k: round(v, 5) for k, v in energy_charges.get("Summer", {}).items()} if energy_charges.get("Summer") else SUMMER_RATES,
+            "export_rate": export_rate,
+            "schedule": schedule,
+        }
+
+    # Fallback to hardcoded rates
     schedule = []
     for h in range(24):
-        dt_repr = datetime(2026, 7 if summer else 1, 1, h, 0)  # weekday for summer peak
+        dt_repr = datetime(2026, 7 if summer else 1, 1, h, 0)
         period = get_tou_period(dt_repr)
         rate = get_import_rate(dt_repr)
         schedule.append({"hour": h, "period": period, "rate": round(rate, 3)})
 
     return {
         "season": "summer" if summer else "winter",
+        "source": "hardcoded",
         "winter_rates": WINTER_RATES,
         "summer_rates": SUMMER_RATES,
         "export_rate": EXPORT_RATE,

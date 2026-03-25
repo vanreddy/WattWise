@@ -17,7 +17,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabId>("flow");
   const [showA2HS, setShowA2HS] = useState(false);
   const data = useDashboardData();
-  const weather = useWeather();
+  const weather = useWeather(user?.latitude, user?.longitude);
   const handleA2HSDone = useCallback(() => setShowA2HS(false), []);
 
   // Show A2HS prompt once after auth resolves, mobile only, if not already seen/installed

@@ -10,6 +10,11 @@ export interface AuthUser {
   site_name: string | null;
   energy_site_id: string | null;
   tesla_connected: boolean;
+  zip_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  solar_capacity_kw: number | null;
+  rate_plan_name: string | null;
 }
 
 export function getAccessToken(): string | null {

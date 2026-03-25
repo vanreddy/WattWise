@@ -40,8 +40,79 @@ ACTION_MIN_DAYS = 3           # pattern must hold 3+ of last 7 days
 ACTION_MIN_MONTHLY_SAVING = 5  # estimated saving > $5/month
 
 
+class TariffLookup:
+    """Resolve import rate and TOU period from a Tesla tariff_content dict."""
+
+    def __init__(self, tariff: dict | None):
+        self.tariff = tariff
+        self._season_cache: dict[str, dict] = {}
+        if tariff:
+            self.energy_charges = tariff.get("energy_charges", {})
+            self.seasons = tariff.get("seasons", {})
+            self.sell_tariff = tariff.get("sell_tariff", {})
+        else:
+            self.energy_charges = {}
+            self.seasons = {}
+            self.sell_tariff = {}
+
+    def _season_key(self, dt: datetime) -> str:
+        return "Summer" if 6 <= dt.month <= 9 else "Winter"
+
+    def get_import_rate(self, dt: datetime) -> float:
+        if not self.tariff:
+            return get_import_rate(dt)
+        season = self._season_key(dt)
+        rates = self.energy_charges.get(season, {})
+        period = self.get_tou_period(dt)
+        key_map = {"peak": "ON_PEAK", "part_peak": "PARTIAL_PEAK", "off_peak": "OFF_PEAK"}
+        return rates.get(key_map.get(period, "OFF_PEAK"), 0.30)
+
+    def get_tou_period(self, dt: datetime) -> str:
+        if not self.tariff:
+            return get_tou_period(dt)
+        season = self._season_key(dt)
+        season_def = self.seasons.get(season, {})
+        tou_periods = season_def.get("tou_periods", {})
+        h = dt.hour
+        for period_name, windows in tou_periods.items():
+            for w in windows:
+                if w.get("fromHour", 0) <= h < w.get("toHour", 0):
+                    if period_name == "ON_PEAK":
+                        return "peak"
+                    elif period_name == "PARTIAL_PEAK":
+                        return "part_peak"
+                    elif period_name == "OFF_PEAK":
+                        return "off_peak"
+        return "off_peak"
+
+    def get_export_rate(self, dt: datetime) -> float:
+        if not self.sell_tariff:
+            return get_export_rate(dt)
+        month_name = dt.strftime("%B")
+        charges = self.sell_tariff.get("energy_charges", {}).get(month_name, {})
+        h = dt.hour
+        dow = dt.weekday()  # 0=Mon
+        key = f"hour_{h}_{'weekday' if dow < 5 else 'weekend'}"
+        return charges.get(key, 0.068)
+
+
+async def _load_tariff(pool: asyncpg.Pool, account_id: UUID) -> TariffLookup:
+    """Load stored Tesla tariff for an account, or return fallback."""
+    import json as _json
+    tariff_json = await pool.fetchval(
+        "SELECT tariff_content FROM accounts WHERE id = $1", account_id
+    )
+    if tariff_json:
+        tariff = _json.loads(tariff_json) if isinstance(tariff_json, str) else tariff_json
+        return TariffLookup(tariff)
+    return TariffLookup(None)
+
+
 async def aggregate_day(pool: asyncpg.Pool, day: date, account_id: UUID) -> dict:
     """Aggregate tesla_intervals for a single day into a summary dict."""
+
+    # Load tariff for this account (from Tesla or fallback to hardcoded)
+    tariff = await _load_tariff(pool, account_id)
 
     # Fetch all intervals for the day (in Pacific time)
     start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
@@ -83,8 +154,8 @@ async def aggregate_day(pool: asyncpg.Pool, day: date, account_id: UUID) -> dict
 
     for row in rows:
         ts_local = row["ts"].astimezone()
-        rate = get_import_rate(ts_local)
-        period = get_tou_period(ts_local)
+        rate = tariff.get_import_rate(ts_local)
+        period = tariff.get_tou_period(ts_local)
 
         solar_kwh = max(row["solar_w"], 0) * INTERVAL_HOURS / 1000
         solar_generated_kwh += solar_kwh
@@ -135,7 +206,17 @@ async def aggregate_day(pool: asyncpg.Pool, day: date, account_id: UUID) -> dict
                 battery_depletion_hour = ts_local.hour + ts_local.minute / 60
 
     total_cost = peak_cost + part_peak_cost + off_peak_cost
-    export_credit = total_export_kwh * get_export_rate()
+    # Compute export credit — use per-interval rate if tariff has sell_tariff
+    if tariff.sell_tariff:
+        export_credit = 0.0
+        for row in rows:
+            ts_local = row["ts"].astimezone()
+            grid_w = row["grid_w"]
+            if grid_w < 0:
+                export_kwh = abs(grid_w) * INTERVAL_HOURS / 1000
+                export_credit += export_kwh * tariff.get_export_rate(ts_local)
+    else:
+        export_credit = total_export_kwh * get_export_rate()
     solar_self_consumed_kwh = solar_generated_kwh - total_export_kwh
     battery_coverage = (
         (peak_intervals_covered / peak_intervals_total * 100)

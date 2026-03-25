@@ -173,7 +173,9 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
     pool = request.app.state.pool
     row = await pool.fetchrow(
         """SELECT u.id, u.email, u.role, u.account_id, u.created_at,
-                  a.site_name, a.energy_site_id
+                  a.site_name, a.energy_site_id,
+                  a.zip_code, a.latitude, a.longitude,
+                  a.solar_capacity_kw, a.rate_plan_name
            FROM users u
            JOIN accounts a ON a.id = u.account_id
            WHERE u.id = $1""",
@@ -197,6 +199,11 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
         "site_name": row["site_name"],
         "energy_site_id": row["energy_site_id"],
         "tesla_connected": tesla_cache is not None,
+        "zip_code": row["zip_code"],
+        "latitude": row["latitude"],
+        "longitude": row["longitude"],
+        "solar_capacity_kw": row["solar_capacity_kw"],
+        "rate_plan_name": row["rate_plan_name"],
     }
 
 
@@ -303,34 +310,66 @@ async def tesla_oauth_complete(body: TeslaCompleteRequest, request: Request, use
                 code_verifier=body.code_verifier,
             )
 
-            # Fetch site info
+            # Fetch site info + SITE_CONFIG for metadata
             site_name = None
             energy_site_id = None
+            zip_code = None
+            latitude = None
+            longitude = None
+            solar_capacity_kw = None
+            rate_plan_name = None
+            tariff_content = None
+
             products = tesla.battery_list() + tesla.solar_list()
             if products:
                 site = products[0]
                 site_name = site.get("site_name")
                 energy_site_id = str(site.get("energy_site_id", ""))
-                # Log all available site fields for discovery
-                logger.info("Tesla site fields: %s", {k: v for k, v in site.items() if not callable(v) and k != 'api'})
+
+                # Fetch detailed site config for zip, rates, capacity
+                try:
+                    config = site.api("SITE_CONFIG")["response"]
+                    address = config.get("address", {})
+                    zip_code = address.get("zip")
+                    geo = config.get("geolocation", {})
+                    latitude = geo.get("latitude")
+                    longitude = geo.get("longitude")
+                    nameplate = config.get("nameplate_power")
+                    if nameplate:
+                        solar_capacity_kw = round(nameplate / 1000, 2)
+                    tariff = config.get("tariff_content", {})
+                    if tariff:
+                        rate_plan_name = tariff.get("name")
+                        tariff_content = tariff
+                    logger.info("Tesla SITE_CONFIG: zip=%s lat=%s lon=%s solar=%.1fkW plan=%s",
+                                zip_code, latitude, longitude, solar_capacity_kw or 0, rate_plan_name)
+                except Exception as cfg_err:
+                    logger.warning("Failed to fetch SITE_CONFIG: %s", cfg_err)
     except Exception as exc:
         logger.exception("Tesla OAuth exchange failed: %s", exc)
         raise HTTPException(status_code=400, detail=f"Tesla authentication failed: {exc}")
 
-    # Save token cache to DB and verify in-memory cache is updated
-    cache_key = str(account_id)
-    logger.info("Tesla OAuth: in-memory cache keys after fetch_token: %s", list(_token_caches.keys()))
-    logger.info("Tesla OAuth: cache for %s has %d bytes", cache_key, len(str(_token_caches.get(cache_key, {}))))
+    # Save token cache to DB
     await _save_cache_to_db(pool, account_id)
     logger.info("Tesla OAuth: token saved to DB for account %s", account_id)
 
-    # Update account with site metadata
+    # Update account with all site metadata
+    import json as _json
     await pool.execute(
-        "UPDATE accounts SET site_name = $1, energy_site_id = $2 WHERE id = $3",
-        site_name, energy_site_id, account_id,
+        """UPDATE accounts SET
+            site_name = $1, energy_site_id = $2,
+            zip_code = $3, latitude = $4, longitude = $5,
+            solar_capacity_kw = $6, rate_plan_name = $7,
+            tariff_content = $8
+        WHERE id = $9""",
+        site_name, energy_site_id,
+        zip_code, latitude, longitude,
+        solar_capacity_kw, rate_plan_name,
+        _json.dumps(tariff_content) if tariff_content else None,
+        account_id,
     )
 
-    logger.info("Tesla connected: account=%s site=%s", account_id, site_name)
+    logger.info("Tesla connected: account=%s site=%s zip=%s plan=%s", account_id, site_name, zip_code, rate_plan_name)
 
     # Kick off full historical backfill in the background (all available history)
     import asyncio
