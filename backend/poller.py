@@ -295,8 +295,7 @@ async def _poll_one_account(pool: asyncpg.Pool, acct, sem: asyncio.Semaphore) ->
         try:
             await _load_cache_from_db(pool, acct["id"])
             data = await poll_once(pool, acct["id"], acct["tesla_email"])
-            if data:
-                await check_solar_surplus_alert(pool, data, acct["id"])
+            pass  # alerts disabled
         except Exception:
             logger.exception("Error polling account %s (%s)", acct["id"], acct["tesla_email"])
 

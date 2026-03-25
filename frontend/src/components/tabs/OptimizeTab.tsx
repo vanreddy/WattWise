@@ -412,35 +412,6 @@ export default function OptimizeTab({ summary, daily, alerts }: Props) {
       )}
 
       {/* ── Alerts ── */}
-      <section>
-        <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
-          <Bell size={14} className="text-yellow-400" />
-          Recent Alerts
-        </h2>
-        {alerts.length === 0 ? (
-          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-            <p className="text-sm text-gray-500">No recent alerts</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {alerts.slice(0, 8).map((alert) => (
-              <div
-                key={alert.id}
-                className={`rounded-xl p-3 border-l-2 ${alertColor(alert.alert_type)}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs text-gray-300 leading-relaxed flex-1">
-                    {alert.message}
-                  </p>
-                  <span className="text-[10px] text-gray-500 whitespace-nowrap shrink-0">
-                    {timeAgo(alert.fired_at)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }

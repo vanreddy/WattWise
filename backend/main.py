@@ -131,11 +131,7 @@ async def lifespan(app: FastAPI):
         run_daily_aggregation, "cron", hour=6, minute=50, args=[pool], id="daily",
     )
 
-    # Weekly summary — Sunday 5:50pm
-    scheduler.add_job(
-        run_weekly_summary, "cron", day_of_week="sun", hour=17, minute=50,
-        args=[pool], id="weekly",
-    )
+    # Weekly summary disabled (no notification channel)
 
     scheduler.start()
 

@@ -515,7 +515,7 @@ async def _run_daily_for_account(pool: asyncpg.Pool, yesterday: date, account_id
         **mtd,
     }
 
-    await send_daily_report(report_data, pool=pool, account_id=account_id)
+    # Daily report notifications disabled
 
     # Log the report
     await pool.execute(
