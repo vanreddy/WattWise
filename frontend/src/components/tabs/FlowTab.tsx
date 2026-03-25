@@ -214,7 +214,7 @@ function BatteryPctChart({ intervalData, isToday }: { intervalData: IntervalPoin
   );
 }
 
-function SelfPoweredByDayChart({ daily }: { daily: DailySummary[] }) {
+function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[]; intervalData: IntervalPoint[] }) {
   if (daily.length < 2) return null;
 
   const sorted = [...daily].sort((a, b) => a.day.localeCompare(b.day));
@@ -226,20 +226,36 @@ function SelfPoweredByDayChart({ daily }: { daily: DailySummary[] }) {
   const barW = Math.min(40, chartW / sorted.length * 0.7);
   const gap = (chartW - barW * sorted.length) / (sorted.length + 1);
 
-  const bars = sorted.map((d, i) => {
-    // Solar direct to home
-    const solarToHome = d.solar_self_consumed_kwh;
-    // Grid import to home
-    const gridToHome = d.total_import_kwh;
-    // Battery to home = total home consumption - solar direct - grid import
-    // Total home ≈ solar generated - exported + grid imported (energy balance)
-    const totalHome = d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh;
-    const battToHome = Math.max(0, totalHome - solarToHome - gridToHome);
-    const totalConsumption = solarToHome + battToHome + gridToHome;
+  // Compute per-day Sankey flows from interval data for accurate solar/battery split
+  const IH = 5 / 60 / 1000; // 5-min interval → kWh
+  const dayFlows = new Map<string, { solarToHome: number; battToHome: number; gridToHome: number }>();
+  for (const pt of intervalData) {
+    const dayKey = pt.ts.slice(0, 10); // "YYYY-MM-DD"
+    if (!dayFlows.has(dayKey)) dayFlows.set(dayKey, { solarToHome: 0, battToHome: 0, gridToHome: 0 });
+    const f = dayFlows.get(dayKey)!;
+    const solar = Math.max(0, pt.solar_w) * IH;
+    const home = Math.max(0, pt.home_w) * IH;
+    const gridImp = Math.max(0, pt.grid_w) * IH;
+    const batDis = Math.max(0, pt.battery_w) * IH;
+    const s2h = Math.min(solar, home);
+    f.solarToHome += s2h;
+    const remainHome = Math.max(0, home - s2h);
+    const b2h = Math.min(batDis, remainHome);
+    f.battToHome += b2h;
+    f.gridToHome += Math.max(0, remainHome - b2h);
+  }
 
-    const solarPct = totalConsumption > 0 ? (solarToHome / totalConsumption) * 100 : 0;
-    const battPct = totalConsumption > 0 ? (battToHome / totalConsumption) * 100 : 0;
-    const totalPct = solarPct + battPct;
+  const bars = sorted.map((d, i) => {
+    const flows = dayFlows.get(d.day);
+    let solarPct = 0, battPct = 0, totalPct = 0;
+    if (flows) {
+      const total = flows.solarToHome + flows.battToHome + flows.gridToHome;
+      if (total > 0) {
+        solarPct = (flows.solarToHome / total) * 100;
+        battPct = (flows.battToHome / total) * 100;
+        totalPct = solarPct + battPct;
+      }
+    }
     const x = padding.left + gap + i * (barW + gap);
     const dayLabel = new Date(d.day + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
     return { x, solarPct, battPct, totalPct, dayLabel, day: d.day };
@@ -436,7 +452,7 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
 
         {/* Weekly: Self-Powered % by day */}
-        {mode === "weekly" && <SelfPoweredByDayChart daily={daily} />}
+        {(mode === "weekly" || mode === "monthly") && <SelfPoweredByDayChart daily={daily} intervalData={intervalData} />}
 
         <SankeyChart
           hourlyData={hourly}
