@@ -302,6 +302,103 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
   );
 }
 
+function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[]; intervalData: IntervalPoint[] }) {
+  if (daily.length < 28) return null; // need at least ~1 month
+
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const maxH = 220;
+  const padding = { left: 40, right: 16, top: 16, bottom: 40 };
+  const w = 600;
+  const chartH = maxH - padding.top - padding.bottom;
+
+  // Compute per-day flows from intervals
+  const IH = 5 / 60 / 1000;
+  const dayFlows = new Map<string, { solarToHome: number; battToHome: number; gridToHome: number }>();
+  for (const pt of intervalData) {
+    const dayKey = pt.ts.slice(0, 10);
+    if (!dayFlows.has(dayKey)) dayFlows.set(dayKey, { solarToHome: 0, battToHome: 0, gridToHome: 0 });
+    const f = dayFlows.get(dayKey)!;
+    const solar = Math.max(0, pt.solar_w) * IH;
+    const home = Math.max(0, pt.home_w) * IH;
+    const batDis = Math.max(0, pt.battery_w) * IH;
+    const s2h = Math.min(solar, home);
+    f.solarToHome += s2h;
+    const remainHome = Math.max(0, home - s2h);
+    const b2h = Math.min(batDis, remainHome);
+    f.battToHome += b2h;
+    f.gridToHome += Math.max(0, remainHome - b2h);
+  }
+
+  // Aggregate by month
+  const monthData = new Map<number, { solarToHome: number; battToHome: number; gridToHome: number }>();
+  for (const [dayKey, flows] of dayFlows) {
+    const m = new Date(dayKey + "T12:00:00").getMonth();
+    if (!monthData.has(m)) monthData.set(m, { solarToHome: 0, battToHome: 0, gridToHome: 0 });
+    const md = monthData.get(m)!;
+    md.solarToHome += flows.solarToHome;
+    md.battToHome += flows.battToHome;
+    md.gridToHome += flows.gridToHome;
+  }
+
+  // Build bars for months that have data
+  const monthEntries = Array.from(monthData.entries())
+    .filter(([, d]) => d.solarToHome + d.battToHome + d.gridToHome > 0)
+    .sort((a, b) => a[0] - b[0]);
+
+  if (monthEntries.length === 0) return null;
+
+  const chartW = w - padding.left - padding.right;
+  const barW = Math.min(36, chartW / monthEntries.length * 0.7);
+  const gap = (chartW - barW * monthEntries.length) / (monthEntries.length + 1);
+
+  const bars = monthEntries.map(([m, d], i) => {
+    const total = d.solarToHome + d.battToHome + d.gridToHome;
+    const solarPct = total > 0 ? (d.solarToHome / total) * 100 : 0;
+    const battPct = total > 0 ? (d.battToHome / total) * 100 : 0;
+    const totalPct = solarPct + battPct;
+    const x = padding.left + gap + i * (barW + gap);
+    return { x, solarPct, battPct, totalPct, label: months[m] };
+  });
+
+  return (
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+      <h3 className="text-sm font-semibold text-gray-300 mb-1">Self-Powered by Month</h3>
+      <div className="flex gap-3 text-[10px] text-gray-500 mb-2">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> Solar</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Powerwall</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 180 }}>
+        {[0, 25, 50, 75, 100].map(pct => {
+          const y = padding.top + (1 - pct / 100) * chartH;
+          return (
+            <g key={pct}>
+              <line x1={padding.left} x2={w - padding.right} y1={y} y2={y} stroke="#374151" strokeWidth={0.5} />
+              <text x={padding.left - 6} y={y + 3} textAnchor="end" className="fill-gray-600" fontSize={9}>{pct}%</text>
+            </g>
+          );
+        })}
+        {bars.map((b, i) => {
+          const solarH = (b.solarPct / 100) * chartH;
+          const battH = (b.battPct / 100) * chartH;
+          const solarY = padding.top + chartH - solarH;
+          const battY = solarY - battH;
+          const topY = battH > 0 ? battY : solarY;
+          return (
+            <g key={i}>
+              <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />
+              <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />
+              <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
+                {Math.round(b.totalPct)}%
+              </text>
+              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy: "day" | "month" }) {
   const chartData = useMemo(() => {
     if (!daily.length) return [];
@@ -476,8 +573,11 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
       <div className="space-y-4">
         <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
 
-        {/* Weekly: Self-Powered % by day */}
+        {/* Weekly/Monthly: Self-Powered % by day */}
         {(mode === "weekly" || mode === "monthly") && <SelfPoweredByDayChart daily={daily} intervalData={intervalData} />}
+
+        {/* Yearly: Self-Powered % by month */}
+        {mode === "yearly" && <SelfPoweredByMonthChart daily={daily} intervalData={intervalData} />}
 
         <SankeyChart
           hourlyData={hourly}
@@ -490,7 +590,10 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         {/* Weekly/Monthly: Energy Flow by Day */}
         {(mode === "weekly" || mode === "monthly") && <EnergyFlowBarChart daily={daily} groupBy="day" />}
 
-        {/* Daily: Hourly chart + Battery % */}
+        {/* Yearly: Energy Flow by Month */}
+        {mode === "yearly" && <EnergyFlowBarChart daily={daily} groupBy="month" />}
+
+        {/* Daily only: Hourly chart + Battery % */}
         {mode === "daily" && <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />}
         {mode === "daily" && <BatteryPctChart intervalData={intervalData} isToday={dateRange.days === 1 && dateRange.from === new Date().toISOString().slice(0, 10)} />}
       </div>
