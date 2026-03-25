@@ -151,38 +151,15 @@ export const api = {
     const qs = date ? `?date=${date}` : "";
     return fetchJSON<HourlyBucket[]>(`/hourly${qs}`);
   },
-  getHourlyRange: async (from: string, to: string): Promise<HourlyBucket[]> => {
-    // Fetch hourly data for each day in range, return combined
-    const days: string[] = [];
-    const d = new Date(from + "T12:00:00"); // noon to avoid UTC/local date drift
-    const end = new Date(to + "T12:00:00");
-    while (d <= end) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      days.push(`${yyyy}-${mm}-${dd}`);
-      d.setDate(d.getDate() + 1);
-    }
-    const results = await Promise.all(days.map((day) => fetchJSON<HourlyBucket[]>(`/hourly?date=${day}`)));
-    return results.flat();
+  getHourlyRange: (from: string, to: string): Promise<HourlyBucket[]> => {
+    return fetchJSON<HourlyBucket[]>(`/hourly?from=${from}&to=${to}`);
   },
   getIntervals: (date?: string) => {
     const qs = date ? `?date=${date}` : "";
     return fetchJSON<IntervalPoint[]>(`/intervals${qs}`);
   },
-  getIntervalsRange: async (from: string, to: string): Promise<IntervalPoint[]> => {
-    const days: string[] = [];
-    const d = new Date(from + "T12:00:00");
-    const end = new Date(to + "T12:00:00");
-    while (d <= end) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      days.push(`${yyyy}-${mm}-${dd}`);
-      d.setDate(d.getDate() + 1);
-    }
-    const results = await Promise.all(days.map((day) => fetchJSON<IntervalPoint[]>(`/intervals?date=${day}`)));
-    return results.flat();
+  getIntervalsRange: (from: string, to: string): Promise<IntervalPoint[]> => {
+    return fetchJSON<IntervalPoint[]>(`/intervals?from=${from}&to=${to}`);
   },
   getSankey: (date?: string, from?: string, to?: string) => {
     const params = new URLSearchParams();

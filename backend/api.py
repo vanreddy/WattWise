@@ -195,16 +195,22 @@ async def daily(
 async def hourly(
     request: Request,
     day: date = Query(alias="date", default=None),
+    range_from: Optional[date] = Query(default=None, alias="from"),
+    range_to: Optional[date] = Query(default=None, alias="to"),
     user: dict = Depends(get_current_user),
 ):
-    """Hourly aggregates from tesla_intervals for a single day."""
+    """Hourly aggregates from tesla_intervals for a single day or date range."""
     pool = request.app.state.pool
     account_id = UUID(user["account_id"])
-    if not day:
-        day = datetime.now(LOCAL_TZ).date()
 
-    start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
-    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
+    if range_from and range_to:
+        start = datetime.combine(range_from, time.min, tzinfo=LOCAL_TZ)
+        end = datetime.combine(range_to + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
+    else:
+        if not day:
+            day = datetime.now(LOCAL_TZ).date()
+        start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
+        end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
 
     rows = await pool.fetch(
         """
@@ -257,16 +263,22 @@ async def hourly(
 async def intervals(
     request: Request,
     day: date = Query(alias="date", default=None),
+    range_from: Optional[date] = Query(default=None, alias="from"),
+    range_to: Optional[date] = Query(default=None, alias="to"),
     user: dict = Depends(get_current_user),
 ):
-    """Raw 5-min interval data for a single day (no aggregation)."""
+    """Raw 5-min interval data for a single day or date range (no aggregation)."""
     pool = request.app.state.pool
     account_id = UUID(user["account_id"])
-    if not day:
-        day = datetime.now(LOCAL_TZ).date()
 
-    start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
-    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
+    if range_from and range_to:
+        start = datetime.combine(range_from, time.min, tzinfo=LOCAL_TZ)
+        end = datetime.combine(range_to + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
+    else:
+        if not day:
+            day = datetime.now(LOCAL_TZ).date()
+        start = datetime.combine(day, time.min, tzinfo=LOCAL_TZ)
+        end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=LOCAL_TZ)
 
     rows = await pool.fetch(
         """
