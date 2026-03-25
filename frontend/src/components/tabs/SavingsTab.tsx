@@ -300,10 +300,6 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
         "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
       };
     });
-    if (result.length > 0) {
-      const sample = result.find(r => r.Peak > 0 || r["Part-Peak"] > 0 || r["Off-Peak"] > 0);
-      console.log("[SavingsTab] costData sample:", sample, "total items:", result.length, "dailyMap size:", dailyMap.size);
-    }
     return result;
   }, [allDaysInRange, dailyMap]);
 
@@ -393,7 +389,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
                 <BarChart data={showHourlyCharts ? hourlySavingsData : savingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                  <YAxis domain={[0, savingsMax]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
                   <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
                   <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
                   <Bar dataKey="Self-Power" stackId="s" fill="#166534" radius={[0, 0, 0, 0]} />
@@ -426,7 +422,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
                 <BarChart data={showHourlyCharts ? hourlyCostData : costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
-                  <YAxis domain={[0, costMax || 1]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
                   <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
                   {showHourlyCharts ? (
                     <Bar dataKey="Cost" fill="#ef4444" radius={[2, 2, 0, 0]} />
