@@ -9,6 +9,7 @@ import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSele
 import SelfPoweredRing from "@/components/SelfPoweredRing";
 import SankeyChart from "@/components/SankeyChart";
 import HourlyChart from "@/components/HourlyChart";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudDrizzle, Wind } from "lucide-react";
 
 /* ─── Now mode: weather only ─── */
@@ -169,59 +170,58 @@ function BatteryPctChart({ intervalData }: { intervalData: IntervalPoint[] }) {
   if (!intervalData.length) return null;
 
   const sorted = [...intervalData].sort((a, b) => a.ts.localeCompare(b.ts));
-  const maxH = 200;
-  const padding = { left: 40, right: 16, top: 16, bottom: 28 };
-  const w = 600;
-  const chartW = w - padding.left - padding.right;
-  const chartH = maxH - padding.top - padding.bottom;
 
-  const points = sorted.map((pt, i) => {
-    const x = padding.left + (i / Math.max(1, sorted.length - 1)) * chartW;
-    const y = padding.top + (1 - pt.battery_pct / 100) * chartH;
-    return { x, y, pct: pt.battery_pct, ts: pt.ts };
+  // Build chart data with same label format as HourlyChart
+  const chartData = sorted.map(pt => {
+    const d = new Date(pt.ts);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const h12 = h % 12 || 12;
+    const ampm = h < 12 ? "AM" : "PM";
+    const label = m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")}`;
+    return { label, pct: pt.battery_pct };
   });
 
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const areaPath = linePath + ` L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
-
-  // Hour labels
-  const hours: { x: number; label: string }[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const h = new Date(sorted[i].ts).getHours();
-    if (h % 4 === 0 && (hours.length === 0 || hours[hours.length - 1].label !== `${h % 12 || 12}${h < 12 ? "a" : "p"}`)) {
-      hours.push({ x: points[i].x, label: `${h % 12 || 12}${h < 12 ? "a" : "p"}` });
-    }
-  }
+  // Same x-axis interval as HourlyChart for alignment
+  const xInterval = Math.max(1, Math.floor(chartData.length / 8));
 
   return (
     <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-3">Powerwall %</h3>
-      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 160 }}>
-        {/* Y-axis lines */}
-        {[0, 25, 50, 75, 100].map(pct => {
-          const y = padding.top + (1 - pct / 100) * chartH;
-          return (
-            <g key={pct}>
-              <line x1={padding.left} x2={w - padding.right} y1={y} y2={y} stroke="#374151" strokeWidth={0.5} />
-              <text x={padding.left - 6} y={y + 3} textAnchor="end" className="fill-gray-600" fontSize={9}>{pct}%</text>
-            </g>
-          );
-        })}
-        {/* Area fill */}
-        <path d={areaPath} fill="url(#battGrad)" opacity={0.3} />
-        {/* Line */}
-        <path d={linePath} fill="none" stroke="#34d399" strokeWidth={2} strokeLinejoin="round" />
-        {/* Hour labels */}
-        {hours.map(h => (
-          <text key={h.label + h.x} x={h.x} y={maxH - 4} textAnchor="middle" className="fill-gray-600" fontSize={9}>{h.label}</text>
-        ))}
-        <defs>
-          <linearGradient id="battGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#34d399" />
-            <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-      </svg>
+      <ResponsiveContainer width="100%" height={160}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+          <XAxis
+            dataKey="label"
+            stroke="#6b7280"
+            fontSize={10}
+            interval={xInterval}
+            tick={{ dy: 4 }}
+            tickLine={false}
+          />
+          <YAxis
+            domain={[0, 100]}
+            stroke="#6b7280"
+            fontSize={10}
+            tickFormatter={(v: number) => `${v}%`}
+            width={35}
+            tickLine={false}
+            axisLine={false}
+          />
+          <Tooltip
+            contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
+            labelStyle={{ color: "#9ca3af" }}
+            formatter={(value: number) => [`${value.toFixed(0)}%`, "Powerwall"]}
+          />
+          <defs>
+            <linearGradient id="battGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#34d399" />
+              <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <Area type="monotone" dataKey="pct" stroke="#34d399" strokeWidth={2} fill="url(#battGrad)" fillOpacity={0.3} />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -335,9 +335,6 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
       <div className="space-y-4">
         <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
 
-        {/* Daily: Battery % by hour */}
-        {mode === "daily" && <BatteryPctChart intervalData={intervalData} />}
-
         {/* Weekly: Self-Powered % by day */}
         {mode === "weekly" && <SelfPoweredByDayChart daily={daily} />}
 
@@ -350,6 +347,9 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         />
 
         <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />
+
+        {/* Daily: Battery % by hour — below hourly chart, aligned x-axis */}
+        {mode === "daily" && <BatteryPctChart intervalData={intervalData} />}
       </div>
     </div>
   );
