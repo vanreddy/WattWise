@@ -64,9 +64,8 @@ function computeRange(mode: Mode, offset: number): DateRange {
     const from = toDateStr(d);
     const sunday = new Date(d);
     sunday.setDate(sunday.getDate() + 6);
-    const today = new Date(now);
-    const to = sunday > today ? toDateStr(today) : toDateStr(sunday);
-    const days = Math.round((new Date(to + "T12:00:00").getTime() - new Date(from + "T12:00:00").getTime()) / 86400000) + 1;
+    const to = toDateStr(sunday);
+    const days = 7;
     return { label: "Weekly", from, to, days };
   }
 
@@ -74,19 +73,17 @@ function computeRange(mode: Mode, offset: number): DateRange {
     const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     const from = toDateStr(d);
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    const today = new Date(now);
-    const to = lastDay > today ? toDateStr(today) : toDateStr(lastDay);
-    const days = Math.round((new Date(to + "T12:00:00").getTime() - new Date(from + "T12:00:00").getTime()) / 86400000) + 1;
+    const to = toDateStr(lastDay);
+    const days = lastDay.getDate();
     return { label: "Monthly", from, to, days };
   }
 
   if (mode === "yearly") {
     const year = now.getFullYear() + offset;
     const from = `${year}-01-01`;
-    const lastDay = new Date(year, 11, 31);
-    const today = new Date(now);
-    const to = lastDay > today ? toDateStr(today) : toDateStr(lastDay);
-    const days = Math.round((new Date(to + "T12:00:00").getTime() - new Date(from + "T12:00:00").getTime()) / 86400000) + 1;
+    const to = `${year}-12-31`;
+    const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    const days = isLeap ? 366 : 365;
     return { label: "Yearly", from, to, days };
   }
 
