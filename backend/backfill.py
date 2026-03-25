@@ -1,22 +1,26 @@
 """
 Backfill tesla_intervals from Tesla's calendar history API.
 
-Multi-tenant: called from auth_api.py to backfill 30 days for a new account.
+Multi-tenant: called from auth_api.py to backfill history for a new account.
 
 Fetches 'power' (5-min intervals) and 'soe' (battery %) history,
 merges them, and inserts into the database.
 
-IMPORTANT: Tesla's calendar history API uses the site's local timezone.
-We must request data using Pacific time (America/Los_Angeles) so we get
-full 24-hour days aligned to midnight Pacific, not midnight UTC.
+Key design decisions:
+  - Fetches newest days first so the dashboard is useful immediately
+  - Resumable: skips days that already have sufficient data in the DB
+  - Wraps synchronous Tesla API calls in asyncio.to_thread to avoid blocking
+  - Saves token cache after every successful day (not just at the end)
+  - Persists progress to DB so it survives restarts
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from typing import Dict, List
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -31,14 +35,19 @@ logger = logging.getLogger(__name__)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
-# In-memory backfill progress: account_id_str -> {days_fetched, days_total, status, error}
+# Minimum interval count to consider a day "complete" (288 = full day of 5-min intervals)
+MIN_INTERVALS_COMPLETE = 250
+
+# In-memory backfill progress (supplemented by DB persistence)
 _backfill_progress: dict[str, dict] = {}
 
 
-def _fetch_one_day(site, day_offset: int) -> List[Dict]:
-    """Fetch one day of power + soe data from Tesla for a site."""
-    target = datetime.now(LOCAL_TZ) - timedelta(days=day_offset)
-    end_of_day = target.replace(hour=23, minute=59, second=59)
+def _fetch_one_day(site, target_date: date) -> List[Dict]:
+    """Fetch one day of power + soe data from Tesla for a site.
+
+    Synchronous — must be called via asyncio.to_thread().
+    """
+    end_of_day = datetime.combine(target_date, datetime.max.time().replace(microsecond=0), tzinfo=LOCAL_TZ)
     end_str = end_of_day.isoformat()
 
     def _parse_response(raw):
@@ -99,7 +108,6 @@ async def _insert_intervals_for_account(
     if not intervals:
         return 0
 
-    # Build rows for batch insert
     rows = []
     for iv in intervals:
         rows.append((
@@ -109,9 +117,7 @@ async def _insert_intervals_for_account(
             account_id,
         ))
 
-    # Use a single connection for the batch to avoid pool contention
     async with pool.acquire() as conn:
-        # Batch insert using executemany — much faster than individual executes
         await conn.executemany(
             """INSERT INTO tesla_intervals (ts, solar_w, home_w, grid_w, battery_w, battery_pct, vehicle_w, account_id)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -123,37 +129,65 @@ async def _insert_intervals_for_account(
 
 
 async def _aggregate_day_for_account(
-    pool: asyncpg.Pool, day_offset: int, account_id: UUID,
+    pool: asyncpg.Pool, target_date: date, account_id: UUID,
 ) -> None:
     """Aggregate one day's intervals into daily_summaries for an account."""
     from backend.aggregator import aggregate_day, save_summary
 
-    target_day = (datetime.now(LOCAL_TZ) - timedelta(days=day_offset)).date()
     try:
-        summary = await aggregate_day(pool, target_day, account_id=account_id)
+        summary = await aggregate_day(pool, target_date, account_id=account_id)
         if summary:
             await save_summary(pool, summary, account_id=account_id)
-            logger.info("Aggregated day %s for account %s", target_day, account_id)
     except Exception:
-        logger.exception("Failed to aggregate %s for account %s", target_day, account_id)
+        logger.exception("Failed to aggregate %s for account %s", target_date, account_id)
 
 
-async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30, include_today: bool = False) -> None:
+async def _count_intervals_for_day(pool: asyncpg.Pool, account_id: UUID, target_date: date) -> int:
+    """Count how many intervals exist for a given day."""
+    start = datetime.combine(target_date, datetime.min.time(), tzinfo=LOCAL_TZ)
+    end = datetime.combine(target_date + timedelta(days=1), datetime.min.time(), tzinfo=LOCAL_TZ)
+    count = await pool.fetchval(
+        "SELECT COUNT(*) FROM tesla_intervals WHERE account_id = $1 AND ts >= $2 AND ts < $3",
+        account_id, start, end,
+    )
+    return count or 0
+
+
+async def _save_progress_to_db(pool: asyncpg.Pool, account_id: UUID, progress: dict) -> None:
+    """Persist backfill progress to kv_store so it survives restarts."""
+    await pool.execute(
+        """INSERT INTO kv_store (key, value, updated_at, account_id)
+           VALUES ('backfill_progress', $1::jsonb, NOW(), $2)
+           ON CONFLICT (key, account_id)
+           DO UPDATE SET value = $1::jsonb, updated_at = NOW()""",
+        json.dumps(progress), account_id,
+    )
+
+
+async def backfill_account(
+    pool: asyncpg.Pool,
+    account_id: UUID,
+    days: int = 30,
+    include_today: bool = False,
+) -> None:
     """Backfill N days of Tesla history for a specific account.
 
-    Updates _backfill_progress in-memory so the frontend can poll status.
-    If include_today=True, also fetches today's partial data (offset 0).
+    - Fetches newest days first for immediate dashboard usability
+    - Skips days that already have sufficient data (resumable)
+    - Wraps blocking Tesla API calls in asyncio.to_thread
+    - Saves token cache after each successful day
+    - Persists progress to DB
     """
     acct_key = str(account_id)
-    _backfill_progress[acct_key] = {
+    progress = {
         "days_fetched": 0,
         "days_total": days,
         "status": "fetching",
         "error": None,
     }
+    _backfill_progress[acct_key] = progress
 
     try:
-        # Load Tesla token cache for this account
         await _load_cache_from_db(pool, account_id)
 
         tesla_email = await pool.fetchval(
@@ -165,55 +199,88 @@ async def backfill_account(pool: asyncpg.Pool, account_id: UUID, days: int = 30,
         loader, dumper = _make_cache_callbacks(account_id)
 
         with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
-            logger.info("Backfill %s: authorized=%s, cache keys=%s", acct_key, tesla.authorized, list(loader().keys())[:5])
+            logger.info("Backfill %s: authorized=%s", acct_key, tesla.authorized)
             if not tesla.authorized:
                 raise RuntimeError("Tesla not authorized — re-authenticate via Settings page")
 
-            # Try an API call — if the token is expired, this will attempt auto-refresh
+            # Verify API access with a test call (non-blocking)
             try:
-                products = tesla.battery_list() + tesla.solar_list()
+                products = await asyncio.to_thread(lambda: tesla.battery_list() + tesla.solar_list())
             except Exception as api_err:
-                logger.error("Backfill %s: Tesla API call failed (token likely expired): %s", acct_key, api_err)
-                raise RuntimeError(f"Tesla token expired — re-authenticate via Settings: {api_err}")
+                logger.error("Backfill %s: Tesla API failed: %s", acct_key, api_err)
+                raise RuntimeError(f"Tesla token expired — re-authenticate: {api_err}")
+
             if not products:
                 raise RuntimeError("No energy sites found")
-
             site = products[0]
 
+            # Build list of days to fetch, newest first
+            today = datetime.now(LOCAL_TZ).date()
             start_offset = 0 if include_today else 1
+            days_to_fetch = []
             for day_offset in range(start_offset, days + 1):
-                target = datetime.now(LOCAL_TZ) - timedelta(days=day_offset)
-                logger.info("Backfill account %s: fetching %s ...", acct_key, target.strftime("%Y-%m-%d"))
+                target_date = today - timedelta(days=day_offset)
+                days_to_fetch.append(target_date)
+
+            fetched_count = 0
+            skipped_count = 0
+
+            for target_date in days_to_fetch:
+                # Check if day already has sufficient data (resumable)
+                existing = await _count_intervals_for_day(pool, account_id, target_date)
+                if existing >= MIN_INTERVALS_COMPLETE:
+                    skipped_count += 1
+                    fetched_count += 1
+                    progress["days_fetched"] = fetched_count
+                    continue
+
+                logger.info("Backfill %s: fetching %s (existing: %d intervals)...",
+                            acct_key, target_date, existing)
 
                 try:
-                    intervals = _fetch_one_day(site, day_offset)
+                    # Non-blocking Tesla API call
+                    intervals = await asyncio.to_thread(_fetch_one_day, site, target_date)
                 except Exception as day_err:
-                    logger.warning("Backfill %s: skipping %s — %s", acct_key, target.strftime("%Y-%m-%d"), day_err)
-                    _backfill_progress[acct_key]["days_fetched"] = day_offset
+                    logger.warning("Backfill %s: skipping %s — %s", acct_key, target_date, day_err)
+                    fetched_count += 1
+                    progress["days_fetched"] = fetched_count
                     continue
 
                 if intervals:
                     await _insert_intervals_for_account(pool, intervals, account_id)
-                    await _aggregate_day_for_account(pool, day_offset, account_id)
+                    await _aggregate_day_for_account(pool, target_date, account_id)
 
-                fetched = day_offset
-                _backfill_progress[acct_key]["days_fetched"] = fetched
-                logger.info("Backfill account %s: %d/%d days done", acct_key, fetched, days)
+                fetched_count += 1
+                progress["days_fetched"] = fetched_count
 
-        # Save updated token cache
+                # Save token cache periodically (in case of token refresh during API calls)
+                if fetched_count % 10 == 0:
+                    await _save_cache_to_db(pool, account_id)
+                    await _save_progress_to_db(pool, account_id, progress)
+
+                if fetched_count % 25 == 0:
+                    logger.info("Backfill %s: %d/%d days done (%d skipped)",
+                                acct_key, fetched_count, len(days_to_fetch), skipped_count)
+
+        # Final save
         await _save_cache_to_db(pool, account_id)
-
-        _backfill_progress[acct_key]["status"] = "done"
-        logger.info("Backfill complete for account %s: %d days", acct_key, days)
+        progress["status"] = "done"
+        await _save_progress_to_db(pool, account_id, progress)
+        logger.info("Backfill complete for %s: %d days (%d skipped, %d fetched)",
+                     acct_key, len(days_to_fetch), skipped_count, len(days_to_fetch) - skipped_count)
 
     except Exception as exc:
         logger.exception("Backfill failed for account %s", acct_key)
-        _backfill_progress[acct_key]["status"] = "error"
-        _backfill_progress[acct_key]["error"] = str(exc)
+        progress["status"] = "error"
+        progress["error"] = str(exc)
+        try:
+            await _save_progress_to_db(pool, account_id, progress)
+        except Exception:
+            pass
 
 
 def get_backfill_status(account_id: UUID) -> dict:
-    """Get backfill progress for an account."""
+    """Get backfill progress for an account (in-memory, fast)."""
     acct_key = str(account_id)
     return _backfill_progress.get(acct_key, {
         "days_fetched": 0,
