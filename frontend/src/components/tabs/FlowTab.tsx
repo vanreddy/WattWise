@@ -513,9 +513,9 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
         </div>
       </div>
       <ResponsiveContainer width="100%" height={350}>
-        <AreaChart data={chartData} margin={{ top: 10, right: 30, bottom: 0, left: 30 }} stackOffset="sign">
+        <AreaChart data={chartData} margin={{ top: 10, right: 40, bottom: 0, left: 40 }} stackOffset="sign">
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-          <XAxis dataKey="label" stroke="#6b7280" fontSize={9} tickLine={false} tick={{ dy: 4 }} padding={{ left: 10, right: 10 }} />
+          <XAxis dataKey="label" stroke="#6b7280" fontSize={9} tickLine={false} tick={{ dy: 4 }} interval={0} padding={{ left: 20, right: 20 }} />
           <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={9} tickLine={false} axisLine={false}
             tickFormatter={(v: number) => `${Math.abs(v)}`} />
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
