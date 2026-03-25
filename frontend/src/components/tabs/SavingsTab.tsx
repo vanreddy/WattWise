@@ -414,26 +414,36 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
             <MiniTile label="Off-Peak" value={totals.offPeakCost} color="text-red-200" dotColor="#fca5a5" />
           </div>
 
-          {/* Cost chart */}
-          {(showHourlyCharts || showMultiDayCharts) && (
+          {/* Cost chart — hourly (single bar) */}
+          {showHourlyCharts && (
             <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
               <h2 className="text-sm font-semibold text-gray-400 mb-2">Cost Breakdown</h2>
               <ResponsiveContainer width="100%" height={chartHeight}>
-                <BarChart data={showHourlyCharts ? hourlyCostData : costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                <BarChart data={hourlyCostData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
                   <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
                   <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
-                  {showHourlyCharts ? (
-                    <Bar dataKey="Cost" fill="#ef4444" radius={[2, 2, 0, 0]} />
-                  ) : (
-                    <>
-                      <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
-                      <Bar dataKey="Peak" stackId="c" fill="#ef4444" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="Part-Peak" stackId="c" fill="#f87171" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="Off-Peak" stackId="c" fill="#fca5a5" radius={[2, 2, 0, 0]} />
-                    </>
-                  )}
+                  <Bar dataKey="Cost" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Cost chart — multi-day (stacked bars) */}
+          {showMultiDayCharts && (
+            <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
+              <h2 className="text-sm font-semibold text-gray-400 mb-2">Cost Breakdown</h2>
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
+                  <YAxis tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(1)}`} />
+                  <Tooltip {...tooltipStyle} formatter={(value: number) => fmtSmall(value)} />
+                  <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconSize={8} />
+                  <Bar dataKey="Peak" stackId="c" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Part-Peak" stackId="c" fill="#f87171" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Off-Peak" stackId="c" fill="#fca5a5" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
