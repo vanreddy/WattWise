@@ -274,7 +274,27 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
     return map;
   }, [daily]);
 
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
   const savingsData = useMemo(() => {
+    if (mode === "yearly") {
+      // Aggregate by month
+      const monthBuckets = MONTHS.map(label => ({ label, "Self-Power": 0, Powerwall: 0, "Export Credits": 0 }));
+      for (const d of daily) {
+        const m = new Date(d.day + "T12:00:00").getMonth();
+        const rate = d.total_import_kwh > 0 ? d.total_cost / d.total_import_kwh : 0.33;
+        const ts = d.solar_self_consumed_kwh * rate;
+        monthBuckets[m]["Self-Power"] += ts * 0.6;
+        monthBuckets[m].Powerwall += ts * 0.4;
+        monthBuckets[m]["Export Credits"] += d.export_credit;
+      }
+      return monthBuckets.map(b => ({
+        ...b,
+        "Self-Power": parseFloat(b["Self-Power"].toFixed(1)),
+        Powerwall: parseFloat(b.Powerwall.toFixed(1)),
+        "Export Credits": parseFloat(b["Export Credits"].toFixed(1)),
+      }));
+    }
     return allDaysInRange.map((day) => {
       const d = dailyMap.get(day);
       if (!d) return { label: formatDay(day), "Self-Power": 0, Powerwall: 0, "Export Credits": 0 };
@@ -287,10 +307,26 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
         "Export Credits": parseFloat(d.export_credit.toFixed(1)),
       };
     });
-  }, [allDaysInRange, dailyMap]);
+  }, [mode, allDaysInRange, dailyMap, daily]);
 
   const costData = useMemo(() => {
-    const result = allDaysInRange.map((day) => {
+    if (mode === "yearly") {
+      // Aggregate by month
+      const monthBuckets = MONTHS.map(label => ({ label, Peak: 0, "Part-Peak": 0, "Off-Peak": 0 }));
+      for (const d of daily) {
+        const m = new Date(d.day + "T12:00:00").getMonth();
+        monthBuckets[m].Peak += d.peak_cost;
+        monthBuckets[m]["Part-Peak"] += d.part_peak_cost;
+        monthBuckets[m]["Off-Peak"] += d.off_peak_cost;
+      }
+      return monthBuckets.map(b => ({
+        ...b,
+        Peak: parseFloat(b.Peak.toFixed(1)),
+        "Part-Peak": parseFloat(b["Part-Peak"].toFixed(1)),
+        "Off-Peak": parseFloat(b["Off-Peak"].toFixed(1)),
+      }));
+    }
+    return allDaysInRange.map((day) => {
       const d = dailyMap.get(day);
       if (!d) return { label: formatDay(day), Peak: 0, "Part-Peak": 0, "Off-Peak": 0 };
       return {
@@ -300,8 +336,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
         "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
       };
     });
-    return result;
-  }, [allDaysInRange, dailyMap]);
+  }, [mode, allDaysInRange, dailyMap, daily]);
 
   const [rateSchedule, setRateSchedule] = useState<RateScheduleEntry[]>([]);
   useEffect(() => {
