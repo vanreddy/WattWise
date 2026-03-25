@@ -165,13 +165,138 @@ interface Props {
 
 /* ─── Historical mode content ─── */
 
-function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange, swipeDir }: {
+function BatteryPctChart({ intervalData }: { intervalData: IntervalPoint[] }) {
+  if (!intervalData.length) return null;
+
+  const sorted = [...intervalData].sort((a, b) => a.ts.localeCompare(b.ts));
+  const maxH = 200;
+  const padding = { left: 40, right: 16, top: 16, bottom: 28 };
+  const w = 600;
+  const chartW = w - padding.left - padding.right;
+  const chartH = maxH - padding.top - padding.bottom;
+
+  const points = sorted.map((pt, i) => {
+    const x = padding.left + (i / Math.max(1, sorted.length - 1)) * chartW;
+    const y = padding.top + (1 - pt.battery_pct / 100) * chartH;
+    return { x, y, pct: pt.battery_pct, ts: pt.ts };
+  });
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const areaPath = linePath + ` L ${points[points.length - 1].x} ${padding.top + chartH} L ${points[0].x} ${padding.top + chartH} Z`;
+
+  // Hour labels
+  const hours: { x: number; label: string }[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const h = new Date(sorted[i].ts).getHours();
+    if (h % 4 === 0 && (hours.length === 0 || hours[hours.length - 1].label !== `${h % 12 || 12}${h < 12 ? "a" : "p"}`)) {
+      hours.push({ x: points[i].x, label: `${h % 12 || 12}${h < 12 ? "a" : "p"}` });
+    }
+  }
+
+  return (
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+      <h3 className="text-sm font-semibold text-gray-300 mb-3">Powerwall %</h3>
+      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 160 }}>
+        {/* Y-axis lines */}
+        {[0, 25, 50, 75, 100].map(pct => {
+          const y = padding.top + (1 - pct / 100) * chartH;
+          return (
+            <g key={pct}>
+              <line x1={padding.left} x2={w - padding.right} y1={y} y2={y} stroke="#374151" strokeWidth={0.5} />
+              <text x={padding.left - 6} y={y + 3} textAnchor="end" className="fill-gray-600" fontSize={9}>{pct}%</text>
+            </g>
+          );
+        })}
+        {/* Area fill */}
+        <path d={areaPath} fill="url(#battGrad)" opacity={0.3} />
+        {/* Line */}
+        <path d={linePath} fill="none" stroke="#34d399" strokeWidth={2} strokeLinejoin="round" />
+        {/* Hour labels */}
+        {hours.map(h => (
+          <text key={h.label + h.x} x={h.x} y={maxH - 4} textAnchor="middle" className="fill-gray-600" fontSize={9}>{h.label}</text>
+        ))}
+        <defs>
+          <linearGradient id="battGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+}
+
+function SelfPoweredByDayChart({ daily }: { daily: DailySummary[] }) {
+  if (daily.length < 2) return null;
+
+  const sorted = [...daily].sort((a, b) => a.day.localeCompare(b.day));
+  const maxH = 220;
+  const padding = { left: 40, right: 16, top: 16, bottom: 40 };
+  const w = 600;
+  const chartW = w - padding.left - padding.right;
+  const chartH = maxH - padding.top - padding.bottom;
+  const barW = Math.min(40, chartW / sorted.length * 0.7);
+  const gap = (chartW - barW * sorted.length) / (sorted.length + 1);
+
+  const bars = sorted.map((d, i) => {
+    const totalConsumption = d.solar_self_consumed_kwh + d.total_import_kwh;
+    const selfPct = totalConsumption > 0 ? (d.solar_self_consumed_kwh / totalConsumption) * 100 : 0;
+    // Estimate battery contribution: total self-powered - solar direct
+    const totalSelfPowered = totalConsumption > 0 ? ((totalConsumption - d.total_import_kwh) / totalConsumption) * 100 : 0;
+    const battPct = Math.max(0, totalSelfPowered - selfPct);
+    const x = padding.left + gap + i * (barW + gap);
+    const dayLabel = new Date(d.day + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+    return { x, solarPct: selfPct, battPct, totalPct: totalSelfPowered, dayLabel, day: d.day };
+  });
+
+  return (
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+      <h3 className="text-sm font-semibold text-gray-300 mb-1">Self-Powered by Day</h3>
+      <div className="flex gap-3 text-[10px] text-gray-500 mb-2">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> Solar</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Powerwall</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 180 }}>
+        {/* Y grid */}
+        {[0, 25, 50, 75, 100].map(pct => {
+          const y = padding.top + (1 - pct / 100) * chartH;
+          return (
+            <g key={pct}>
+              <line x1={padding.left} x2={w - padding.right} y1={y} y2={y} stroke="#374151" strokeWidth={0.5} />
+              <text x={padding.left - 6} y={y + 3} textAnchor="end" className="fill-gray-600" fontSize={9}>{pct}%</text>
+            </g>
+          );
+        })}
+        {/* Bars */}
+        {bars.map((b, i) => {
+          const solarH = (b.solarPct / 100) * chartH;
+          const battH = (b.battPct / 100) * chartH;
+          const solarY = padding.top + chartH - solarH;
+          const battY = solarY - battH;
+          return (
+            <g key={i}>
+              <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />
+              <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />
+              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.dayLabel}</text>
+              <text x={b.x + barW / 2} y={maxH - 6} textAnchor="middle" className="fill-gray-600" fontSize={8}>
+                {Math.round(b.totalPct)}%
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange, swipeDir, mode }: {
   daily: DailySummary[];
   hourly: HourlyBucket[];
   intervalData: IntervalPoint[];
   sankeyFlows: SankeyFlows | null;
   dateRange: DateRange;
   swipeDir: "left" | "right" | null;
+  mode: Mode;
 }) {
   // Compute self-powered % with solar/battery breakout
   let gridImport = 0;
@@ -209,6 +334,12 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
     >
       <div className="space-y-4">
         <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
+
+        {/* Daily: Battery % by hour */}
+        {mode === "daily" && <BatteryPctChart intervalData={intervalData} />}
+
+        {/* Weekly: Self-Powered % by day */}
+        {mode === "weekly" && <SelfPoweredByDayChart daily={daily} />}
 
         <SankeyChart
           hourlyData={hourly}
@@ -297,6 +428,7 @@ export default function FlowTab({
             sankeyFlows={sankeyFlows}
             dateRange={dateRange}
             swipeDir={swipeDir}
+            mode={mode}
           />
         </div>
       )}
