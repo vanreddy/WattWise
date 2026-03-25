@@ -555,7 +555,7 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
   return (
     <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-2 sm:p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-1">
-        Energy Flow by {groupBy === "month" ? "Month" : groupBy === "hour" ? "Hour" : "Day"}
+        Energy Flow by {groupBy === "month" ? "Month" : "Day"}
       </h3>
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-2">
         <span className="text-gray-400 font-medium">Sources ↑</span>
