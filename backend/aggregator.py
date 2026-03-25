@@ -525,7 +525,7 @@ async def _run_daily_for_account(pool: asyncpg.Pool, yesterday: date, account_id
         """,
         yesterday,
         f"WattWise Daily — {yesterday.isoformat()}",
-        "(see Telegram)",
+        "(logged)",
         json.dumps({"total_cost": summary["total_cost"]}),
         account_id,
     )

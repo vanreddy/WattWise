@@ -9,7 +9,6 @@ import {
   Thermometer,
   TrendingDown,
   Bell,
-  BellRing,
   ChevronRight,
   Lightbulb,
   Sparkles,
@@ -19,7 +18,7 @@ import {
   WashingMachine,
 } from "lucide-react";
 import type { SummaryResponse, DailySummary, Alert } from "@/lib/api";
-import type { AuthUser } from "@/lib/auth";
+
 import type { ReactNode } from "react";
 
 /* ─── Types ─────────────────────────────────── */
@@ -38,14 +37,12 @@ interface Props {
   summary: SummaryResponse | null;
   daily: DailySummary[];
   alerts: Alert[];
-  user: AuthUser | null;
 }
 
 /* ─── Strategic rules-based recommendations ─── */
 
 function generateRulesBasedSuggestions(
   daily: DailySummary[],
-  user: AuthUser | null,
 ): Suggestion[] {
   const suggestions: Suggestion[] = [];
   const last7 = daily.slice(0, 7);
@@ -58,21 +55,7 @@ function generateRulesBasedSuggestions(
       : 0;
   const isHighExporter = avgExportKwh > 5; // exporting 5+ kWh/day on average
 
-  // 1. NEM 3.0 high exporter + no Telegram alerts → suggest enabling alerts
-  if (isHighExporter && user && !user.telegram_chat_id) {
-    suggestions.push({
-      id: "enable-alerts",
-      icon: <BellRing size={20} />,
-      iconBg: "bg-yellow-500/20 text-yellow-400",
-      title: "Enable real-time solar alerts",
-      description:
-        "You're on NEM 3.0 where grid export earns only $0.07/kWh — but that same energy used at home offsets $0.32/kWh. Link Telegram in Settings to get notified when you have excess solar, so you can shift loads and capture 5× more value.",
-      savings: `~$${(avgExportKwh * 0.25 * 30).toFixed(0)}/mo opportunity`,
-      priority: "high",
-    });
-  }
-
-  // 2. NEM 3.0 high exporter → shift EV charging to solar hours (morning)
+  // 1. NEM 3.0 high exporter → shift EV charging to solar hours (morning)
   if (isHighExporter) {
     const evDays = last7.filter((d) => d.ev_kwh > 2);
     const evOffPeakHeavy = evDays.filter(
@@ -347,8 +330,8 @@ function useStickysuggestions(current: Suggestion[]): Suggestion[] {
 
 /* ─── Component ─────────────────────────────── */
 
-export default function OptimizeTab({ summary, daily, alerts, user }: Props) {
-  const rawRulesSuggestions = generateRulesBasedSuggestions(daily, user);
+export default function OptimizeTab({ summary, daily, alerts }: Props) {
+  const rawRulesSuggestions = generateRulesBasedSuggestions(daily);
   const rulesSuggestions = useStickysuggestions(rawRulesSuggestions);
   const realtimeSuggestions = generateRealtimeSuggestions(summary, daily);
 

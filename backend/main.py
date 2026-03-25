@@ -20,7 +20,6 @@ from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
 from backend.auth_api import router as auth_router
 from backend.poller import poll_and_check
-from backend.telegram_bot import run_bot_polling
 from backend.weekly_summary import run_weekly_summary
 
 logging.basicConfig(
@@ -140,24 +139,11 @@ async def lifespan(app: FastAPI):
 
     scheduler.start()
 
-    import asyncio
-
-    # Telegram bot listener (long-polling for /start commands)
-    bot_task = asyncio.create_task(run_bot_polling(pool))
-
-    # Keep references alive for the duration of the app
-    app.state.background_tasks = [bot_task]
-
-    logger.info("SelfPower started — poller, daily, weekly jobs + gap-fill + Telegram bot")
+    logger.info("WattWise started — poller, daily, weekly jobs")
 
     yield
 
     # Shutdown
-    bot_task.cancel()
-    try:
-        await bot_task
-    except asyncio.CancelledError:
-        pass
     scheduler.shutdown()
     await pool.close()
 

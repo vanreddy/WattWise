@@ -273,7 +273,7 @@ async def _run_weekly_for_account(pool: asyncpg.Pool, account_id, week_start: da
         week_start,
         week_end,
         f"SelfPower Weekly — {week_label}",
-        "(see Telegram)",
+        "(logged)",
         json.dumps({"total_cost": data["total_cost"], "ai_narrative": ai_narrative}),
         account_id,
     )

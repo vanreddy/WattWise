@@ -92,7 +92,6 @@ export default function Dashboard() {
             summary={data.summary}
             daily={data.daily}
             alerts={data.alerts}
-            user={user}
           />
         )}
       </div>

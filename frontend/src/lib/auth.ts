@@ -5,9 +5,8 @@ const REFRESH_KEY = "ww_refresh_token";
 export interface AuthUser {
   id: string;
   email: string;
-  role: "primary" | "secondary";
+  role: string;
   account_id: string;
-  telegram_chat_id: string | null;
   site_name: string | null;
   energy_site_id: string | null;
   tesla_connected: boolean;
@@ -100,59 +99,6 @@ export function logout() {
   window.location.href = "/login";
 }
 
-// --------------- invite & register helpers ---------------
-
-export async function createInvite(email: string): Promise<{ invite_id: string }> {
-  const token = getAccessToken();
-  const res = await fetch(`${API_BASE}/auth/invite`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ email }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to create invite" }));
-    throw new Error(err.detail || "Failed to create invite");
-  }
-
-  return res.json();
-}
-
-export async function linkTelegram(code: string): Promise<{ telegram_chat_id: string }> {
-  const token = getAccessToken();
-  const res = await fetch(`${API_BASE}/auth/me/telegram/link`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ code }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to link Telegram" }));
-    throw new Error(err.detail || "Failed to link Telegram");
-  }
-
-  return res.json();
-}
-
-export async function unlinkTelegram(): Promise<void> {
-  const token = getAccessToken();
-  const res = await fetch(`${API_BASE}/auth/me/telegram`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to unlink Telegram" }));
-    throw new Error(err.detail || "Failed to unlink Telegram");
-  }
-}
-
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   const token = getAccessToken();
   const res = await fetch(`${API_BASE}/auth/me/password`, {
@@ -183,28 +129,7 @@ export async function disconnectTesla(): Promise<void> {
   }
 }
 
-export async function register(
-  email: string,
-  password: string,
-  invite_token: string,
-): Promise<{ user: AuthUser }> {
-  const res = await fetch(`${API_BASE}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, invite_token }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Registration failed" }));
-    throw new Error(err.detail || "Registration failed");
-  }
-
-  const data = await res.json();
-  setTokens(data.access_token, data.refresh_token);
-  return { user: data.user };
-}
-
-// --------------- primary onboarding helpers ---------------
+// --------------- registration ---------------
 
 export async function registerPrimary(
   email: string,
