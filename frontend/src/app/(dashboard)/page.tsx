@@ -31,7 +31,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      window.location.href = "/login";
+      window.location.href = "/onboard";
     }
   }, [authLoading, user]);
 
