@@ -77,12 +77,12 @@ function formatHour(hour: string): string {
 function MiniTile({ label, value, color, dotColor }: { label: string; value: number; color: string; dotColor: string }) {
   const animated = useTickUp(value, 800, 200);
   return (
-    <div className="card-elevated rounded-2xl p-3 border border-gray-800/50 flex flex-col items-center text-center">
-      <span className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-1">
-        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+    <div className="card-elevated rounded-2xl p-2 sm:p-3 border border-gray-800/50 flex flex-col items-center text-center">
+      <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] text-gray-500 mb-0.5 sm:mb-1">
+        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full" style={{ backgroundColor: dotColor }} />
         {label}
       </span>
-      <span className={`text-lg sm:text-xl font-bold tabular-nums ${color}`}>
+      <span className={`text-base sm:text-xl font-bold tabular-nums ${color}`}>
         {fmtSmall(animated)}
       </span>
     </div>
@@ -94,10 +94,10 @@ function MiniTile({ label, value, color, dotColor }: { label: string; value: num
 function HeroTile({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   const animated = useTickUp(value, 1200, 100);
   return (
-    <div className="card-elevated rounded-2xl p-4 border border-gray-800/50 flex flex-col items-center text-center">
-      <h2 className="text-sm font-semibold text-gray-400 mb-2">{label}</h2>
+    <div className="card-elevated rounded-2xl p-3 sm:p-4 border border-gray-800/50 flex flex-col items-center text-center">
+      <h2 className="text-xs sm:text-sm font-semibold text-gray-400 mb-1 sm:mb-2">{label}</h2>
       <div className="mb-1">{icon}</div>
-      <p className={`text-3xl sm:text-5xl font-bold tabular-nums ${color}`}>
+      <p className={`text-2xl sm:text-5xl font-bold tabular-nums ${color}`}>
         {fmtBig(animated)}
       </p>
     </div>
@@ -125,8 +125,8 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
   );
 
   const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => navigate(-1),
-    onSwipedRight: () => navigate(1),
+    onSwipedLeft: () => navigate(1),
+    onSwipedRight: () => navigate(-1),
     trackMouse: false,
     delta: 40,
     preventScrollOnSwipe: true,
@@ -385,10 +385,10 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
     contentStyle: { backgroundColor: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 },
     labelStyle: { color: "#9ca3af" },
   };
-  const chartHeight = 220;
+  const chartHeight = 180;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* Period selector */}
       <div className="sticky top-0 z-20 bg-gray-950 pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4">
         <PeriodSelector value={dateRange} onChange={handlePeriodChange} onModeChange={handleModeChange} />
@@ -400,7 +400,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
           swipeDir === "left" ? "-translate-x-2" : swipeDir === "right" ? "translate-x-2" : "translate-x-0"
         }`}
       >
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
 
           {/* ═══ SAVINGS SECTION ═══ */}
           <HeroTile
@@ -420,7 +420,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
           {(showHourlyCharts || showMultiDayCharts) && (
             <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
               <h2 className="text-sm font-semibold text-gray-400 mb-2">Savings Breakdown</h2>
-              <ResponsiveContainer width="100%" height={chartHeight}>
+              <ResponsiveContainer width="100%" height={chartHeight} className="sm:!h-[220px]">
                 <BarChart data={showHourlyCharts ? hourlySavingsData : savingsData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
@@ -453,7 +453,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
           {showHourlyCharts && (
             <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
               <h2 className="text-sm font-semibold text-gray-400 mb-2">Cost Breakdown</h2>
-              <ResponsiveContainer width="100%" height={chartHeight}>
+              <ResponsiveContainer width="100%" height={chartHeight} className="sm:!h-[220px]">
                 <BarChart data={hourlyCostData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
@@ -469,7 +469,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
           {showMultiDayCharts && (
             <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
               <h2 className="text-sm font-semibold text-gray-400 mb-2">Cost Breakdown</h2>
-              <ResponsiveContainer width="100%" height={chartHeight}>
+              <ResponsiveContainer width="100%" height={chartHeight} className="sm:!h-[220px]">
                 <BarChart data={costData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />
@@ -488,7 +488,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
           {showHourlyCharts && (
             <div className="card-chart rounded-2xl p-3 sm:p-4 border border-gray-800/50">
               <h2 className="text-sm font-semibold text-gray-400 mb-2">Grid Rate Schedule</h2>
-              <ResponsiveContainer width="100%" height={chartHeight}>
+              <ResponsiveContainer width="100%" height={chartHeight} className="sm:!h-[220px]">
                 <BarChart data={rateData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={{ stroke: "#374151" }} tickLine={false} />

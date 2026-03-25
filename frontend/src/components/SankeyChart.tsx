@@ -320,7 +320,7 @@ export function renderSankey(flows: Flow[], animated?: boolean, onNodeClick?: (l
     });
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[340px] sm:h-[420px]">
+    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-[280px] sm:h-[420px]">
       <text x={LEFT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>SOURCES</text>
       <text x={RIGHT_X + NODE_W / 2} y={18} textAnchor="middle" className="fill-gray-600 font-medium" fontSize={11} letterSpacing={1}>SINKS</text>
       {flowPaths}

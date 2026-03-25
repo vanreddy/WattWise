@@ -56,7 +56,7 @@ function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | 
   const dataTs = current?.ts ? new Date(current.ts) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* Weather + data timestamp */}
       <div className="flex items-center justify-between px-1">
         {weather ? (
@@ -82,7 +82,7 @@ function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | 
       />
 
       {/* Powerwall Battery Tile — compact inline */}
-      <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl px-4 py-3 flex items-center gap-4">
+      <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-3 sm:gap-4">
         <div className="shrink-0">
           <p className="text-xs font-semibold text-gray-400">Powerwall</p>
         </div>
@@ -173,9 +173,9 @@ function BatteryPctChart({ intervalData, isToday }: { intervalData: IntervalPoin
   });
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">Powerwall %</h3>
-      <ResponsiveContainer width="100%" height={160}>
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-2 sm:p-4">
+      <h3 className="text-sm font-semibold text-gray-300 mb-2 sm:mb-3">Powerwall %</h3>
+      <ResponsiveContainer width="100%" height={120} className="sm:!h-[160px]">
         <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis
@@ -280,13 +280,13 @@ function SelfPoweredByDayChart({ daily, intervalData, dateRange }: { daily: Dail
   });
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-2 sm:p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-1">Self-Powered by Day</h3>
       <div className="flex gap-3 text-[10px] text-gray-500 mb-2">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> Solar</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Powerwall</span>
       </div>
-      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 240 }}>
+      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full h-[180px] sm:h-[240px]">
         {/* Y grid */}
         {[0, 25, 50, 75, 100].map(pct => {
           const y = padding.top + (1 - pct / 100) * chartH;
@@ -381,13 +381,13 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
   });
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-2 sm:p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-1">Self-Powered by Month</h3>
       <div className="flex gap-3 text-[10px] text-gray-500 mb-2">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> Solar</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Powerwall</span>
       </div>
-      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 180 }}>
+      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full h-[150px] sm:h-[180px]">
         {[0, 25, 50, 75, 100].map(pct => {
           const y = padding.top + (1 - pct / 100) * chartH;
           return (
@@ -553,18 +553,18 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
   };
 
   return (
-    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
+    <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-2 sm:p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-1">
         Energy Flow by {groupBy === "month" ? "Month" : "Day"}
       </h3>
-      <div className="flex justify-center gap-3 text-[10px] text-gray-500 mb-2">
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-2">
         <span className="text-gray-400 font-medium">Sources ↑</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#facc15" }} /> Solar</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
       </div>
-      <ResponsiveContainer width="100%" height={350}>
-        <AreaChart data={chartData} margin={{ top: 10, right: 40, bottom: 0, left: 40 }} stackOffset="sign">
+      <ResponsiveContainer width="100%" height={250} className="sm:!h-[350px]">
+        <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 10 }} stackOffset="sign">
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis dataKey="label" stroke="#6b7280" fontSize={9} tickLine={false} tick={{ dy: 4 }} interval={0} padding={{ left: 20, right: 20 }} />
           <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={9} tickLine={false} axisLine={false}
@@ -582,7 +582,7 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
           <Area type="monotone" dataKey="batteryCharge" stackId="sink" stroke="#34d399" fill="#34d399" fillOpacity={0.15} strokeWidth={2} name="Powerwall Charge" />
         </AreaChart>
       </ResponsiveContainer>
-      <div className="flex justify-center gap-3 text-[10px] text-gray-500 mt-2">
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mt-2">
         <span className="text-gray-400 font-medium">Sinks ↓</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#a78bfa" }} /> EV</span>
@@ -636,7 +636,7 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
             : "translate-x-0"
       }`}
     >
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
 
         {/* Weekly/Monthly: Self-Powered % by day */}
@@ -700,8 +700,8 @@ export default function FlowTab({
   );
 
   const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => navigate(-1),
-    onSwipedRight: () => navigate(1),
+    onSwipedLeft: () => navigate(1),
+    onSwipedRight: () => navigate(-1),
     trackMouse: false,
     delta: 40,
     preventScrollOnSwipe: true,
@@ -717,7 +717,7 @@ export default function FlowTab({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* Period selector — sticky */}
       <div className="sticky top-0 z-20 bg-gray-950 pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4">
         <PeriodSelector

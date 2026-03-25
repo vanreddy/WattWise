@@ -26,9 +26,15 @@ function formatDaily(dateStr: string): string {
 function formatWeekly(from: string, to: string): string {
   const f = new Date(from + "T12:00:00");
   const t = new Date(to + "T12:00:00");
-  const fStr = f.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const tStr = t.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  return `${fStr} – ${tStr}`;
+  // Shorter format: "Mar 16 – 22" when same month, "Mar 16 – Apr 22" otherwise
+  const fMonth = f.toLocaleDateString("en-US", { month: "short" });
+  const tMonth = t.toLocaleDateString("en-US", { month: "short" });
+  const fDay = f.getDate();
+  const tDay = t.getDate();
+  if (fMonth === tMonth) {
+    return `${fMonth} ${fDay} – ${tDay}`;
+  }
+  return `${fMonth} ${fDay} – ${tMonth} ${tDay}`;
 }
 
 function formatMonthly(dateStr: string): string {
@@ -140,14 +146,14 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
   const visibleModes = ALL_MODES.filter(m => availableModes.includes(m.id));
 
   return (
-    <div className="flex flex-col items-center gap-3 relative px-2">
+    <div className="flex flex-col items-center gap-2 sm:gap-3 relative px-2">
       {/* Segmented control */}
       <div className="w-full max-w-sm bg-gray-800/40 rounded-2xl p-1 flex backdrop-blur-sm border border-gray-700/20">
         {visibleModes.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => handleModeChange(id)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+            className={`flex-1 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 ${
               mode === id
                 ? "bg-gray-700 text-white shadow-lg shadow-black/30"
                 : "text-gray-500 hover:text-gray-300 active:bg-gray-800"
@@ -166,7 +172,7 @@ export default function PeriodSelector({ value, onChange, onModeChange, modes, d
         >
           <ChevronLeft size={24} />
         </button>
-        <span className="text-base font-semibold text-gray-200 min-w-[160px] text-center">
+        <span className="text-sm sm:text-base font-semibold text-gray-200 min-w-[120px] sm:min-w-[160px] text-center">
           {periodLabel}
         </span>
         <button

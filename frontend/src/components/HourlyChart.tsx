@@ -378,7 +378,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
         <LegendRow items={sourceLegend} label="Sources ↑" />
       </div>
 
-      <ResponsiveContainer width="100%" height={400} className="sm:!h-[500px]">
+      <ResponsiveContainer width="100%" height={280} className="sm:!h-[500px]">
         <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis
@@ -412,7 +412,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
       </ResponsiveContainer>
 
       {/* Consumption legend — centered below chart */}
-      <div className="flex justify-center mt-3 sm:mt-1">
+      <div className="flex justify-center mt-1">
         <LegendRow items={consumptionLegend} label="Sinks ↓" />
       </div>
     </div>
