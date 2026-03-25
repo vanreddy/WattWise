@@ -407,6 +407,64 @@ async def _sankey_from_polled(pool, start_day: date, end_day: date, account_id: 
     return flows
 
 
+@router.get("/sankey/live")
+async def sankey_live(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Sankey flows from the latest non-zero interval (for Now tab)."""
+    pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
+
+    row = await pool.fetchrow(
+        """SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
+           FROM tesla_intervals
+           WHERE account_id = $1
+             AND (solar_w != 0 OR home_w != 0 OR grid_w != 0 OR battery_w != 0)
+           ORDER BY ts DESC LIMIT 1""",
+        account_id,
+    )
+
+    if not row:
+        return {"flows": {k: 0.0 for k in ["solar_to_home", "solar_to_battery", "solar_to_grid", "battery_to_home", "battery_to_grid", "grid_to_home", "grid_to_battery"]}}
+
+    solar = max(0, row["solar_w"]) / 1000
+    home = max(0, row["home_w"]) / 1000
+    grid_import = max(0, row["grid_w"]) / 1000
+    grid_export = max(0, -row["grid_w"]) / 1000
+    bat_discharge = max(0, row["battery_w"]) / 1000
+    bat_charge = max(0, -row["battery_w"]) / 1000
+
+    solar_to_home = min(solar, home)
+    solar_left = solar - solar_to_home
+    solar_to_bat = min(bat_charge, solar_left)
+    solar_left -= solar_to_bat
+    solar_to_grid = min(grid_export, solar_left)
+
+    remain_home = max(0, home - solar_to_home)
+    bat_to_home = min(bat_discharge, remain_home)
+    bat_left = bat_discharge - bat_to_home
+    remain_exp = max(0, grid_export - solar_to_grid)
+    bat_to_grid = min(bat_left, remain_exp)
+
+    remain_home2 = max(0, remain_home - bat_to_home)
+    grid_to_home = remain_home2
+    grid_left = grid_import - remain_home2
+    remain_bat_chg = max(0, bat_charge - solar_to_bat)
+    grid_to_bat = min(grid_left, remain_bat_chg)
+
+    flows = {
+        "solar_to_home": round(solar_to_home, 3),
+        "solar_to_battery": round(solar_to_bat, 3),
+        "solar_to_grid": round(solar_to_grid, 3),
+        "battery_to_home": round(bat_to_home, 3),
+        "battery_to_grid": round(bat_to_grid, 3),
+        "grid_to_home": round(grid_to_home, 3),
+        "grid_to_battery": round(grid_to_bat, 3),
+    }
+    return {"flows": flows}
+
+
 @router.get("/alerts")
 async def alerts(
     request: Request,

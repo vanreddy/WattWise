@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSwipeable } from "react-swipeable";
-import type { DailySummary, HourlyBucket, SankeyFlows, IntervalPoint, SummaryResponse, CurrentPower } from "@/lib/api";
+import type { DailySummary, HourlyBucket, SankeyFlows, IntervalPoint, SummaryResponse } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { WeatherData } from "@/hooks/useWeather";
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
@@ -24,47 +25,23 @@ function WeatherIcon({ condition, size = 28 }: { condition: string; size?: numbe
   return <Sun size={size} className="text-yellow-400" />;
 }
 
-function currentToSankeyFlows(c: CurrentPower): SankeyFlows {
-  const solar = Math.max(0, c.solar_w) / 1000;
-  const home = Math.max(0, c.home_w) / 1000;
-  const gridImport = Math.max(0, c.grid_w) / 1000;
-  const gridExport = Math.max(0, -c.grid_w) / 1000;
-  const batCharge = Math.max(0, -c.battery_w) / 1000;
-  const batDischarge = Math.max(0, c.battery_w) / 1000;
-  const ev = Math.max(0, c.vehicle_w) / 1000;
-
-  const solarToHome = Math.min(solar, home);
-  const solarToBat = Math.min(solar - solarToHome, batCharge);
-  const solarToGrid = Math.min(solar - solarToHome - solarToBat, gridExport);
-  const batToHome = Math.min(batDischarge, home - solarToHome);
-  const gridToHome = Math.min(gridImport, home + ev - solarToHome - batToHome);
-  const gridToBat = Math.min(gridImport - gridToHome, batCharge - solarToBat);
-
-  return {
-    solar_to_home: solarToHome,
-    solar_to_battery: solarToBat,
-    solar_to_grid: solarToGrid,
-    battery_to_home: batToHome,
-    battery_to_grid: 0,
-    grid_to_home: gridToHome,
-    grid_to_battery: gridToBat,
-  };
-}
-
 function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | null; lastUpdated: Date | null; summary: SummaryResponse | null }) {
   const current = summary?.current;
+  const [liveFlows, setLiveFlows] = useState<SankeyFlows | null>(null);
 
-  // Self-powered % from live data
-  const home = current ? Math.max(0, current.home_w) : 0;
-  const gridImport = current ? Math.max(0, current.grid_w) : 0;
-  const solarDirect = current ? Math.min(Math.max(0, current.solar_w), home) : 0;
-  const batDirect = current ? Math.min(Math.max(0, current.battery_w), home - solarDirect) : 0;
-  const selfPoweredPct = home > 0 ? Math.round(((home - gridImport) / home) * 100) : 0;
-  const solarPct = home > 0 ? Math.round((solarDirect / home) * 100) : 0;
-  const batteryPct = home > 0 ? Math.round((batDirect / home) * 100) : 0;
+  // Fetch live Sankey flows from backend (single source of truth)
+  useEffect(() => {
+    api.getSankeyLive().then(res => setLiveFlows(res.flows)).catch(() => {});
+  }, [current?.ts]);
 
-  // Sankey flows from live data
-  const liveFlows = current ? currentToSankeyFlows(current) : null;
+  // Self-powered % from live flows
+  const solarToHome = liveFlows?.solar_to_home ?? 0;
+  const batToHome = liveFlows?.battery_to_home ?? 0;
+  const gridToHome = liveFlows?.grid_to_home ?? 0;
+  const totalToHome = solarToHome + batToHome + gridToHome;
+  const selfPoweredPct = totalToHome > 0 ? Math.round(((totalToHome - gridToHome) / totalToHome) * 100) : 0;
+  const solarPct = totalToHome > 0 ? Math.round((solarToHome / totalToHome) * 100) : 0;
+  const batteryPct = totalToHome > 0 ? Math.round((batToHome / totalToHome) * 100) : 0;
 
   // Battery status
   const batteryChargePct = current?.battery_pct ?? 0;

@@ -183,6 +183,7 @@ export const api = {
     const qs = params.toString();
     return fetchJSON<SankeyResponse>(`/sankey${qs ? `?${qs}` : ""}`);
   },
+  getSankeyLive: () => fetchJSON<SankeyResponse>("/sankey/live"),
   getRates: (date?: string) => {
     const qs = date ? `?date=${date}` : "";
     return fetchJSON<RatesResponse>(`/rates${qs}`);
