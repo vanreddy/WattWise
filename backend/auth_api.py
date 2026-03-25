@@ -311,6 +311,8 @@ async def tesla_oauth_complete(body: TeslaCompleteRequest, request: Request, use
                 site = products[0]
                 site_name = site.get("site_name")
                 energy_site_id = str(site.get("energy_site_id", ""))
+                # Log all available site fields for discovery
+                logger.info("Tesla site fields: %s", {k: v for k, v in site.items() if not callable(v) and k != 'api'})
     except Exception as exc:
         logger.exception("Tesla OAuth exchange failed: %s", exc)
         raise HTTPException(status_code=400, detail=f"Tesla authentication failed: {exc}")
