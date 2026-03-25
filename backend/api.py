@@ -24,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
-from backend.rates import get_import_rate, get_tou_period, get_export_rate
+from backend.rates import (
+    get_import_rate, get_tou_period, get_export_rate, is_summer,
+    WINTER_RATES, SUMMER_RATES, EXPORT_RATE,
+)
 from backend.aggregator import aggregate_day
 
 router = APIRouter()
@@ -503,3 +506,32 @@ async def reports(
         }
         for row in rows
     ]
+
+
+@router.get("/rates")
+async def rates(
+    request: Request,
+    for_date: Optional[str] = Query(default=None, alias="date"),
+):
+    """Return current TOU rate schedule. Optionally pass ?date= to get rates for a specific date's season."""
+    if for_date:
+        dt = datetime.fromisoformat(for_date + "T12:00:00")
+        summer = is_summer(dt)
+    else:
+        summer = is_summer(datetime.now(LOCAL_TZ))
+
+    # Build hourly rate schedule for a representative day
+    schedule = []
+    for h in range(24):
+        dt_repr = datetime(2026, 7 if summer else 1, 1, h, 0)  # weekday for summer peak
+        period = get_tou_period(dt_repr)
+        rate = get_import_rate(dt_repr)
+        schedule.append({"hour": h, "period": period, "rate": round(rate, 3)})
+
+    return {
+        "season": "summer" if summer else "winter",
+        "winter_rates": WINTER_RATES,
+        "summer_rates": SUMMER_RATES,
+        "export_rate": EXPORT_RATE,
+        "schedule": schedule,
+    }

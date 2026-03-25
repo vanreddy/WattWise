@@ -120,6 +120,20 @@ export interface IntervalPoint {
   vehicle_w: number;
 }
 
+export interface RateScheduleEntry {
+  hour: number;
+  period: string;
+  rate: number;
+}
+
+export interface RatesResponse {
+  season: "summer" | "winter";
+  winter_rates: Record<string, number>;
+  summer_rates: Record<string, number>;
+  export_rate: number;
+  schedule: RateScheduleEntry[];
+}
+
 export interface Alert {
   id: number;
   fired_at: string;
@@ -168,6 +182,10 @@ export const api = {
     if (to) params.set("to", to);
     const qs = params.toString();
     return fetchJSON<SankeyResponse>(`/sankey${qs ? `?${qs}` : ""}`);
+  },
+  getRates: (date?: string) => {
+    const qs = date ? `?date=${date}` : "";
+    return fetchJSON<RatesResponse>(`/rates${qs}`);
   },
   getAlerts: (limit = 50) => fetchJSON<Alert[]>(`/alerts?limit=${limit}`),
   getReports: (type?: string, limit = 10) => {

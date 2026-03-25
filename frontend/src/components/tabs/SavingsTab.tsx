@@ -13,7 +13,8 @@ import {
   Legend,
 } from "recharts";
 import { Sun, Zap } from "lucide-react";
-import type { DailySummary, HourlyBucket, SankeyFlows } from "@/lib/api";
+import type { DailySummary, HourlyBucket, SankeyFlows, RateScheduleEntry } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
 
@@ -247,24 +248,21 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
     }));
   }, [daily]);
 
-  const rateData = useMemo(() => {
-    if (!isDaily) return [];
-    const month = new Date(dateRange.from + "T12:00:00").getMonth();
-    const isSummer = month >= 5 && month <= 8;
-    return Array.from({ length: 24 }, (_, h) => {
-      const label = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-      let rate: number, tier: string;
-      if (isSummer) {
-        if (h >= 16 && h < 21) { rate = 0.42; tier = "Peak"; }
-        else if ((h >= 15 && h < 16) || (h >= 21 && h < 24)) { rate = 0.35; tier = "Part-Peak"; }
-        else { rate = 0.25; tier = "Off-Peak"; }
-      } else {
-        if (h >= 16 && h < 21) { rate = 0.38; tier = "Peak"; }
-        else { rate = 0.28; tier = "Off-Peak"; }
-      }
-      return { label, rate: parseFloat(rate.toFixed(2)), tier };
-    });
+  const [rateSchedule, setRateSchedule] = useState<RateScheduleEntry[]>([]);
+  useEffect(() => {
+    if (!isDaily) return;
+    api.getRates(dateRange.from).then(data => setRateSchedule(data.schedule)).catch(() => {});
   }, [isDaily, dateRange.from]);
+
+  const rateData = useMemo(() => {
+    if (!isDaily || rateSchedule.length === 0) return [];
+    return rateSchedule.map(entry => {
+      const h = entry.hour;
+      const label = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+      const tier = entry.period === "peak" ? "Peak" : entry.period === "part_peak" ? "Part-Peak" : "Off-Peak";
+      return { label, rate: entry.rate, tier };
+    });
+  }, [isDaily, rateSchedule]);
 
   const showMultiDayCharts = !isDaily && daily.length > 1;
   const showHourlyCharts = isDaily && hourly.length > 0;
