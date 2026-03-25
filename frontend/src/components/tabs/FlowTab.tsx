@@ -285,14 +285,15 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
           const battH = (b.battPct / 100) * chartH;
           const solarY = padding.top + chartH - solarH;
           const battY = solarY - battH;
+          const topY = battH > 0 ? battY : solarY;
           return (
             <g key={i}>
               <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />
               <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />
-              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.dayLabel}</text>
-              <text x={b.x + barW / 2} y={maxH - 6} textAnchor="middle" className="fill-gray-600" fontSize={8}>
+              <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
                 {Math.round(b.totalPct)}%
               </text>
+              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.dayLabel}</text>
             </g>
           );
         })}
@@ -306,13 +307,9 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
     if (!daily.length) return [];
 
     if (groupBy === "month") {
-      // Aggregate by month
       const monthMap = new Map<string, { solar: number; gridImport: number; gridExport: number; home: number; ev: number; label: string }>();
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      // Initialize all 12 months with zeros
-      for (let m = 0; m < 12; m++) {
-        monthMap.set(String(m), { solar: 0, gridImport: 0, gridExport: 0, home: 0, ev: 0, label: months[m] });
-      }
+      for (let m = 0; m < 12; m++) monthMap.set(String(m), { solar: 0, gridImport: 0, gridExport: 0, home: 0, ev: 0, label: months[m] });
       for (const d of daily) {
         const m = String(new Date(d.day + "T12:00:00").getMonth());
         const entry = monthMap.get(m)!;
@@ -322,83 +319,111 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
         entry.home += d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh - d.ev_kwh;
         entry.ev += d.ev_kwh;
       }
-      // Only return months that have data or are within the range
       const monthsWithData = Array.from(monthMap.values()).filter(m => m.solar > 0 || m.gridImport > 0);
       if (monthsWithData.length === 0) return [];
-      return monthsWithData.map(m => ({
-        label: m.label,
-        solar: Math.round(m.solar),
-        gridImport: Math.round(m.gridImport),
-        batteryDischarge: Math.round(Math.max(0, m.home + m.ev - m.solar - m.gridImport + m.gridExport)),
-        home: -Math.round(Math.max(0, m.home)),
-        ev: -Math.round(m.ev),
-        gridExport: -Math.round(m.gridExport),
-      }));
+      return monthsWithData.map(m => {
+        const battDis = Math.max(0, m.home + m.ev - m.solar - m.gridImport + m.gridExport);
+        const srcTotal = m.solar + m.gridImport + battDis;
+        const sinkTotal = Math.max(0, m.home) + m.ev + m.gridExport;
+        return {
+          label: m.label,
+          solar: -Math.round(m.solar), gridImport: -Math.round(m.gridImport), batteryDischarge: -Math.round(battDis),
+          home: Math.round(Math.max(0, m.home)), ev: Math.round(m.ev), gridExport: Math.round(m.gridExport),
+          srcTotal: Math.round(srcTotal), sinkTotal: Math.round(sinkTotal),
+        };
+      });
     }
 
-    // Group by day
     const sorted = [...daily].sort((a, b) => a.day.localeCompare(b.day));
     return sorted.map(d => {
       const totalHome = d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh;
       const homeOnly = Math.max(0, totalHome - d.ev_kwh);
       const battDischarge = Math.max(0, totalHome - d.solar_self_consumed_kwh - d.total_import_kwh);
+      const srcTotal = d.solar_generated_kwh + d.total_import_kwh + battDischarge;
+      const sinkTotal = homeOnly + d.ev_kwh + d.total_export_kwh;
       const dt = new Date(d.day + "T12:00:00");
       const label = sorted.length <= 7
         ? dt.toLocaleDateString("en-US", { weekday: "short" })
         : dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       return {
         label,
-        solar: Math.round(d.solar_generated_kwh * 10) / 10,
-        gridImport: Math.round(d.total_import_kwh * 10) / 10,
-        batteryDischarge: Math.round(battDischarge * 10) / 10,
-        home: -Math.round(homeOnly * 10) / 10,
-        ev: -Math.round(d.ev_kwh * 10) / 10,
-        gridExport: -Math.round(d.total_export_kwh * 10) / 10,
+        // Sources go LEFT (negative in horizontal bar chart)
+        solar: -Math.round(d.solar_generated_kwh * 10) / 10,
+        gridImport: -Math.round(d.total_import_kwh * 10) / 10,
+        batteryDischarge: -Math.round(battDischarge * 10) / 10,
+        // Sinks go RIGHT (positive)
+        home: Math.round(homeOnly * 10) / 10,
+        ev: Math.round(d.ev_kwh * 10) / 10,
+        gridExport: Math.round(d.total_export_kwh * 10) / 10,
+        srcTotal: Math.round(srcTotal * 10) / 10,
+        sinkTotal: Math.round(sinkTotal * 10) / 10,
       };
     });
   }, [daily, groupBy]);
 
   if (chartData.length === 0) return null;
 
-  // Compute Y domain
-  const maxSource = Math.max(...chartData.map(d => d.solar + d.gridImport + d.batteryDischarge));
-  const maxSink = Math.max(...chartData.map(d => Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.gridExport)));
-  const yMax = Math.ceil(Math.max(maxSource, maxSink) * 1.1);
+  const maxVal = Math.max(
+    ...chartData.map(d => Math.abs(d.solar) + Math.abs(d.gridImport) + Math.abs(d.batteryDischarge)),
+    ...chartData.map(d => d.home + d.ev + d.gridExport),
+  );
+  const xMax = Math.ceil(maxVal * 1.15);
+
+  // Custom label to show totals at bar ends
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderSourceTotal = (props: any) => {
+    const { x, y, width, height, index } = props;
+    if (index === undefined || !chartData[index]) return <text />;
+    const total = chartData[index].srcTotal;
+    return <text x={x + width - 4} y={y + height / 2 + 3} textAnchor="end" fill="#9ca3af" fontSize={9}>{total}</text>;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderSinkTotal = (props: any) => {
+    const { x, y, width, height, index } = props;
+    if (index === undefined || !chartData[index]) return <text />;
+    const total = chartData[index].sinkTotal;
+    return <text x={x + width + 4} y={y + height / 2 + 3} textAnchor="start" fill="#9ca3af" fontSize={9}>{total}</text>;
+  };
 
   return (
     <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-1">
         Energy Flow by {groupBy === "month" ? "Month" : "Day"}
       </h3>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-3">
-        <span className="flex items-center gap-1">Sources ↑</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#eab308" }} /> Solar</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#ef4444" }} /> Grid</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
-        <span className="ml-2 flex items-center gap-1">Sinks ↓</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#818cf8" }} /> EV</span>
+      <div className="flex justify-between text-[10px] text-gray-500 mb-3">
+        <div className="flex gap-2 items-center">
+          <span className="text-gray-400 font-medium">← Sources</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#facc15" }} /> Solar</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
+        </div>
+        <div className="flex gap-2 items-center">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#a78bfa" }} /> EV</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
+          <span className="text-gray-400 font-medium">Sinks →</span>
+        </div>
       </div>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }} stackOffset="sign">
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-          <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} />
-          <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false}
+      <ResponsiveContainer width="100%" height={Math.max(250, chartData.length * 40 + 40)}>
+        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }} stackOffset="sign">
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+          <YAxis dataKey="label" type="category" stroke="#6b7280" fontSize={10} tickLine={false} width={40} />
+          <XAxis type="number" domain={[-xMax, xMax]} stroke="#6b7280" fontSize={9} tickLine={false} axisLine={false}
             tickFormatter={(v: number) => `${Math.abs(v)}`} />
-          <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
+          <ReferenceLine x={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip
             contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: "#9ca3af" }}
             formatter={(value: number, name: string) => [`${Math.abs(value).toFixed(1)} kWh`, name]}
           />
-          {/* Sources (positive) */}
-          <Bar dataKey="solar" stackId="stack" fill="#eab308" name="Solar" radius={[2, 2, 0, 0]} />
-          <Bar dataKey="gridImport" stackId="stack" fill="#ef4444" name="Grid" radius={[2, 2, 0, 0]} />
-          <Bar dataKey="batteryDischarge" stackId="stack" fill="#34d399" name="Powerwall" radius={[2, 2, 0, 0]} />
-          {/* Sinks (negative) */}
-          <Bar dataKey="home" stackId="stack" fill="#60a5fa" name="Home" radius={[0, 0, 2, 2]} />
-          <Bar dataKey="ev" stackId="stack" fill="#818cf8" name="EV" radius={[0, 0, 2, 2]} />
-          <Bar dataKey="gridExport" stackId="stack" fill="#f87171" name="Grid Export" radius={[0, 0, 2, 2]} />
+          {/* Sources (negative = left) */}
+          <Bar dataKey="solar" stackId="stack" fill="#facc15" name="Solar" radius={[2, 0, 0, 2]} />
+          <Bar dataKey="gridImport" stackId="stack" fill="#f87171" name="Grid" radius={[2, 0, 0, 2]} />
+          <Bar dataKey="batteryDischarge" stackId="stack" fill="#34d399" name="Powerwall" radius={[2, 0, 0, 2]} label={renderSourceTotal} />
+          {/* Sinks (positive = right) */}
+          <Bar dataKey="home" stackId="stack" fill="#60a5fa" name="Home" radius={[0, 2, 2, 0]} />
+          <Bar dataKey="ev" stackId="stack" fill="#a78bfa" name="EV" radius={[0, 2, 2, 0]} />
+          <Bar dataKey="gridExport" stackId="stack" fill="#f87171" name="Grid Export" radius={[0, 2, 2, 0]} label={renderSinkTotal} />
         </BarChart>
       </ResponsiveContainer>
     </div>
