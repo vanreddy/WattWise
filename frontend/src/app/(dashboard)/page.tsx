@@ -83,6 +83,7 @@ export default function Dashboard() {
             hourly={data.hourly}
             dateRange={data.dateRange}
             setDateRange={data.setDateRange}
+            sankeyFlows={data.sankeyFlows}
           />
         )}
 

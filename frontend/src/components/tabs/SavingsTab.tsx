@@ -13,7 +13,7 @@ import {
   Legend,
 } from "recharts";
 import { Sun, Zap } from "lucide-react";
-import type { DailySummary, HourlyBucket } from "@/lib/api";
+import type { DailySummary, HourlyBucket, SankeyFlows } from "@/lib/api";
 import type { DateRange } from "@/hooks/useDashboardData";
 import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSelector";
 
@@ -22,6 +22,7 @@ interface Props {
   hourly: HourlyBucket[];
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
+  sankeyFlows?: SankeyFlows | null;
 }
 
 /* ─── Tick-up hook ─── */
@@ -104,7 +105,7 @@ function HeroTile({ label, value, icon, color }: { label: string; value: number;
 
 /* ─── Main component ─── */
 
-export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: Props) {
+export default function SavingsTab({ daily, hourly, dateRange, setDateRange, sankeyFlows }: Props) {
   const [mode, setMode] = useState<Mode>("daily");
   const [offset, setOffset] = useState(0);
   const [swipeDir, setSwipeDir] = useState<"left" | "right" | null>(null);
@@ -163,9 +164,19 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
     }
 
     const avgRate = totalImportKwh > 0 ? totalCost / totalImportKwh : 0.33;
-    const totalSelfPowerSavings = solarSelfConsumedKwh * avgRate;
-    const solarDirect = totalSelfPowerSavings * 0.6;
-    const batterySavings = totalSelfPowerSavings * 0.4;
+
+    // Use real Sankey flow data when available, otherwise estimate from daily summaries
+    let solarDirect: number;
+    let batterySavings: number;
+    if (sankeyFlows && (sankeyFlows.solar_to_home > 0 || sankeyFlows.battery_to_home > 0)) {
+      solarDirect = sankeyFlows.solar_to_home * avgRate;
+      batterySavings = sankeyFlows.battery_to_home * avgRate;
+    } else {
+      // Fallback: estimate from daily data using consumption split
+      const totalSelfPowerSavings = solarSelfConsumedKwh * avgRate;
+      solarDirect = totalSelfPowerSavings * 0.6;
+      batterySavings = totalSelfPowerSavings * 0.4;
+    }
 
     return {
       solarSavings: solarDirect,
@@ -177,7 +188,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange }: P
       offPeakCost,
       totalGridCost: totalCost,
     };
-  }, [daily]);
+  }, [daily, sankeyFlows]);
 
   /* ─── Average rate ─── */
 
