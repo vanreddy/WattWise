@@ -483,9 +483,9 @@ async def tesla_oauth_complete(body: TeslaCompleteRequest, request: Request, use
 
     logger.info("Tesla connected: account=%s site=%s", account_id, site_name)
 
-    # Kick off full historical backfill in the background (up to 1 year)
+    # Kick off full historical backfill in the background (all available history)
     import asyncio
-    asyncio.create_task(backfill_account(pool, account_id, days=365))
+    asyncio.create_task(backfill_account(pool, account_id, days=3650, include_today=True))
 
     return {
         "status": "ok",

@@ -82,10 +82,9 @@ export default function SetupPage() {
     }
   }, [status, redirecting]);
 
-  const daysFetched = status?.days_fetched ?? 0;
-  const daysTotal = status?.days_total ?? 30;
   const daysInDb = status?.days_in_db ?? 0;
-  const pct = daysTotal > 0 ? Math.round((daysFetched / daysTotal) * 100) : 0;
+  const target = 7;
+  const pct = Math.min(100, Math.round((daysInDb / target) * 100));
   const isError = status?.status === "error";
 
   return (
@@ -104,29 +103,26 @@ export default function SetupPage() {
             }}
           />
           <h2 className="text-lg font-semibold text-gray-300">
-            {redirecting ? "You\u2019re all set!" : "Setting up your account"}
+            {redirecting ? "You\u2019re all set!" : "Loading your energy history"}
           </h2>
         </div>
 
-        {/* Progress bar */}
+        {/* Single progress bar: days ready out of 7 */}
         <div className="space-y-3">
           <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-700 ease-out"
               style={{
                 width: `${pct}%`,
-                background:
-                  "linear-gradient(90deg, #F5B700, #86C840)",
+                background: "linear-gradient(90deg, #F5B700, #86C840)",
               }}
             />
           </div>
 
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>
-              {daysFetched} of {daysTotal} days fetched
-            </span>
-            <span>{pct}%</span>
-          </div>
+          <p className="text-sm text-gray-400">
+            <span className="text-green-400 font-semibold">{daysInDb}</span>
+            <span className="text-gray-600"> / {target} days ready</span>
+          </p>
         </div>
 
         {/* Rotating tip text */}
@@ -142,20 +138,10 @@ export default function SetupPage() {
               : TIPS[tipIndex]}
         </p>
 
-        {/* Days in DB indicator */}
-        {daysInDb > 0 && !redirecting && (
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Days of data ready</span>
-              <span className="text-green-400 font-medium">{daysInDb}</span>
-            </div>
-            {daysInDb < 7 && (
-              <p className="text-[10px] text-gray-600">
-                Dashboard unlocks at 7 days
-              </p>
-            )}
-          </div>
-        )}
+        <p className="text-[11px] text-gray-600">
+          Dashboard unlocks once 7 days of data are loaded.
+          {"\n"}Historical data will continue loading in the background.
+        </p>
 
         {/* Error retry */}
         {isError && (

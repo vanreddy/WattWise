@@ -214,53 +214,67 @@ async def backfill_account(
                 raise RuntimeError("No energy sites found")
             site = products[0]
 
-            # Build list of days to fetch, newest first
+            # Fetch newest first, stop when Tesla returns no data (end of history)
             today = datetime.now(LOCAL_TZ).date()
             start_offset = 0 if include_today else 1
-            days_to_fetch = []
-            for day_offset in range(start_offset, days + 1):
-                target_date = today - timedelta(days=day_offset)
-                days_to_fetch.append(target_date)
+            consecutive_empty = 0
+            max_consecutive_empty = 5  # stop after 5 days with no data = end of history
 
             fetched_count = 0
             skipped_count = 0
+            day_offset = start_offset
 
-            for target_date in days_to_fetch:
+            while day_offset <= days:
+                target_date = today - timedelta(days=day_offset)
+
                 # Check if day already has sufficient data (resumable)
                 existing = await _count_intervals_for_day(pool, account_id, target_date)
                 if existing >= MIN_INTERVALS_COMPLETE:
                     skipped_count += 1
                     fetched_count += 1
+                    day_offset += 1
                     progress["days_fetched"] = fetched_count
+                    consecutive_empty = 0
                     continue
 
                 logger.info("Backfill %s: fetching %s (existing: %d intervals)...",
                             acct_key, target_date, existing)
 
                 try:
-                    # Non-blocking Tesla API call
                     intervals = await asyncio.to_thread(_fetch_one_day, site, target_date)
                 except Exception as day_err:
                     logger.warning("Backfill %s: skipping %s — %s", acct_key, target_date, day_err)
                     fetched_count += 1
+                    day_offset += 1
                     progress["days_fetched"] = fetched_count
+                    consecutive_empty += 1
+                    if consecutive_empty >= max_consecutive_empty:
+                        logger.info("Backfill %s: %d consecutive empty days — reached end of Tesla history", acct_key, consecutive_empty)
+                        break
                     continue
 
                 if intervals:
                     await _insert_intervals_for_account(pool, intervals, account_id)
                     await _aggregate_day_for_account(pool, target_date, account_id)
+                    consecutive_empty = 0
+                else:
+                    consecutive_empty += 1
+                    if consecutive_empty >= max_consecutive_empty:
+                        logger.info("Backfill %s: %d consecutive empty days — reached end of Tesla history", acct_key, consecutive_empty)
+                        break
 
                 fetched_count += 1
+                day_offset += 1
                 progress["days_fetched"] = fetched_count
 
-                # Save token cache periodically (in case of token refresh during API calls)
+                # Save token cache periodically
                 if fetched_count % 10 == 0:
                     await _save_cache_to_db(pool, account_id)
                     await _save_progress_to_db(pool, account_id, progress)
 
                 if fetched_count % 25 == 0:
-                    logger.info("Backfill %s: %d/%d days done (%d skipped)",
-                                acct_key, fetched_count, len(days_to_fetch), skipped_count)
+                    logger.info("Backfill %s: %d days processed (%d skipped)",
+                                acct_key, fetched_count, skipped_count)
 
         # Final save
         await _save_cache_to_db(pool, account_id)
