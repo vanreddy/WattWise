@@ -218,8 +218,8 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
   if (daily.length < 2) return null;
 
   const sorted = [...daily].sort((a, b) => a.day.localeCompare(b.day));
-  const maxH = 220;
-  const padding = { left: 40, right: 16, top: 16, bottom: 40 };
+  const maxH = 240;
+  const padding = { left: 40, right: 16, top: 16, bottom: 50 };
   const w = 600;
   const chartW = w - padding.left - padding.right;
   const chartH = maxH - padding.top - padding.bottom;
@@ -257,8 +257,10 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
       }
     }
     const x = padding.left + gap + i * (barW + gap);
-    const dayLabel = new Date(d.day + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
-    return { x, solarPct, battPct, totalPct, dayLabel, day: d.day };
+    const dt = new Date(d.day + "T12:00:00");
+    const dayLabel = dt.toLocaleDateString("en-US", { weekday: "short" });
+    const dateLabel = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return { x, solarPct, battPct, totalPct, dayLabel, dateLabel, day: d.day };
   });
 
   return (
@@ -268,7 +270,7 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500 inline-block" /> Solar</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" /> Powerwall</span>
       </div>
-      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 180 }}>
+      <svg viewBox={`0 0 ${w} ${maxH}`} className="w-full" style={{ height: 240 }}>
         {/* Y grid */}
         {[0, 25, 50, 75, 100].map(pct => {
           const y = padding.top + (1 - pct / 100) * chartH;
@@ -293,7 +295,8 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
               <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
                 {Math.round(b.totalPct)}%
               </text>
-              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.dayLabel}</text>
+              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.dayLabel}</text>
+              <text x={b.x + barW / 2} y={maxH - 7} textAnchor="middle" className="fill-gray-600" fontSize={7}>{b.dateLabel}</text>
             </g>
           );
         })}
@@ -424,8 +427,8 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
         const sinkTotal = Math.max(0, m.home) + m.ev + m.gridExport;
         return {
           label: m.label,
-          solar: -Math.round(m.solar), gridImport: -Math.round(m.gridImport), batteryDischarge: -Math.round(battDis),
-          home: Math.round(Math.max(0, m.home)), ev: Math.round(m.ev), gridExport: Math.round(m.gridExport),
+          solar: Math.round(m.solar), gridImport: Math.round(m.gridImport), batteryDischarge: Math.round(battDis),
+          home: -Math.round(Math.max(0, m.home)), ev: -Math.round(m.ev), gridExport: -Math.round(m.gridExport),
           srcTotal: Math.round(srcTotal), sinkTotal: Math.round(sinkTotal),
         };
       });
@@ -439,19 +442,19 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
       const srcTotal = d.solar_generated_kwh + d.total_import_kwh + battDischarge;
       const sinkTotal = homeOnly + d.ev_kwh + d.total_export_kwh;
       const dt = new Date(d.day + "T12:00:00");
-      const label = sorted.length <= 7
-        ? dt.toLocaleDateString("en-US", { weekday: "short" })
-        : dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
+      const dateName = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const label = sorted.length <= 10 ? `${dayName} ${dateName}` : dateName;
       return {
         label,
-        // Sources go LEFT (negative in horizontal bar chart)
-        solar: -Math.round(d.solar_generated_kwh * 10) / 10,
-        gridImport: -Math.round(d.total_import_kwh * 10) / 10,
-        batteryDischarge: -Math.round(battDischarge * 10) / 10,
-        // Sinks go RIGHT (positive)
-        home: Math.round(homeOnly * 10) / 10,
-        ev: Math.round(d.ev_kwh * 10) / 10,
-        gridExport: Math.round(d.total_export_kwh * 10) / 10,
+        // Sources (positive = above zero)
+        solar: Math.round(d.solar_generated_kwh * 10) / 10,
+        gridImport: Math.round(d.total_import_kwh * 10) / 10,
+        batteryDischarge: Math.round(battDischarge * 10) / 10,
+        // Sinks (negative = below zero)
+        home: -Math.round(homeOnly * 10) / 10,
+        ev: -Math.round(d.ev_kwh * 10) / 10,
+        gridExport: -Math.round(d.total_export_kwh * 10) / 10,
         srcTotal: Math.round(srcTotal * 10) / 10,
         sinkTotal: Math.round(sinkTotal * 10) / 10,
       };
@@ -466,20 +469,28 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
   );
   const xMax = Math.ceil(maxVal * 1.15);
 
-  // Custom label to show totals at bar ends
+  // Compute Y domain for the vertical mirror chart
+  const maxSource = Math.max(...chartData.map(d => Math.abs(d.solar) + Math.abs(d.gridImport) + Math.abs(d.batteryDischarge)));
+  const maxSink = Math.max(...chartData.map(d => d.home + d.ev + d.gridExport));
+  const yMax = Math.ceil(Math.max(maxSource, maxSink) * 1.15);
+
+  // Custom tooltip
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderSourceTotal = (props: any) => {
-    const { x, y, width, height, index } = props;
-    if (index === undefined || !chartData[index]) return <text />;
-    const total = chartData[index].srcTotal;
-    return <text x={x + width - 4} y={y + height / 2 + 3} textAnchor="end" fill="#9ca3af" fontSize={9}>{total}</text>;
-  };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderSinkTotal = (props: any) => {
-    const { x, y, width, height, index } = props;
-    if (index === undefined || !chartData[index]) return <text />;
-    const total = chartData[index].sinkTotal;
-    return <text x={x + width + 4} y={y + height / 2 + 3} textAnchor="start" fill="#9ca3af" fontSize={9}>{total}</text>;
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload) return null;
+    const srcItems = payload.filter((p: any) => p.value < 0);
+    const sinkItems = payload.filter((p: any) => p.value > 0);
+    const srcTotal = srcItems.reduce((s: number, p: any) => s + Math.abs(p.value), 0);
+    const sinkTotal = sinkItems.reduce((s: number, p: any) => s + p.value, 0);
+    return (
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-xs">
+        <p className="text-gray-400 mb-1">{label}</p>
+        {srcItems.length > 0 && <p className="text-gray-300 font-medium">Sources: {srcTotal.toFixed(1)} kWh</p>}
+        {srcItems.map((p: any) => <p key={p.name} style={{ color: p.color }}>{p.name}: {Math.abs(p.value).toFixed(1)} kWh</p>)}
+        {sinkItems.length > 0 && <p className="text-gray-300 font-medium mt-1">Sinks: {sinkTotal.toFixed(1)} kWh</p>}
+        {sinkItems.map((p: any) => <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value.toFixed(1)} kWh</p>)}
+      </div>
+    );
   };
 
   return (
@@ -489,7 +500,7 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
       </h3>
       <div className="flex justify-between text-[10px] text-gray-500 mb-3">
         <div className="flex gap-2 items-center">
-          <span className="text-gray-400 font-medium">← Sources</span>
+          <span className="text-gray-400 font-medium">Sources ↑</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#facc15" }} /> Solar</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
@@ -498,30 +509,26 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#a78bfa" }} /> EV</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
-          <span className="text-gray-400 font-medium">Sinks →</span>
+          <span className="text-gray-400 font-medium">Sinks ↓</span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={Math.max(250, chartData.length * 40 + 40)}>
-        <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }} stackOffset="sign">
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-          <YAxis dataKey="label" type="category" stroke="#6b7280" fontSize={10} tickLine={false} width={40} />
-          <XAxis type="number" domain={[-xMax, xMax]} stroke="#6b7280" fontSize={9} tickLine={false} axisLine={false}
+      <ResponsiveContainer width="100%" height={350}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 5, bottom: 0, left: 5 }} stackOffset="sign">
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+          <XAxis dataKey="label" stroke="#6b7280" fontSize={9} tickLine={false} tick={{ dy: 4 }} />
+          <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={9} tickLine={false} axisLine={false}
             tickFormatter={(v: number) => `${Math.abs(v)}`} />
-          <ReferenceLine x={0} stroke="#6b7280" strokeWidth={1.5} />
-          <Tooltip
-            contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
-            labelStyle={{ color: "#9ca3af" }}
-            formatter={(value: number, name: string) => [`${Math.abs(value).toFixed(1)} kWh`, name]}
-          />
-          {/* Sources (negative = left) */}
-          <Bar dataKey="solar" stackId="stack" fill="#facc15" name="Solar" radius={[2, 0, 0, 2]} />
-          <Bar dataKey="gridImport" stackId="stack" fill="#f87171" name="Grid" radius={[2, 0, 0, 2]} />
-          <Bar dataKey="batteryDischarge" stackId="stack" fill="#34d399" name="Powerwall" radius={[2, 0, 0, 2]} label={renderSourceTotal} />
-          {/* Sinks (positive = right) */}
-          <Bar dataKey="home" stackId="stack" fill="#60a5fa" name="Home" radius={[0, 2, 2, 0]} />
-          <Bar dataKey="ev" stackId="stack" fill="#a78bfa" name="EV" radius={[0, 2, 2, 0]} />
-          <Bar dataKey="gridExport" stackId="stack" fill="#f87171" name="Grid Export" radius={[0, 2, 2, 0]} label={renderSinkTotal} />
-        </BarChart>
+          <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
+          <Tooltip content={<CustomTooltip />} />
+          {/* Sources (negative = above zero line via sign offset) */}
+          <Area type="monotone" dataKey="solar" stackId="src" stroke="#facc15" fill="#facc15" fillOpacity={0.15} strokeWidth={2} name="Solar" />
+          <Area type="monotone" dataKey="gridImport" stackId="src" stroke="#f87171" fill="#f87171" fillOpacity={0.15} strokeWidth={2} name="Grid" />
+          <Area type="monotone" dataKey="batteryDischarge" stackId="src" stroke="#34d399" fill="#34d399" fillOpacity={0.15} strokeWidth={2} name="Powerwall" />
+          {/* Sinks (positive = below zero line) */}
+          <Area type="monotone" dataKey="home" stackId="sink" stroke="#60a5fa" fill="#60a5fa" fillOpacity={0.15} strokeWidth={2} name="Home" />
+          <Area type="monotone" dataKey="ev" stackId="sink" stroke="#a78bfa" fill="#a78bfa" fillOpacity={0.15} strokeWidth={2} name="EV" />
+          <Area type="monotone" dataKey="gridExport" stackId="sink" stroke="#f87171" fill="#f87171" fillOpacity={0.15} strokeWidth={2} name="Grid Export" />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
