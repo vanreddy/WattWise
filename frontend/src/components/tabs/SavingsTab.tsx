@@ -201,52 +201,106 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
 
   /* ─── Chart data ─── */
 
-  const hourlySavingsData = useMemo(() => {
+  // Aggregate hourly data to 1-hour buckets (API may return 15-min or 5-min intervals)
+  const hourlyBuckets = useMemo(() => {
     if (!isDaily || hourly.length === 0) return [];
-    return [...hourly]
-      .sort((a, b) => new Date(a.hour).getTime() - new Date(b.hour).getTime())
-      .map((h) => {
-        const solarDirectUse = Math.max(0, h.solar_kwh - h.grid_export_kwh - h.battery_charge_kwh);
-        return {
-          label: formatHour(h.hour),
-          "Self-Power": parseFloat((solarDirectUse * avgRate).toFixed(1)),
-          Powerwall: parseFloat((h.battery_discharge_kwh * avgRate).toFixed(1)),
-          "Export Credits": parseFloat((h.grid_export_kwh * avgRate * 0.25).toFixed(1)),
-        };
-      });
-  }, [isDaily, hourly, avgRate]);
+    const bucketMap = new Map<number, HourlyBucket>();
+    for (const h of hourly) {
+      const dt = new Date(h.hour);
+      const hourKey = dt.getHours();
+      if (!bucketMap.has(hourKey)) {
+        bucketMap.set(hourKey, { ...h });
+      } else {
+        const b = bucketMap.get(hourKey)!;
+        b.solar_kwh += h.solar_kwh;
+        b.grid_import_kwh += h.grid_import_kwh;
+        b.grid_export_kwh += h.grid_export_kwh;
+        b.battery_charge_kwh += h.battery_charge_kwh;
+        b.battery_discharge_kwh += h.battery_discharge_kwh;
+        b.home_kwh += h.home_kwh;
+      }
+    }
+    // Generate all 24 hours
+    const result: { hour: number; data: HourlyBucket | null }[] = [];
+    for (let hr = 0; hr < 24; hr++) {
+      result.push({ hour: hr, data: bucketMap.get(hr) || null });
+    }
+    return result;
+  }, [isDaily, hourly]);
+
+  const hourlySavingsData = useMemo(() => {
+    if (hourlyBuckets.length === 0) return [];
+    return hourlyBuckets.map(({ hour, data }) => {
+      const label = hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`;
+      if (!data) return { label, "Self-Power": 0, Powerwall: 0, "Export Credits": 0 };
+      const solarDirectUse = Math.max(0, data.solar_kwh - data.grid_export_kwh - data.battery_charge_kwh);
+      return {
+        label,
+        "Self-Power": parseFloat((solarDirectUse * avgRate).toFixed(1)),
+        Powerwall: parseFloat((data.battery_discharge_kwh * avgRate).toFixed(1)),
+        "Export Credits": parseFloat((data.grid_export_kwh * avgRate * 0.25).toFixed(1)),
+      };
+    });
+  }, [hourlyBuckets, avgRate]);
 
   const hourlyCostData = useMemo(() => {
-    if (!isDaily || hourly.length === 0) return [];
-    return [...hourly]
-      .sort((a, b) => new Date(a.hour).getTime() - new Date(b.hour).getTime())
-      .map((h) => ({
-        label: formatHour(h.hour),
-        Cost: parseFloat((h.grid_import_kwh * avgRate).toFixed(1)),
-      }));
-  }, [isDaily, hourly, avgRate]);
+    if (hourlyBuckets.length === 0) return [];
+    return hourlyBuckets.map(({ hour, data }) => {
+      const label = hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`;
+      if (!data) return { label, Cost: 0 };
+      return {
+        label,
+        Cost: parseFloat((data.grid_import_kwh * avgRate).toFixed(1)),
+      };
+    });
+  }, [hourlyBuckets, avgRate]);
+
+  // Generate all days in range for full x-axis
+  const allDaysInRange = useMemo(() => {
+    const days: string[] = [];
+    const start = new Date(dateRange.from + "T12:00:00");
+    const end = new Date(dateRange.to + "T12:00:00");
+    const d = new Date(start);
+    while (d <= end) {
+      days.push(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+    return days;
+  }, [dateRange]);
+
+  const dailyMap = useMemo(() => {
+    const map = new Map<string, DailySummary>();
+    for (const d of daily) map.set(d.day, d);
+    return map;
+  }, [daily]);
 
   const savingsData = useMemo(() => {
-    return [...daily].sort((a, b) => a.day.localeCompare(b.day)).map((d) => {
+    return allDaysInRange.map((day) => {
+      const d = dailyMap.get(day);
+      if (!d) return { label: formatDay(day), "Self-Power": 0, Powerwall: 0, "Export Credits": 0 };
       const rate = d.total_import_kwh > 0 ? d.total_cost / d.total_import_kwh : 0.33;
       const ts = d.solar_self_consumed_kwh * rate;
       return {
-        label: formatDay(d.day),
+        label: formatDay(day),
         "Self-Power": parseFloat((ts * 0.6).toFixed(1)),
         Powerwall: parseFloat((ts * 0.4).toFixed(1)),
         "Export Credits": parseFloat(d.export_credit.toFixed(1)),
       };
     });
-  }, [daily]);
+  }, [allDaysInRange, dailyMap]);
 
   const costData = useMemo(() => {
-    return [...daily].sort((a, b) => a.day.localeCompare(b.day)).map((d) => ({
-      label: formatDay(d.day),
-      Peak: parseFloat(d.peak_cost.toFixed(1)),
-      "Part-Peak": parseFloat(d.part_peak_cost.toFixed(1)),
-      "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
-    }));
-  }, [daily]);
+    return allDaysInRange.map((day) => {
+      const d = dailyMap.get(day);
+      if (!d) return { label: formatDay(day), Peak: 0, "Part-Peak": 0, "Off-Peak": 0 };
+      return {
+        label: formatDay(day),
+        Peak: parseFloat(d.peak_cost.toFixed(1)),
+        "Part-Peak": parseFloat(d.part_peak_cost.toFixed(1)),
+        "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
+      };
+    });
+  }, [allDaysInRange, dailyMap]);
 
   const [rateSchedule, setRateSchedule] = useState<RateScheduleEntry[]>([]);
   useEffect(() => {
@@ -264,7 +318,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
     });
   }, [isDaily, rateSchedule]);
 
-  const showMultiDayCharts = !isDaily && daily.length > 1;
+  const showMultiDayCharts = !isDaily && daily.length >= 1;
   const showHourlyCharts = isDaily && hourly.length > 0;
 
   const savingsMax = useMemo(() => {
