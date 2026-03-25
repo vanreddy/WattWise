@@ -214,17 +214,31 @@ function BatteryPctChart({ intervalData, isToday }: { intervalData: IntervalPoin
   );
 }
 
-function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[]; intervalData: IntervalPoint[] }) {
-  if (daily.length < 2) return null;
+function SelfPoweredByDayChart({ daily, intervalData, dateRange }: { daily: DailySummary[]; intervalData: IntervalPoint[]; dateRange: DateRange }) {
+  if (daily.length < 2 && !dateRange) return null;
 
-  const sorted = [...daily].sort((a, b) => a.day.localeCompare(b.day));
+  // Generate all days in the dateRange
+  const allDays: string[] = [];
+  {
+    const start = new Date(dateRange.from + "T12:00:00");
+    const end = new Date(dateRange.to + "T12:00:00");
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      allDays.push(d.toISOString().slice(0, 10));
+    }
+  }
+
+  if (allDays.length < 2) return null;
+
+  // Index existing daily data by day
+  const dailyMap = new Map(daily.map(d => [d.day, d]));
+
   const maxH = 240;
   const padding = { left: 40, right: 16, top: 16, bottom: 50 };
   const w = 600;
   const chartW = w - padding.left - padding.right;
   const chartH = maxH - padding.top - padding.bottom;
-  const barW = Math.min(40, chartW / sorted.length * 0.7);
-  const gap = (chartW - barW * sorted.length) / (sorted.length + 1);
+  const barW = Math.min(40, chartW / allDays.length * 0.7);
+  const gap = (chartW - barW * allDays.length) / (allDays.length + 1);
 
   // Compute per-day Sankey flows from interval data for accurate solar/battery split
   const IH = 5 / 60 / 1000; // 5-min interval → kWh
@@ -245,8 +259,8 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
     f.gridToHome += Math.max(0, remainHome - b2h);
   }
 
-  const bars = sorted.map((d, i) => {
-    const flows = dayFlows.get(d.day);
+  const bars = allDays.map((day, i) => {
+    const flows = dayFlows.get(day);
     let solarPct = 0, battPct = 0, totalPct = 0;
     if (flows) {
       const total = flows.solarToHome + flows.battToHome + flows.gridToHome;
@@ -257,10 +271,10 @@ function SelfPoweredByDayChart({ daily, intervalData }: { daily: DailySummary[];
       }
     }
     const x = padding.left + gap + i * (barW + gap);
-    const dt = new Date(d.day + "T12:00:00");
+    const dt = new Date(day + "T12:00:00");
     const dayLabel = dt.toLocaleDateString("en-US", { weekday: "short" });
     const dateLabel = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return { x, solarPct, battPct, totalPct, dayLabel, dateLabel, day: d.day };
+    return { x, solarPct, battPct, totalPct, dayLabel, dateLabel, day };
   });
 
   return (
@@ -402,10 +416,8 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
   );
 }
 
-function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySummary[]; intervalData: IntervalPoint[]; groupBy: "day" | "month" }) {
+function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily: DailySummary[]; intervalData: IntervalPoint[]; groupBy: "day" | "month"; dateRange: DateRange }) {
   const chartData = useMemo(() => {
-    if (!intervalData.length && !daily.length) return [];
-
     // Compute accurate per-bucket flows from interval data
     const IH = 5 / 60 / 1000; // 5-min interval watts → kWh
     const bucketKey = (ts: string) => groupBy === "month"
@@ -446,9 +458,32 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySumm
       }
     }
 
-    const sortedKeys = Array.from(buckets.keys()).sort();
-    return sortedKeys.map(key => {
-      const b = buckets.get(key)!;
+    // Generate full list of keys from dateRange
+    const allKeys: string[] = [];
+    if (groupBy === "day") {
+      const start = new Date(dateRange.from + "T12:00:00");
+      const end = new Date(dateRange.to + "T12:00:00");
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        allKeys.push(d.toISOString().slice(0, 10));
+      }
+    } else {
+      // month groupBy: generate all months in range
+      const startDate = new Date(dateRange.from + "T12:00:00");
+      const endDate = new Date(dateRange.to + "T12:00:00");
+      let cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+      const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+      while (cur <= endMonth) {
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, "0");
+        allKeys.push(`${y}-${m}`);
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+
+    const emptyBucket = { solar: 0, gridImport: 0, gridExport: 0, battDischarge: 0, battCharge: 0, home: 0, ev: 0 };
+
+    return allKeys.map(key => {
+      const b = buckets.get(key) || emptyBucket;
       const srcTotal = b.solar + b.gridImport + b.battDischarge;
       const sinkTotal = b.home + b.ev + b.gridExport + b.battCharge;
       const r = (v: number) => Math.round(v * 10) / 10;
@@ -461,7 +496,7 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySumm
         const dt = new Date(key + "T12:00:00");
         const dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
         const dateName = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        label = sortedKeys.length <= 10 ? `${dayName} ${dateName}` : dateName;
+        label = allKeys.length <= 10 ? `${dayName} ${dateName}` : dateName;
       }
 
       return {
@@ -479,7 +514,7 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySumm
         sinkTotal: r(sinkTotal),
       };
     });
-  }, [daily, intervalData, groupBy]);
+  }, [daily, intervalData, groupBy, dateRange]);
 
   if (chartData.length === 0) return null;
 
@@ -601,7 +636,7 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         <SelfPoweredRing selfPoweredPct={selfPoweredPct} solarPct={solarPct} batteryPct={batteryPctVal} />
 
         {/* Weekly/Monthly: Self-Powered % by day */}
-        {(mode === "weekly" || mode === "monthly") && <SelfPoweredByDayChart daily={daily} intervalData={intervalData} />}
+        {(mode === "weekly" || mode === "monthly") && <SelfPoweredByDayChart daily={daily} intervalData={intervalData} dateRange={dateRange} />}
 
         {/* Yearly: Self-Powered % by month */}
         {mode === "yearly" && <SelfPoweredByMonthChart daily={daily} intervalData={intervalData} />}
@@ -615,10 +650,10 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         />
 
         {/* Weekly/Monthly: Energy Flow by Day */}
-        {(mode === "weekly" || mode === "monthly") && <EnergyFlowBarChart daily={daily} intervalData={intervalData} groupBy="day" />}
+        {(mode === "weekly" || mode === "monthly") && <EnergyFlowBarChart daily={daily} intervalData={intervalData} groupBy="day" dateRange={dateRange} />}
 
         {/* Yearly: Energy Flow by Month */}
-        {mode === "yearly" && <EnergyFlowBarChart daily={daily} intervalData={intervalData} groupBy="month" />}
+        {mode === "yearly" && <EnergyFlowBarChart daily={daily} intervalData={intervalData} groupBy="month" dateRange={dateRange} />}
 
         {/* Daily only: Hourly chart + Battery % */}
         {mode === "daily" && <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />}
