@@ -258,6 +258,8 @@ function SelfPoweredByDayChart({ daily, intervalData, dateRange }: { daily: Dail
     f.gridToHome += Math.max(0, remainHome - b2h);
   }
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   const bars = allDays.map((day, i) => {
     const flows = dayFlows.get(day);
     let solarPct = 0, battPct = 0, totalPct = 0;
@@ -273,7 +275,8 @@ function SelfPoweredByDayChart({ daily, intervalData, dateRange }: { daily: Dail
     const dt = new Date(day + "T12:00:00");
     const dayLabel = dt.toLocaleDateString("en-US", { weekday: "short" });
     const dateLabel = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return { x, solarPct, battPct, totalPct, dayLabel, dateLabel, day };
+    const isFuture = day > todayStr && !flows;
+    return { x, solarPct, battPct, totalPct, dayLabel, dateLabel, day, isFuture };
   });
 
   return (
@@ -303,13 +306,15 @@ function SelfPoweredByDayChart({ daily, intervalData, dateRange }: { daily: Dail
           const topY = battH > 0 ? battY : solarY;
           return (
             <g key={i}>
-              <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />
-              <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />
-              <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
-                {Math.round(b.totalPct)}%
-              </text>
-              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.dayLabel}</text>
-              <text x={b.x + barW / 2} y={maxH - 7} textAnchor="middle" className="fill-gray-600" fontSize={7}>{b.dateLabel}</text>
+              {!b.isFuture && solarH > 0 && <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />}
+              {!b.isFuture && battH > 0 && <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />}
+              {!b.isFuture && b.totalPct > 0 && (
+                <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
+                  {Math.round(b.totalPct)}%
+                </text>
+              )}
+              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-500"} fontSize={9}>{b.dayLabel}</text>
+              <text x={b.x + barW / 2} y={maxH - 7} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-600"} fontSize={7}>{b.dateLabel}</text>
             </g>
           );
         })}
