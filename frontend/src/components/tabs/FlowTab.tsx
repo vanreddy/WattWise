@@ -309,12 +309,12 @@ function SelfPoweredByDayChart({ daily, intervalData, dateRange }: { daily: Dail
               {!b.isFuture && solarH > 0 && <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />}
               {!b.isFuture && battH > 0 && <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />}
               {!b.isFuture && b.totalPct > 0 && (
-                <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
+                <text x={b.x + barW / 2} y={topY - 5} textAnchor="middle" className="fill-gray-300" fontSize={12} fontWeight="700">
                   {Math.round(b.totalPct)}%
                 </text>
               )}
-              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-500"} fontSize={9}>{b.dayLabel}</text>
-              <text x={b.x + barW / 2} y={maxH - 7} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-600"} fontSize={7}>{b.dateLabel}</text>
+              <text x={b.x + barW / 2} y={maxH - 18} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-500"} fontSize={10}>{b.dayLabel}</text>
+              <text x={b.x + barW / 2} y={maxH - 7} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-600"} fontSize={8}>{b.dateLabel}</text>
             </g>
           );
         })}
@@ -408,11 +408,11 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
               {!b.isFuture && solarH > 0 && <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />}
               {!b.isFuture && battH > 0 && <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />}
               {!b.isFuture && b.totalPct > 0 && (
-                <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
+                <text x={b.x + barW / 2} y={topY - 5} textAnchor="middle" className="fill-gray-300" fontSize={12} fontWeight="700">
                   {Math.round(b.totalPct)}%
                 </text>
               )}
-              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-500"} fontSize={9}>{b.label}</text>
+              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-500"} fontSize={10}>{b.label}</text>
             </g>
           );
         })}
@@ -555,7 +555,7 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
   return (
     <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-2 sm:p-4">
       <h3 className="text-sm font-semibold text-gray-300 mb-1">
-        Energy Flow by {groupBy === "month" ? "Month" : "Day"}
+        Energy Flow by {groupBy === "month" ? "Month" : groupBy === "hour" ? "Hour" : "Day"}
       </h3>
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mb-2">
         <span className="text-gray-400 font-medium">Sources ↑</span>
@@ -566,8 +566,8 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
       <ResponsiveContainer width="100%" height={250} className="sm:!h-[350px]">
         <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 10 }} stackOffset="sign">
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-          <XAxis dataKey="label" stroke="#6b7280" fontSize={9} tickLine={false} tick={{ dy: 4 }} interval={0} padding={{ left: 20, right: 20 }} />
-          <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={9} tickLine={false} axisLine={false}
+          <XAxis dataKey="label" stroke="#6b7280" fontSize={11} tickLine={false} tick={{ dy: 4 }} interval={0} padding={{ left: 20, right: 20 }} />
+          <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={11} tickLine={false} axisLine={false}
             tickFormatter={(v: number) => `${Math.abs(v)}`} />
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip content={<CustomTooltip />} />

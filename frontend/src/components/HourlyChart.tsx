@@ -312,7 +312,7 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
     };
   }, [data, days, intervalData, useIntervals]);
 
-  const title = isMultiDay ? `Average Day (${days} Days)` : "Hourly Energy Flow";
+  const title = isMultiDay ? `Average Day (${days} Days)` : "Energy Flow by Hour";
   const fmtKwh = (v: number) => v >= 100 ? `${Math.round(v)} kWh` : `${v.toFixed(1)} kWh`;
 
   // XAxis tick interval: 3-hour marks (every 12 slots for 96 15-min slots, every 3 for 24 hourly)

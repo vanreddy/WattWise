@@ -372,7 +372,7 @@ export default function SankeyChart({ hourlyData, dailyData, days, sankeyFlows, 
   }, [flows]);
 
   const unit = liveUnits ? "kW" : "kWh";
-  const title = liveUnits ? "Live Energy Flow" : days === 1 ? "Energy Flow" : `Energy Flow (${days} Days)`;
+  const title = liveUnits ? "Live Energy Flow" : "Energy Flow Overview";
 
   // Compute detail rows for selected node
   const detailRows = useMemo(() => {
