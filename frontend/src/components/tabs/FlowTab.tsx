@@ -402,64 +402,84 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
   );
 }
 
-function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy: "day" | "month" }) {
+function EnergyFlowBarChart({ daily, intervalData, groupBy }: { daily: DailySummary[]; intervalData: IntervalPoint[]; groupBy: "day" | "month" }) {
   const chartData = useMemo(() => {
-    if (!daily.length) return [];
+    if (!intervalData.length && !daily.length) return [];
 
-    if (groupBy === "month") {
-      const monthMap = new Map<string, { solar: number; gridImport: number; gridExport: number; home: number; ev: number; label: string }>();
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      for (let m = 0; m < 12; m++) monthMap.set(String(m), { solar: 0, gridImport: 0, gridExport: 0, home: 0, ev: 0, label: months[m] });
-      for (const d of daily) {
-        const m = String(new Date(d.day + "T12:00:00").getMonth());
-        const entry = monthMap.get(m)!;
-        entry.solar += d.solar_generated_kwh;
-        entry.gridImport += d.total_import_kwh;
-        entry.gridExport += d.total_export_kwh;
-        entry.home += d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh - d.ev_kwh;
-        entry.ev += d.ev_kwh;
-      }
-      const monthsWithData = Array.from(monthMap.values()).filter(m => m.solar > 0 || m.gridImport > 0);
-      if (monthsWithData.length === 0) return [];
-      return monthsWithData.map(m => {
-        const battDis = Math.max(0, m.home + m.ev - m.solar - m.gridImport + m.gridExport);
-        const srcTotal = m.solar + m.gridImport + battDis;
-        const sinkTotal = Math.max(0, m.home) + m.ev + m.gridExport;
-        return {
-          label: m.label,
-          solar: Math.round(m.solar), gridImport: Math.round(m.gridImport), batteryDischarge: Math.round(battDis),
-          home: -Math.round(Math.max(0, m.home)), ev: -Math.round(m.ev), gridExport: -Math.round(m.gridExport),
-          srcTotal: Math.round(srcTotal), sinkTotal: Math.round(sinkTotal),
-        };
-      });
+    // Compute accurate per-bucket flows from interval data
+    const IH = 5 / 60 / 1000; // 5-min interval watts → kWh
+    const bucketKey = (ts: string) => groupBy === "month"
+      ? ts.slice(0, 7) // "YYYY-MM"
+      : ts.slice(0, 10); // "YYYY-MM-DD"
+
+    const buckets = new Map<string, {
+      solar: number; gridImport: number; gridExport: number;
+      battDischarge: number; battCharge: number;
+      home: number; ev: number;
+    }>();
+
+    for (const pt of intervalData) {
+      const key = bucketKey(pt.ts);
+      if (!buckets.has(key)) buckets.set(key, { solar: 0, gridImport: 0, gridExport: 0, battDischarge: 0, battCharge: 0, home: 0, ev: 0 });
+      const b = buckets.get(key)!;
+      b.solar += Math.max(0, pt.solar_w) * IH;
+      b.gridImport += Math.max(0, pt.grid_w) * IH;
+      b.gridExport += Math.max(0, -pt.grid_w) * IH;
+      b.battDischarge += Math.max(0, pt.battery_w) * IH;
+      b.battCharge += Math.max(0, -pt.battery_w) * IH;
+      b.home += Math.max(0, pt.home_w) * IH;
+      b.ev += Math.max(0, pt.vehicle_w || 0) * IH;
     }
 
-    const sorted = [...daily].sort((a, b) => a.day.localeCompare(b.day));
-    return sorted.map(d => {
-      const totalHome = d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh;
-      const homeOnly = Math.max(0, totalHome - d.ev_kwh);
-      const battDischarge = Math.max(0, totalHome - d.solar_self_consumed_kwh - d.total_import_kwh);
-      const srcTotal = d.solar_generated_kwh + d.total_import_kwh + battDischarge;
-      const sinkTotal = homeOnly + d.ev_kwh + d.total_export_kwh;
-      const dt = new Date(d.day + "T12:00:00");
-      const dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
-      const dateName = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const label = sorted.length <= 10 ? `${dayName} ${dateName}` : dateName;
+    // If no interval data, fall back to daily summaries
+    if (buckets.size === 0) {
+      for (const d of daily) {
+        const key = groupBy === "month" ? d.day.slice(0, 7) : d.day;
+        buckets.set(key, {
+          solar: d.solar_generated_kwh,
+          gridImport: d.total_import_kwh,
+          gridExport: d.total_export_kwh,
+          battDischarge: 0, battCharge: 0,
+          home: Math.max(0, d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh - d.ev_kwh),
+          ev: d.ev_kwh,
+        });
+      }
+    }
+
+    const sortedKeys = Array.from(buckets.keys()).sort();
+    return sortedKeys.map(key => {
+      const b = buckets.get(key)!;
+      const srcTotal = b.solar + b.gridImport + b.battDischarge;
+      const sinkTotal = b.home + b.ev + b.gridExport + b.battCharge;
+      const r = (v: number) => Math.round(v * 10) / 10;
+
+      let label: string;
+      if (groupBy === "month") {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        label = months[parseInt(key.slice(5, 7), 10) - 1] || key;
+      } else {
+        const dt = new Date(key + "T12:00:00");
+        const dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
+        const dateName = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        label = sortedKeys.length <= 10 ? `${dayName} ${dateName}` : dateName;
+      }
+
       return {
         label,
-        // Sources (positive = above zero)
-        solar: Math.round(d.solar_generated_kwh * 10) / 10,
-        gridImport: Math.round(d.total_import_kwh * 10) / 10,
-        batteryDischarge: Math.round(battDischarge * 10) / 10,
-        // Sinks (negative = below zero)
-        home: -Math.round(homeOnly * 10) / 10,
-        ev: -Math.round(d.ev_kwh * 10) / 10,
-        gridExport: -Math.round(d.total_export_kwh * 10) / 10,
-        srcTotal: Math.round(srcTotal * 10) / 10,
-        sinkTotal: Math.round(sinkTotal * 10) / 10,
+        // Sources (positive)
+        solar: r(b.solar),
+        gridImport: r(b.gridImport),
+        batteryDischarge: r(b.battDischarge),
+        // Sinks (negative)
+        home: -r(b.home),
+        ev: -r(b.ev),
+        gridExport: -r(b.gridExport),
+        batteryCharge: -r(b.battCharge),
+        srcTotal: r(srcTotal),
+        sinkTotal: r(sinkTotal),
       };
     });
-  }, [daily, groupBy]);
+  }, [daily, intervalData, groupBy]);
 
   if (chartData.length === 0) return null;
 
@@ -471,24 +491,24 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
 
   // Compute Y domain for the vertical mirror chart
   const maxSource = Math.max(...chartData.map(d => Math.abs(d.solar) + Math.abs(d.gridImport) + Math.abs(d.batteryDischarge)));
-  const maxSink = Math.max(...chartData.map(d => d.home + d.ev + d.gridExport));
+  const maxSink = Math.max(...chartData.map(d => Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.gridExport) + Math.abs(d.batteryCharge)));
   const yMax = Math.ceil(Math.max(maxSource, maxSink) * 1.15);
 
   // Custom tooltip
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload) return null;
-    const srcItems = payload.filter((p: any) => p.value < 0);
-    const sinkItems = payload.filter((p: any) => p.value > 0);
-    const srcTotal = srcItems.reduce((s: number, p: any) => s + Math.abs(p.value), 0);
-    const sinkTotal = sinkItems.reduce((s: number, p: any) => s + p.value, 0);
+    const srcItems = payload.filter((p: any) => p.value > 0);
+    const sinkItems = payload.filter((p: any) => p.value < 0);
+    const srcTotal = srcItems.reduce((s: number, p: any) => s + p.value, 0);
+    const sinkTotal = sinkItems.reduce((s: number, p: any) => s + Math.abs(p.value), 0);
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-2 text-xs">
         <p className="text-gray-400 mb-1">{label}</p>
         {srcItems.length > 0 && <p className="text-gray-300 font-medium">Sources: {srcTotal.toFixed(1)} kWh</p>}
-        {srcItems.map((p: any) => <p key={p.name} style={{ color: p.color }}>{p.name}: {Math.abs(p.value).toFixed(1)} kWh</p>)}
+        {srcItems.map((p: any) => <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value.toFixed(1)} kWh</p>)}
         {sinkItems.length > 0 && <p className="text-gray-300 font-medium mt-1">Sinks: {sinkTotal.toFixed(1)} kWh</p>}
-        {sinkItems.map((p: any) => <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value.toFixed(1)} kWh</p>)}
+        {sinkItems.map((p: any) => <p key={p.name} style={{ color: p.color }}>{p.name}: {Math.abs(p.value).toFixed(1)} kWh</p>)}
       </div>
     );
   };
@@ -509,6 +529,7 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#60a5fa" }} /> Home</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#a78bfa" }} /> EV</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
           <span className="text-gray-400 font-medium">Sinks ↓</span>
         </div>
       </div>
@@ -528,6 +549,7 @@ function EnergyFlowBarChart({ daily, groupBy }: { daily: DailySummary[]; groupBy
           <Area type="monotone" dataKey="home" stackId="sink" stroke="#60a5fa" fill="#60a5fa" fillOpacity={0.15} strokeWidth={2} name="Home" />
           <Area type="monotone" dataKey="ev" stackId="sink" stroke="#a78bfa" fill="#a78bfa" fillOpacity={0.15} strokeWidth={2} name="EV" />
           <Area type="monotone" dataKey="gridExport" stackId="sink" stroke="#f87171" fill="#f87171" fillOpacity={0.15} strokeWidth={2} name="Grid Export" />
+          <Area type="monotone" dataKey="batteryCharge" stackId="sink" stroke="#34d399" fill="#34d399" fillOpacity={0.15} strokeWidth={2} name="Powerwall Charge" />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -595,10 +617,10 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         />
 
         {/* Weekly/Monthly: Energy Flow by Day */}
-        {(mode === "weekly" || mode === "monthly") && <EnergyFlowBarChart daily={daily} groupBy="day" />}
+        {(mode === "weekly" || mode === "monthly") && <EnergyFlowBarChart daily={daily} intervalData={intervalData} groupBy="day" />}
 
         {/* Yearly: Energy Flow by Month */}
-        {mode === "yearly" && <EnergyFlowBarChart daily={daily} groupBy="month" />}
+        {mode === "yearly" && <EnergyFlowBarChart daily={daily} intervalData={intervalData} groupBy="month" />}
 
         {/* Daily only: Hourly chart + Battery % */}
         {mode === "daily" && <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />}
