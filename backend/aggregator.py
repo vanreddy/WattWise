@@ -279,8 +279,9 @@ async def evaluate_actions(pool: asyncpg.Pool, target_day: date, account_id: UUI
         day_intervals = await pool.fetch(
             """
             SELECT ts, grid_w FROM tesla_intervals
-            WHERE ts >= $1 AND ts < $2 AND grid_w > 2000
+            WHERE account_id = $1 AND ts >= $2 AND ts < $3 AND grid_w > 2000
             """,
+            account_id,
             datetime.combine(r["day"], time.min).astimezone(),
             datetime.combine(r["day"] + timedelta(days=1), time.min).astimezone(),
         )

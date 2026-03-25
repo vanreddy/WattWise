@@ -49,20 +49,15 @@ def _send_to_chat(text: str, chat_id: str) -> None:
 
 async def _send(text: str, pool=None, account_id: UUID | None = None) -> None:
     """Send message to all linked Telegram users for an account."""
-    if pool and account_id:
-        chat_ids = await _get_account_chat_ids(pool, account_id)
-        if not chat_ids:
-            logger.warning("No Telegram chat IDs for account %s", account_id)
-            return
-        for cid in chat_ids:
-            _send_to_chat(text, cid)
-    else:
-        # Legacy fallback: use env var
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-        if chat_id:
-            _send_to_chat(text, chat_id)
-        else:
-            logger.warning("No TELEGRAM_CHAT_ID configured and no account context")
+    if not pool or not account_id:
+        logger.warning("Cannot send notification — missing pool or account_id")
+        return
+    chat_ids = await _get_account_chat_ids(pool, account_id)
+    if not chat_ids:
+        logger.warning("No Telegram chat IDs for account %s", account_id)
+        return
+    for cid in chat_ids:
+        _send_to_chat(text, cid)
 
 
 # --- Formatters ---

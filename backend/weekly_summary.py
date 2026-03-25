@@ -45,17 +45,17 @@ This week's data:
 Focus on the single most actionable pattern and estimate its monthly dollar impact."""
 
 
-async def get_weekly_data(pool: asyncpg.Pool, week_end: date) -> dict | None:
-    """Fetch and aggregate 7 days of daily summaries (Mon through Sun)."""
+async def get_weekly_data(pool: asyncpg.Pool, week_end: date, account_id) -> dict | None:
+    """Fetch and aggregate 7 days of daily summaries (Mon through Sun) for an account."""
     week_start = week_end - timedelta(days=6)
 
     rows = await pool.fetch(
         """
         SELECT * FROM daily_summaries
-        WHERE day >= $1 AND day <= $2
+        WHERE account_id = $1 AND day >= $2 AND day <= $3
         ORDER BY day
         """,
-        week_start, week_end,
+        account_id, week_start, week_end,
     )
 
     if not rows:
@@ -107,13 +107,13 @@ async def get_weekly_data(pool: asyncpg.Pool, week_end: date) -> dict | None:
     return data
 
 
-async def get_prior_week_cost(pool: asyncpg.Pool, week_start: date) -> float:
-    """Get total cost for the week before this one."""
+async def get_prior_week_cost(pool: asyncpg.Pool, week_start: date, account_id) -> float:
+    """Get total cost for the week before this one for an account."""
     prior_start = week_start - timedelta(days=7)
     prior_end = week_start - timedelta(days=1)
     row = await pool.fetchrow(
-        "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE day >= $1 AND day <= $2",
-        prior_start, prior_end,
+        "SELECT COALESCE(SUM(total_cost), 0) as cost FROM daily_summaries WHERE account_id = $1 AND day >= $2 AND day <= $3",
+        account_id, prior_start, prior_end,
     )
     return float(row["cost"])
 
@@ -213,28 +213,21 @@ async def generate_ai_narrative(data: dict, prior_week_cost: float) -> str:
     return message.content[0].text
 
 
-async def run_weekly_summary(pool: asyncpg.Pool) -> None:
-    """Full weekly job: aggregate, rules, AI narrative, report."""
-    today = date.today()
-    # Sunday = current day (job runs Sunday evening)
-    week_end = today
-    week_start = today - timedelta(days=6)
-
-    logger.info("Running weekly summary for %s to %s", week_start, week_end)
-
-    data = await get_weekly_data(pool, week_end)
+async def _run_weekly_for_account(pool: asyncpg.Pool, account_id, week_start: date, week_end: date) -> None:
+    """Run weekly summary for a single account."""
+    data = await get_weekly_data(pool, week_end, account_id)
     if not data:
-        logger.warning("No data for weekly report")
+        logger.warning("No data for weekly report (account %s)", account_id)
         return
 
-    prior_week_cost = await get_prior_week_cost(pool, week_start)
+    prior_week_cost = await get_prior_week_cost(pool, week_start, account_id)
     actions = await evaluate_weekly_actions(pool, data)
 
     # Generate AI narrative
     try:
         ai_narrative = await generate_ai_narrative(data, prior_week_cost)
     except Exception:
-        logger.exception("Claude API call failed, using fallback narrative")
+        logger.exception("Claude API call failed for account %s, using fallback", account_id)
         ai_narrative = (
             f"This week you imported {data['total_import_kwh']:.0f} kWh "
             f"from the grid at a cost of ${data['total_cost']:.2f}. "
@@ -269,19 +262,40 @@ async def run_weekly_summary(pool: asyncpg.Pool) -> None:
         "wow_change": wow_change,
     }
 
-    await send_weekly_report(report_data)
+    await send_weekly_report(report_data, pool=pool, account_id=account_id)
 
     # Log the report
     await pool.execute(
         """
-        INSERT INTO reports_log (report_type, covers_from, covers_to, subject, body_html, metadata)
-        VALUES ('weekly', $1, $2, $3, $4, $5)
+        INSERT INTO reports_log (report_type, covers_from, covers_to, subject, body_html, metadata, account_id)
+        VALUES ('weekly', $1, $2, $3, $4, $5, $6)
         """,
         week_start,
         week_end,
-        f"WattWise Weekly — {week_label}",
-        "(see email)",
+        f"SelfPower Weekly — {week_label}",
+        "(see Telegram)",
         json.dumps({"total_cost": data["total_cost"], "ai_narrative": ai_narrative}),
+        account_id,
     )
 
-    logger.info("Weekly report sent for %s — cost=$%.2f", week_label, data["total_cost"])
+    logger.info("Weekly report sent for account %s — %s — cost=$%.2f", account_id, week_label, data["total_cost"])
+
+
+async def run_weekly_summary(pool: asyncpg.Pool) -> None:
+    """Full weekly job: iterate all accounts, aggregate, rules, AI narrative, report."""
+    today = date.today()
+    week_end = today
+    week_start = today - timedelta(days=6)
+
+    logger.info("Running weekly summary for %s to %s", week_start, week_end)
+
+    accounts = await pool.fetch("SELECT id FROM accounts")
+    if not accounts:
+        logger.warning("No accounts found — skipping weekly summary")
+        return
+
+    for acct in accounts:
+        try:
+            await _run_weekly_for_account(pool, acct["id"], week_start, week_end)
+        except Exception:
+            logger.exception("Error in weekly summary for account %s", acct["id"])
