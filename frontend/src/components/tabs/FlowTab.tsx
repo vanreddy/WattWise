@@ -166,24 +166,35 @@ interface Props {
 
 /* ─── Historical mode content ─── */
 
-function BatteryPctChart({ intervalData }: { intervalData: IntervalPoint[] }) {
+function BatteryPctChart({ intervalData, isToday }: { intervalData: IntervalPoint[]; isToday?: boolean }) {
   if (!intervalData.length) return null;
 
-  const sorted = [...intervalData].sort((a, b) => a.ts.localeCompare(b.ts));
+  // Build 96-slot (15-min) grid matching HourlyChart structure
+  const SLOTS = 96;
+  const now = new Date();
+  const nowSlot = isToday ? now.getHours() * 4 + Math.floor(now.getMinutes() / 15) : SLOTS;
 
-  // Build chart data with same label format as HourlyChart
-  const chartData = sorted.map(pt => {
-    const d = new Date(pt.ts);
-    const h = d.getHours();
-    const m = d.getMinutes();
+  // Index interval data by 15-min slot
+  const slotMap = new Map<number, number>();
+  for (const d of intervalData) {
+    const dt = new Date(d.ts);
+    const idx = dt.getHours() * 4 + Math.floor(dt.getMinutes() / 15);
+    if (!slotMap.has(idx)) slotMap.set(idx, d.battery_pct);
+  }
+
+  const chartData = Array.from({ length: SLOTS }, (_, i) => {
+    const h = Math.floor(i / 4);
+    const m = (i % 4) * 15;
     const h12 = h % 12 || 12;
     const ampm = h < 12 ? "AM" : "PM";
     const label = m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, "0")}`;
-    return { label, pct: pt.battery_pct };
-  });
 
-  // Same x-axis interval as HourlyChart for alignment
-  const xInterval = Math.max(1, Math.floor(chartData.length / 8));
+    if (isToday && i > nowSlot) {
+      return { label, pct: null };
+    }
+    const pct = slotMap.get(i);
+    return { label, pct: pct ?? null };
+  });
 
   return (
     <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
@@ -195,7 +206,7 @@ function BatteryPctChart({ intervalData }: { intervalData: IntervalPoint[] }) {
             dataKey="label"
             stroke="#6b7280"
             fontSize={10}
-            interval={xInterval}
+            interval={11}
             tick={{ dy: 4 }}
             tickLine={false}
           />
@@ -219,7 +230,7 @@ function BatteryPctChart({ intervalData }: { intervalData: IntervalPoint[] }) {
               <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <Area type="monotone" dataKey="pct" stroke="#34d399" strokeWidth={2} fill="url(#battGrad)" fillOpacity={0.3} />
+          <Area type="monotone" dataKey="pct" stroke="#34d399" strokeWidth={2} fill="url(#battGrad)" fillOpacity={0.3} connectNulls={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -349,7 +360,7 @@ function HistoricalContent({ daily, hourly, intervalData, sankeyFlows, dateRange
         <HourlyChart data={hourly} days={dateRange.days} intervalData={intervalData} />
 
         {/* Daily: Battery % by hour — below hourly chart, aligned x-axis */}
-        {mode === "daily" && <BatteryPctChart intervalData={intervalData} />}
+        {mode === "daily" && <BatteryPctChart intervalData={intervalData} isToday={dateRange.days === 1 && dateRange.from === new Date().toISOString().slice(0, 10)} />}
       </div>
     </div>
   );

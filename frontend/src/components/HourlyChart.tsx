@@ -121,7 +121,10 @@ export default function HourlyChart({ data, days = 1, intervalData }: Props) {
 
   const { chartData, yMax, isMultiDay, nowIndex, nowY } = useMemo(() => {
     const multiDay = days > 1;
-    const isToday = !multiDay; // single-day mode
+    // Only treat as "today" if it's actually today's date (not yesterday in daily mode)
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dataDate = intervalData?.length ? new Date(intervalData[0].ts).toISOString().slice(0, 10) : null;
+    const isToday = !multiDay && dataDate === todayStr;
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
