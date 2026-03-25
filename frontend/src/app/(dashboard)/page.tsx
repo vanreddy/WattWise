@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useWeather } from "@/hooks/useWeather";
@@ -8,12 +8,26 @@ import BottomTabBar, { type TabId } from "@/components/BottomTabBar";
 import FlowTab from "@/components/tabs/FlowTab";
 import SavingsTab from "@/components/tabs/SavingsTab";
 import OptimizeTab from "@/components/tabs/OptimizeTab";
+import AddToHomeScreen from "@/components/AddToHomeScreen";
+
+const A2HS_KEY = "selfpower_a2hs_shown";
 
 export default function Dashboard() {
   const { user, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>("flow");
+  const [showA2HS, setShowA2HS] = useState(false);
   const data = useDashboardData();
   const weather = useWeather();
+  const handleA2HSDone = useCallback(() => setShowA2HS(false), []);
+
+  // Show A2HS prompt once after auth resolves, mobile only, if not already seen/installed
+  useEffect(() => {
+    if (authLoading || !user) return;
+    const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+    const alreadyShown = localStorage.getItem(A2HS_KEY) === "1";
+    const alreadyInstalled = window.matchMedia("(display-mode: standalone)").matches;
+    if (isMobile && !alreadyShown && !alreadyInstalled) setShowA2HS(true);
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -44,6 +58,10 @@ export default function Dashboard() {
         <p className="text-gray-400">Loading...</p>
       </div>
     );
+  }
+
+  if (showA2HS) {
+    return <AddToHomeScreen onDone={handleA2HSDone} />;
   }
 
   return (
