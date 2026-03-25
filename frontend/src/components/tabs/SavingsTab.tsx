@@ -290,7 +290,7 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
   }, [allDaysInRange, dailyMap]);
 
   const costData = useMemo(() => {
-    return allDaysInRange.map((day) => {
+    const result = allDaysInRange.map((day) => {
       const d = dailyMap.get(day);
       if (!d) return { label: formatDay(day), Peak: 0, "Part-Peak": 0, "Off-Peak": 0 };
       return {
@@ -300,6 +300,11 @@ export default function SavingsTab({ daily, hourly, dateRange, setDateRange, san
         "Off-Peak": parseFloat(d.off_peak_cost.toFixed(1)),
       };
     });
+    if (result.length > 0) {
+      const sample = result.find(r => r.Peak > 0 || r["Part-Peak"] > 0 || r["Off-Peak"] > 0);
+      console.log("[SavingsTab] costData sample:", sample, "total items:", result.length, "dailyMap size:", dailyMap.size);
+    }
+    return result;
   }, [allDaysInRange, dailyMap]);
 
   const [rateSchedule, setRateSchedule] = useState<RateScheduleEntry[]>([]);
