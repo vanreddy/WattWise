@@ -227,14 +227,22 @@ function SelfPoweredByDayChart({ daily }: { daily: DailySummary[] }) {
   const gap = (chartW - barW * sorted.length) / (sorted.length + 1);
 
   const bars = sorted.map((d, i) => {
-    const totalConsumption = d.solar_self_consumed_kwh + d.total_import_kwh;
-    const selfPct = totalConsumption > 0 ? (d.solar_self_consumed_kwh / totalConsumption) * 100 : 0;
-    // Estimate battery contribution: total self-powered - solar direct
-    const totalSelfPowered = totalConsumption > 0 ? ((totalConsumption - d.total_import_kwh) / totalConsumption) * 100 : 0;
-    const battPct = Math.max(0, totalSelfPowered - selfPct);
+    // Solar direct to home
+    const solarToHome = d.solar_self_consumed_kwh;
+    // Grid import to home
+    const gridToHome = d.total_import_kwh;
+    // Battery to home = total home consumption - solar direct - grid import
+    // Total home ≈ solar generated - exported + grid imported (energy balance)
+    const totalHome = d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh;
+    const battToHome = Math.max(0, totalHome - solarToHome - gridToHome);
+    const totalConsumption = solarToHome + battToHome + gridToHome;
+
+    const solarPct = totalConsumption > 0 ? (solarToHome / totalConsumption) * 100 : 0;
+    const battPct = totalConsumption > 0 ? (battToHome / totalConsumption) * 100 : 0;
+    const totalPct = solarPct + battPct;
     const x = padding.left + gap + i * (barW + gap);
     const dayLabel = new Date(d.day + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
-    return { x, solarPct: selfPct, battPct, totalPct: totalSelfPowered, dayLabel, day: d.day };
+    return { x, solarPct, battPct, totalPct, dayLabel, day: d.day };
   });
 
   return (
