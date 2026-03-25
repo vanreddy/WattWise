@@ -356,24 +356,23 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
     md.gridToHome += flows.gridToHome;
   }
 
-  // Build bars for months that have data
-  const monthEntries = Array.from(monthData.entries())
-    .filter(([, d]) => d.solarToHome + d.battToHome + d.gridToHome > 0)
-    .sort((a, b) => a[0] - b[0]);
-
-  if (monthEntries.length === 0) return null;
-
+  // Always show all 12 months
   const chartW = w - padding.left - padding.right;
-  const barW = Math.min(36, chartW / monthEntries.length * 0.7);
-  const gap = (chartW - barW * monthEntries.length) / (monthEntries.length + 1);
+  const barW = Math.min(36, chartW / 12 * 0.7);
+  const gap = (chartW - barW * 12) / 13;
 
-  const bars = monthEntries.map(([m, d], i) => {
-    const total = d.solarToHome + d.battToHome + d.gridToHome;
-    const solarPct = total > 0 ? (d.solarToHome / total) * 100 : 0;
-    const battPct = total > 0 ? (d.battToHome / total) * 100 : 0;
+  const now = new Date();
+  const currentMonth = now.getMonth();
+
+  const bars = months.map((label, m) => {
+    const d = monthData.get(m);
+    const total = d ? d.solarToHome + d.battToHome + d.gridToHome : 0;
+    const solarPct = total > 0 ? (d!.solarToHome / total) * 100 : 0;
+    const battPct = total > 0 ? (d!.battToHome / total) * 100 : 0;
     const totalPct = solarPct + battPct;
-    const x = padding.left + gap + i * (barW + gap);
-    return { x, solarPct, battPct, totalPct, label: months[m] };
+    const x = padding.left + gap + m * (barW + gap);
+    const isFuture = m > currentMonth;
+    return { x, solarPct, battPct, totalPct, label, isFuture };
   });
 
   return (
@@ -401,12 +400,14 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
           const topY = battH > 0 ? battY : solarY;
           return (
             <g key={i}>
-              <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />
-              <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />
-              <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
-                {Math.round(b.totalPct)}%
-              </text>
-              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className="fill-gray-500" fontSize={9}>{b.label}</text>
+              {!b.isFuture && solarH > 0 && <rect x={b.x} y={solarY} width={barW} height={solarH} rx={3} fill="#eab308" />}
+              {!b.isFuture && battH > 0 && <rect x={b.x} y={battY} width={barW} height={battH} rx={3} fill="#22c55e" />}
+              {!b.isFuture && b.totalPct > 0 && (
+                <text x={b.x + barW / 2} y={topY - 4} textAnchor="middle" className="fill-gray-300" fontSize={9} fontWeight="600">
+                  {Math.round(b.totalPct)}%
+                </text>
+              )}
+              <text x={b.x + barW / 2} y={maxH - 10} textAnchor="middle" className={b.isFuture ? "fill-gray-700" : "fill-gray-500"} fontSize={9}>{b.label}</text>
             </g>
           );
         })}
@@ -480,8 +481,13 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
     }
 
     const emptyBucket = { solar: 0, gridImport: 0, gridExport: 0, battDischarge: 0, battCharge: 0, home: 0, ev: 0 };
+    const today = new Date();
+    const todayKey = groupBy === "month"
+      ? `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
+      : today.toISOString().slice(0, 10);
 
     return allKeys.map(key => {
+      const isFuture = key > todayKey && !buckets.has(key);
       const b = buckets.get(key) || emptyBucket;
       const srcTotal = b.solar + b.gridImport + b.battDischarge;
       const sinkTotal = b.home + b.ev + b.gridExport + b.battCharge;
@@ -500,32 +506,26 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
 
       return {
         label,
-        // Sources (positive)
-        solar: r(b.solar),
-        gridImport: r(b.gridImport),
-        batteryDischarge: r(b.battDischarge),
+        // Sources (positive) — null for future so Recharts leaves gaps
+        solar: isFuture ? null : r(b.solar),
+        gridImport: isFuture ? null : r(b.gridImport),
+        batteryDischarge: isFuture ? null : r(b.battDischarge),
         // Sinks (negative)
-        home: -r(b.home),
-        ev: -r(b.ev),
-        gridExport: -r(b.gridExport),
-        batteryCharge: -r(b.battCharge),
-        srcTotal: r(srcTotal),
-        sinkTotal: r(sinkTotal),
+        home: isFuture ? null : -r(b.home),
+        ev: isFuture ? null : -r(b.ev),
+        gridExport: isFuture ? null : -r(b.gridExport),
+        batteryCharge: isFuture ? null : -r(b.battCharge),
+        srcTotal: isFuture ? null : r(srcTotal),
+        sinkTotal: isFuture ? null : r(sinkTotal),
       };
     });
   }, [daily, intervalData, groupBy, dateRange]);
 
   if (chartData.length === 0) return null;
 
-  const maxVal = Math.max(
-    ...chartData.map(d => Math.abs(d.solar) + Math.abs(d.gridImport) + Math.abs(d.batteryDischarge)),
-    ...chartData.map(d => d.home + d.ev + d.gridExport),
-  );
-  const xMax = Math.ceil(maxVal * 1.15);
-
-  // Compute Y domain for the vertical mirror chart
-  const maxSource = Math.max(...chartData.map(d => Math.abs(d.solar) + Math.abs(d.gridImport) + Math.abs(d.batteryDischarge)));
-  const maxSink = Math.max(...chartData.map(d => Math.abs(d.home) + Math.abs(d.ev) + Math.abs(d.gridExport) + Math.abs(d.batteryCharge)));
+  const n = (v: number | null) => v ?? 0;
+  const maxSource = Math.max(...chartData.map(d => Math.abs(n(d.solar)) + Math.abs(n(d.gridImport)) + Math.abs(n(d.batteryDischarge))));
+  const maxSink = Math.max(...chartData.map(d => Math.abs(n(d.home)) + Math.abs(n(d.ev)) + Math.abs(n(d.gridExport)) + Math.abs(n(d.batteryCharge))));
   const yMax = Math.ceil(Math.max(maxSource, maxSink) * 1.15);
 
   // Custom tooltip
