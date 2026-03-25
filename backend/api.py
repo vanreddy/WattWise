@@ -341,31 +341,20 @@ async def sankey(
     }
 
 
-async def _sankey_from_polled(pool, start_day: date, end_day: date, account_id: Optional[UUID] = None) -> dict:
-    """Fallback: compute Sankey flows from polled tesla_intervals data."""
+async def _sankey_from_polled(pool, start_day: date, end_day: date, account_id: UUID) -> dict:
+    """Compute Sankey flows from polled tesla_intervals data."""
     start = datetime.combine(start_day, time.min, tzinfo=LOCAL_TZ)
     end = datetime.combine(end_day, time.min, tzinfo=LOCAL_TZ)
 
-    if account_id:
-        rows = await pool.fetch(
-            """
-            SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
-            FROM tesla_intervals
-            WHERE account_id = $1 AND ts >= $2 AND ts < $3
-            ORDER BY ts
-            """,
-            account_id, start, end,
-        )
-    else:
-        rows = await pool.fetch(
-            """
-            SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
-            FROM tesla_intervals
-            WHERE ts >= $1 AND ts < $2
-            ORDER BY ts
-            """,
-            start, end,
-        )
+    rows = await pool.fetch(
+        """
+        SELECT solar_w, home_w, grid_w, battery_w, vehicle_w
+        FROM tesla_intervals
+        WHERE account_id = $1 AND ts >= $2 AND ts < $3
+        ORDER BY ts
+        """,
+        account_id, start, end,
+    )
 
     flows = {
         "solar_to_home": 0.0,

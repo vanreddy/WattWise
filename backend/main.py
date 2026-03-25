@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
 from backend.auth_api import router as auth_router
-from backend.poller import poll_and_check, _load_cache_from_db
+from backend.poller import poll_and_check
 from backend.telegram_bot import run_bot_polling
 from backend.weekly_summary import run_weekly_summary
 
@@ -117,9 +117,6 @@ async def lifespan(app: FastAPI):
             logger.info("Dropped legacy tesla_intervals_pkey (ts only)")
     except Exception:
         logger.exception("PK fix check failed — continuing")
-
-    # Load Tesla token cache from DB before poller starts
-    await _load_cache_from_db(pool)
 
     from datetime import datetime as dt_cls
     scheduler = AsyncIOScheduler()

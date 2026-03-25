@@ -13,7 +13,6 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 from uuid import UUID
 
 import asyncpg
@@ -32,49 +31,24 @@ ALERT_EXPORT_W = 3000          # 3kW export
 ALERT_SUSTAIN_MINUTES = 15     # sustained for 15 min
 ALERT_COOLDOWN_HOURS = 4       # don't re-alert within 4 hours
 
-# In-memory copy of token caches, keyed by account_id string
+# In-memory token caches, keyed by account_id string
 _token_caches: dict[str, dict] = {}
 
 # Per-account export history for solar surplus alerts
 _export_histories: dict[str, list[tuple[datetime, float]]] = {}
 
 
-async def _load_cache_from_db(pool: asyncpg.Pool, account_id: UUID | None = None) -> dict:
-    """Load Tesla token cache from kv_store table.
-
-    If account_id is provided, loads cache for that account.
-    If None, loads the legacy global cache (for backward compat during migration).
-    """
+async def _load_cache_from_db(pool: asyncpg.Pool, account_id: UUID) -> dict:
+    """Load Tesla token cache from kv_store table for a specific account."""
     global _token_caches
 
-    if account_id:
-        row = await pool.fetchval(
-            "SELECT value FROM kv_store WHERE key = $1 AND account_id = $2",
-            TESLA_CACHE_KEY, account_id,
-        )
-        cache = _ensure_dict(row)
-        _token_caches[str(account_id)] = cache
-        return cache
-    else:
-        # Legacy: load global cache (no account_id)
-        row = await pool.fetchval(
-            "SELECT value FROM kv_store WHERE key = $1 AND account_id IS NULL",
-            TESLA_CACHE_KEY,
-        )
-        cache = {}
-        if row:
-            cache = row
-            while isinstance(cache, str):
-                cache = json.loads(cache)
-        elif CACHE_PATH.exists():
-            try:
-                with open(CACHE_PATH, encoding="utf-8") as f:
-                    cache = json.load(f)
-                logger.info("Seeded Tesla token cache from file: %s", CACHE_PATH)
-            except (IOError, ValueError):
-                cache = {}
-        _token_caches["__global__"] = cache
-        return cache
+    row = await pool.fetchval(
+        "SELECT value FROM kv_store WHERE key = $1 AND account_id = $2",
+        TESLA_CACHE_KEY, account_id,
+    )
+    cache = _ensure_dict(row)
+    _token_caches[str(account_id)] = cache
+    return cache
 
 
 def _ensure_dict(val) -> dict:
@@ -86,39 +60,29 @@ def _ensure_dict(val) -> dict:
     return val if isinstance(val, dict) else {}
 
 
-async def _save_cache_to_db(pool: asyncpg.Pool, account_id: UUID | None = None) -> None:
+async def _save_cache_to_db(pool: asyncpg.Pool, account_id: UUID) -> None:
     """Persist Tesla token cache to kv_store table."""
-    cache_key = str(account_id) if account_id else "__global__"
+    cache_key = str(account_id)
     cache = _ensure_dict(_token_caches.get(cache_key, {}))
 
     # asyncpg needs a JSON string for JSONB columns
     cache_json = json.dumps(cache)
 
-    if account_id:
-        await pool.execute(
-            """
-            INSERT INTO kv_store (key, value, updated_at, account_id)
-            VALUES ($1, $2::jsonb, NOW(), $3)
-            ON CONFLICT (key, account_id)
-            DO UPDATE SET value = $2::jsonb, updated_at = NOW()
-            """,
-            TESLA_CACHE_KEY, cache_json, account_id,
-        )
-    else:
-        await pool.execute(
-            """
-            INSERT INTO kv_store (key, value, updated_at)
-            VALUES ($1, $2::jsonb, NOW())
-            ON CONFLICT (key) DO UPDATE SET value = $2::jsonb, updated_at = NOW()
-            """,
-            TESLA_CACHE_KEY, cache_json,
-        )
+    await pool.execute(
+        """
+        INSERT INTO kv_store (key, value, updated_at, account_id)
+        VALUES ($1, $2::jsonb, NOW(), $3)
+        ON CONFLICT (key, account_id)
+        DO UPDATE SET value = $2::jsonb, updated_at = NOW()
+        """,
+        TESLA_CACHE_KEY, cache_json, account_id,
+    )
     logger.debug("Saved Tesla token cache to DB for %s", cache_key)
 
 
-def _make_cache_callbacks(account_id: UUID | None = None):
+def _make_cache_callbacks(account_id: UUID):
     """Create TeslaPy cache_loader/cache_dumper callbacks for a specific account."""
-    cache_key = str(account_id) if account_id else "__global__"
+    cache_key = str(account_id)
 
     def loader() -> dict:
         return _token_caches.get(cache_key, {})
@@ -130,25 +94,10 @@ def _make_cache_callbacks(account_id: UUID | None = None):
     return loader, dumper
 
 
-# Legacy global callbacks (used by _get_tesla_client without account context)
-def _cache_loader() -> dict:
-    return _token_caches.get("__global__", {})
-
-
-def _cache_dumper(cache: dict) -> None:
-    _token_caches["__global__"] = cache
-
-
-def _get_tesla_client(email: str | None = None, account_id: UUID | None = None) -> teslapy.Tesla:
-    """Create a TeslaPy client with per-account or global cache."""
-    if not email:
-        email = os.environ["TESLA_EMAIL"]
-
-    if account_id:
-        loader, dumper = _make_cache_callbacks(account_id)
-        return teslapy.Tesla(email, cache_loader=loader, cache_dumper=dumper)
-
-    return teslapy.Tesla(email, cache_loader=_cache_loader, cache_dumper=_cache_dumper)
+def _get_tesla_client(email: str, account_id: UUID) -> teslapy.Tesla:
+    """Create a TeslaPy client with per-account cache."""
+    loader, dumper = _make_cache_callbacks(account_id)
+    return teslapy.Tesla(email, cache_loader=loader, cache_dumper=dumper)
 
 
 def _get_tesla_client_file() -> teslapy.Tesla:
@@ -157,7 +106,7 @@ def _get_tesla_client_file() -> teslapy.Tesla:
     return teslapy.Tesla(email, cache_file=str(CACHE_PATH))
 
 
-def _fetch_live_status(email: str | None = None, account_id: UUID | None = None) -> tuple[dict, dict]:
+def _fetch_live_status(email: str, account_id: UUID) -> tuple[dict, dict]:
     """Synchronous Tesla API call — returns (live_status, site_info).
 
     site_info contains site_name and energy_site_id for account metadata.
@@ -181,15 +130,15 @@ def _fetch_live_status(email: str | None = None, account_id: UUID | None = None)
         return data.get("response", data), site_info
 
 
-async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_email: str | None = None) -> dict | None:
+async def poll_once(pool: asyncpg.Pool, account_id: UUID, tesla_email: str) -> dict | None:
     """Poll Tesla API once, insert row, persist token cache, return data."""
     status, site_info = _fetch_live_status(tesla_email, account_id)
 
     # Persist any token refresh that happened during the API call
     await _save_cache_to_db(pool, account_id)
 
-    # Update account with site metadata (if available and account exists)
-    if account_id and site_info.get("site_name"):
+    # Update account with site metadata (if available)
+    if site_info.get("site_name"):
         await pool.execute(
             """UPDATE accounts SET site_name = $1, energy_site_id = $2
                WHERE id = $3 AND (site_name IS NULL OR site_name != $1)""",
@@ -255,14 +204,14 @@ async def poll_once(pool: asyncpg.Pool, account_id: UUID | None = None, tesla_em
 # --- Solar surplus alert tracking ---
 
 async def check_solar_surplus_alert(
-    pool: asyncpg.Pool, data: dict, account_id: UUID | None = None,
+    pool: asyncpg.Pool, data: dict, account_id: UUID,
 ) -> bool:
     """Check if solar surplus alert should fire. Returns True if alert was sent."""
     from backend.notifier import send_alert
 
     from backend.rates import get_import_rate, get_export_rate
 
-    acct_key = str(account_id) if account_id else "__global__"
+    acct_key = str(account_id)
     export_history = _export_histories.setdefault(acct_key, [])
 
     now = data["ts"]
@@ -290,19 +239,12 @@ async def check_solar_surplus_alert(
         return False
 
     # Check cooldown — no alert in last N hours
-    if account_id:
-        last_alert = await pool.fetchval(
-            """SELECT fired_at FROM alerts_log
-               WHERE account_id = $1 AND alert_type = 'solar_surplus'
-               ORDER BY fired_at DESC LIMIT 1""",
-            account_id,
-        )
-    else:
-        last_alert = await pool.fetchval(
-            """SELECT fired_at FROM alerts_log
-               WHERE alert_type = 'solar_surplus'
-               ORDER BY fired_at DESC LIMIT 1"""
-        )
+    last_alert = await pool.fetchval(
+        """SELECT fired_at FROM alerts_log
+           WHERE account_id = $1 AND alert_type = 'solar_surplus'
+           ORDER BY fired_at DESC LIMIT 1""",
+        account_id,
+    )
 
     if last_alert:
         hours_since = (now - last_alert).total_seconds() / 3600
@@ -345,17 +287,10 @@ async def check_solar_surplus_alert(
 
 async def poll_and_check(pool: asyncpg.Pool) -> None:
     """Poll all accounts."""
-    # Get all accounts from DB
     accounts = await pool.fetch("SELECT id, tesla_email FROM accounts")
 
     if not accounts:
-        # Fallback: legacy single-tenant mode (no accounts in DB yet)
-        try:
-            data = await poll_once(pool)
-            if data:
-                await check_solar_surplus_alert(pool, data)
-        except Exception:
-            logger.exception("Error during legacy poll cycle")
+        logger.warning("No accounts found in DB — nothing to poll")
         return
 
     for acct in accounts:
