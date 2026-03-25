@@ -81,33 +81,32 @@ function NowContent({ weather, lastUpdated, summary }: { weather: WeatherData | 
         label="Self-Powering"
       />
 
-      {/* Powerwall Battery Tile */}
-      <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-gray-300">Powerwall</p>
-            <p className={`text-xs ${batteryStatusColor} flex items-center gap-1`}>
-              <span>{batteryIcon}</span> {batteryStatus}
-              {(isCharging || isDischarging) && (
-                <span className="text-gray-500 ml-1">
-                  {(Math.abs(batteryW) / 1000).toFixed(1)} kW
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-green-400">{Math.round(batteryChargePct)}%</p>
+      {/* Powerwall Battery Tile — compact inline */}
+      <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl px-4 py-3 flex items-center gap-4">
+        <div className="shrink-0">
+          <p className="text-xs font-semibold text-gray-400">Powerwall</p>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${batteryChargePct}%`,
+                background: batteryChargePct > 20 ? "#34d399" : "#f87171",
+              }}
+            />
           </div>
         </div>
-        {/* Progress bar */}
-        <div className="mt-2 w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{
-              width: `${batteryChargePct}%`,
-              background: batteryChargePct > 20 ? "#34d399" : "#f87171",
-            }}
-          />
+        <div className="shrink-0 flex items-center gap-2">
+          <span className="text-lg font-bold text-green-400">{Math.round(batteryChargePct)}%</span>
+          <span className={`text-[10px] ${batteryStatusColor} flex items-center gap-0.5`}>
+            <span>{batteryIcon}</span> {batteryStatus}
+            {(isCharging || isDischarging) && (
+              <span className="text-gray-500 ml-0.5">
+                {(Math.abs(batteryW) / 1000).toFixed(1)} kW
+              </span>
+            )}
+          </span>
         </div>
       </div>
 
