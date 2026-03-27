@@ -572,14 +572,14 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip content={<CustomTooltip />} />
           {/* Sources (negative = above zero line via sign offset) */}
-          <Area type="monotone" dataKey="solar" stackId="src" stroke="#facc15" fill="#facc15" fillOpacity={0.15} strokeWidth={2} name="Solar" />
-          <Area type="monotone" dataKey="gridImport" stackId="src" stroke="#f87171" fill="#f87171" fillOpacity={0.15} strokeWidth={2} name="Grid" />
-          <Area type="monotone" dataKey="batteryDischarge" stackId="src" stroke="#34d399" fill="#34d399" fillOpacity={0.15} strokeWidth={2} name="Powerwall" />
+          <Area type="monotone" dataKey="solar" stackId="src" stroke="none" fill="#facc15b3" name="Solar" connectNulls={false} />
+          <Area type="monotone" dataKey="gridImport" stackId="src" stroke="none" fill="#f87171b3" name="Grid" connectNulls={false} />
+          <Area type="monotone" dataKey="batteryDischarge" stackId="src" stroke="none" fill="#34d399b3" name="Powerwall" connectNulls={false} />
           {/* Sinks (positive = below zero line) */}
-          <Area type="monotone" dataKey="home" stackId="sink" stroke="#60a5fa" fill="#60a5fa" fillOpacity={0.15} strokeWidth={2} name="Home" />
-          <Area type="monotone" dataKey="ev" stackId="sink" stroke="#a78bfa" fill="#a78bfa" fillOpacity={0.15} strokeWidth={2} name="EV" />
-          <Area type="monotone" dataKey="gridExport" stackId="sink" stroke="#f87171" fill="#f87171" fillOpacity={0.15} strokeWidth={2} name="Grid Export" />
-          <Area type="monotone" dataKey="batteryCharge" stackId="sink" stroke="#34d399" fill="#34d399" fillOpacity={0.15} strokeWidth={2} name="Powerwall Charge" />
+          <Area type="monotone" dataKey="home" stackId="sink" stroke="none" fill="#60a5fab3" name="Home" connectNulls={false} />
+          <Area type="monotone" dataKey="ev" stackId="sink" stroke="none" fill="#a78bfab3" name="EV" connectNulls={false} />
+          <Area type="monotone" dataKey="gridExport" stackId="sink" stroke="none" fill="#f87171b3" name="Grid Export" connectNulls={false} />
+          <Area type="monotone" dataKey="batteryCharge" stackId="sink" stroke="none" fill="#2dd4bfb3" name="Powerwall Charge" connectNulls={false} />
         </AreaChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mt-2">
