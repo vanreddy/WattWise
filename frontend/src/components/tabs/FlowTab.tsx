@@ -10,7 +10,7 @@ import PeriodSelector, { computeRange, type Mode } from "@/components/PeriodSele
 import SelfPoweredRing from "@/components/SelfPoweredRing";
 import SankeyChart from "@/components/SankeyChart";
 import HourlyChart from "@/components/HourlyChart";
-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, LabelList, Cell } from "recharts";
 import { Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudDrizzle, Wind } from "lucide-react";
 
 /* ─── Now mode: weather only ─── */
@@ -498,17 +498,24 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
         label = allKeys.length <= 10 ? `${dayName} ${dateName}` : dateName;
       }
 
+      // Compute totals from raw values (no rounding) so Sources = Sinks
+      const srcTotal = b.solar + b.gridImport + Math.max(0, netBatt);
+      const sinkTotal = b.home + b.ev + b.gridExport + Math.abs(Math.min(0, netBatt));
+
       return {
         label,
         // Sources (positive bars above zero)
         solar: isFuture ? null : r(b.solar),
         gridImport: isFuture ? null : r(b.gridImport),
-        pwSource: isFuture ? null : r(Math.max(0, netBatt)), // net discharge only
+        pwSource: isFuture ? null : r(Math.max(0, netBatt)),
         // Sinks (negative bars below zero)
         home: isFuture ? null : -r(b.home),
         ev: isFuture ? null : -r(b.ev),
         gridExport: isFuture ? null : -r(b.gridExport),
-        pwSink: isFuture ? null : r(Math.min(0, netBatt)), // net charge only (already negative)
+        pwSink: isFuture ? null : r(Math.min(0, netBatt)),
+        // Totals from raw values
+        srcTotal: isFuture ? null : r(srcTotal),
+        sinkTotal: isFuture ? null : r(sinkTotal),
       };
     });
   }, [daily, intervalData, groupBy, dateRange]);
@@ -549,8 +556,8 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#f87171" }} /> Grid</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
       </div>
-      <ResponsiveContainer width="100%" height={250} className="sm:!h-[350px]">
-        <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 10 }} stackOffset="sign">
+      <ResponsiveContainer width="100%" height={280} className="sm:!h-[380px]">
+        <BarChart data={chartData} margin={{ top: 20, right: 10, bottom: 0, left: 10 }} stackOffset="sign">
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} tick={{ dy: 4 }} interval={0} />
           <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false}
@@ -558,14 +565,18 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip content={<CustomTooltip />} />
           {/* Sources (positive) */}
-          <Bar dataKey="solar" stackId="a" fill="#facc15" name="Solar" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="solar" stackId="a" fill="#facc15" name="Solar" />
           <Bar dataKey="gridImport" stackId="a" fill="#f87171" name="Grid" />
-          <Bar dataKey="pwSource" stackId="a" fill="#34d399" name="Powerwall" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="pwSource" stackId="a" fill="#34d399" name="Powerwall" radius={[3, 3, 0, 0]}>
+            <LabelList dataKey="srcTotal" position="top" fill="#9ca3af" fontSize={8} fontWeight={600} />
+          </Bar>
           {/* Sinks (negative) */}
           <Bar dataKey="home" stackId="a" fill="#60a5fa" name="Home" />
           <Bar dataKey="ev" stackId="a" fill="#a78bfa" name="EV" />
           <Bar dataKey="gridExport" stackId="a" fill="#f87171" name="Grid Export" />
-          <Bar dataKey="pwSink" stackId="a" fill="#2dd4bf" name="Powerwall" radius={[0, 0, 3, 3]} />
+          <Bar dataKey="pwSink" stackId="a" fill="#34d399" name="Powerwall" radius={[0, 0, 3, 3]}>
+            <LabelList dataKey="sinkTotal" position="bottom" fill="#9ca3af" fontSize={8} fontWeight={600} />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mt-2">
