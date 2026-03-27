@@ -423,11 +423,8 @@ function SelfPoweredByMonthChart({ daily, intervalData }: { daily: DailySummary[
 
 function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily: DailySummary[]; intervalData: IntervalPoint[]; groupBy: "day" | "month"; dateRange: DateRange }) {
   const chartData = useMemo(() => {
-    // Compute accurate per-bucket flows from interval data
-    const IH = 5 / 60 / 1000; // 5-min interval watts → kWh
-    const bucketKey = (ts: string) => groupBy === "month"
-      ? ts.slice(0, 7) // "YYYY-MM"
-      : ts.slice(0, 10); // "YYYY-MM-DD"
+    const IH = 5 / 60 / 1000;
+    const bucketKey = (ts: string) => groupBy === "month" ? ts.slice(0, 7) : ts.slice(0, 10);
 
     const buckets = new Map<string, {
       solar: number; gridImport: number; gridExport: number;
@@ -448,44 +445,35 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
       b.ev += Math.max(0, pt.vehicle_w || 0) * IH;
     }
 
-    // If no interval data, fall back to daily summaries
     if (buckets.size === 0) {
       for (const d of daily) {
         const key = groupBy === "month" ? d.day.slice(0, 7) : d.day;
         buckets.set(key, {
-          solar: d.solar_generated_kwh,
-          gridImport: d.total_import_kwh,
-          gridExport: d.total_export_kwh,
-          battDischarge: 0, battCharge: 0,
+          solar: d.solar_generated_kwh, gridImport: d.total_import_kwh,
+          gridExport: d.total_export_kwh, battDischarge: 0, battCharge: 0,
           home: Math.max(0, d.solar_generated_kwh - d.total_export_kwh + d.total_import_kwh - d.ev_kwh),
           ev: d.ev_kwh,
         });
       }
     }
 
-    // Generate full list of keys from dateRange
     const allKeys: string[] = [];
     if (groupBy === "day") {
       const start = new Date(dateRange.from + "T12:00:00");
       const end = new Date(dateRange.to + "T12:00:00");
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        allKeys.push(d.toISOString().slice(0, 10));
-      }
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) allKeys.push(d.toISOString().slice(0, 10));
     } else {
-      // month groupBy: generate all months in range
       const startDate = new Date(dateRange.from + "T12:00:00");
       const endDate = new Date(dateRange.to + "T12:00:00");
       let cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
       const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
       while (cur <= endMonth) {
-        const y = cur.getFullYear();
-        const m = String(cur.getMonth() + 1).padStart(2, "0");
-        allKeys.push(`${y}-${m}`);
+        allKeys.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
         cur.setMonth(cur.getMonth() + 1);
       }
     }
 
-    const emptyBucket = { solar: 0, gridImport: 0, gridExport: 0, battDischarge: 0, battCharge: 0, home: 0, ev: 0 };
+    const empty = { solar: 0, gridImport: 0, gridExport: 0, battDischarge: 0, battCharge: 0, home: 0, ev: 0 };
     const today = new Date();
     const todayKey = groupBy === "month"
       ? `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
@@ -493,10 +481,11 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
 
     return allKeys.map(key => {
       const isFuture = key > todayKey && !buckets.has(key);
-      const b = buckets.get(key) || emptyBucket;
-      const srcTotal = b.solar + b.gridImport + b.battDischarge;
-      const sinkTotal = b.home + b.ev + b.gridExport + b.battCharge;
+      const b = buckets.get(key) || empty;
       const r = (v: number) => Math.round(v * 10) / 10;
+
+      // Use net battery to ensure energy conservation: Sources = Sinks
+      const netBatt = b.battDischarge - b.battCharge;
 
       let label: string;
       if (groupBy === "month") {
@@ -511,17 +500,15 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
 
       return {
         label,
-        // Sources (positive) — null for future so Recharts leaves gaps
+        // Sources (positive bars above zero)
         solar: isFuture ? null : r(b.solar),
         gridImport: isFuture ? null : r(b.gridImport),
-        batteryDischarge: isFuture ? null : r(b.battDischarge),
-        // Sinks (negative)
+        pwSource: isFuture ? null : r(Math.max(0, netBatt)), // net discharge only
+        // Sinks (negative bars below zero)
         home: isFuture ? null : -r(b.home),
         ev: isFuture ? null : -r(b.ev),
         gridExport: isFuture ? null : -r(b.gridExport),
-        batteryCharge: isFuture ? null : -r(b.battCharge),
-        srcTotal: isFuture ? null : r(srcTotal),
-        sinkTotal: isFuture ? null : r(sinkTotal),
+        pwSink: isFuture ? null : r(Math.min(0, netBatt)), // net charge only (already negative)
       };
     });
   }, [daily, intervalData, groupBy, dateRange]);
@@ -529,16 +516,15 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
   if (chartData.length === 0) return null;
 
   const n = (v: number | null) => v ?? 0;
-  const maxSource = Math.max(...chartData.map(d => Math.abs(n(d.solar)) + Math.abs(n(d.gridImport)) + Math.abs(n(d.batteryDischarge))));
-  const maxSink = Math.max(...chartData.map(d => Math.abs(n(d.home)) + Math.abs(n(d.ev)) + Math.abs(n(d.gridExport)) + Math.abs(n(d.batteryCharge))));
-  const yMax = Math.ceil(Math.max(maxSource, maxSink) * 1.15);
+  const maxSrc = Math.max(...chartData.map(d => n(d.solar) + n(d.gridImport) + n(d.pwSource)));
+  const maxSink = Math.max(...chartData.map(d => Math.abs(n(d.home)) + Math.abs(n(d.ev)) + Math.abs(n(d.gridExport)) + Math.abs(n(d.pwSink))));
+  const yMax = Math.ceil(Math.max(maxSrc, maxSink) * 1.15);
 
-  // Custom tooltip
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload) return null;
-    const srcItems = payload.filter((p: any) => p.value > 0);
-    const sinkItems = payload.filter((p: any) => p.value < 0);
+    const srcItems = payload.filter((p: any) => (p.value ?? 0) > 0);
+    const sinkItems = payload.filter((p: any) => (p.value ?? 0) < 0);
     const srcTotal = srcItems.reduce((s: number, p: any) => s + p.value, 0);
     const sinkTotal = sinkItems.reduce((s: number, p: any) => s + Math.abs(p.value), 0);
     return (
@@ -564,23 +550,23 @@ function EnergyFlowBarChart({ daily, intervalData, groupBy, dateRange }: { daily
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: "#34d399" }} /> Powerwall</span>
       </div>
       <ResponsiveContainer width="100%" height={250} className="sm:!h-[350px]">
-        <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 10 }} stackOffset="sign">
+        <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 10 }} stackOffset="sign">
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-          <XAxis dataKey="label" stroke="#6b7280" fontSize={11} tickLine={false} tick={{ dy: 4 }} interval={0} padding={{ left: 20, right: 20 }} />
-          <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={11} tickLine={false} axisLine={false}
-            tickFormatter={(v: number) => `${Math.abs(v)}`} />
+          <XAxis dataKey="label" stroke="#6b7280" fontSize={10} tickLine={false} tick={{ dy: 4 }} interval={0} />
+          <YAxis domain={[-yMax, yMax]} stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false}
+            tickFormatter={(v: number) => `${Math.abs(Math.round(v))}`} />
           <ReferenceLine y={0} stroke="#6b7280" strokeWidth={1.5} />
           <Tooltip content={<CustomTooltip />} />
-          {/* Sources (negative = above zero line via sign offset) */}
-          <Area type="monotone" dataKey="solar" stackId="src" stroke="none" fill="#facc15b3" name="Solar" connectNulls={false} />
-          <Area type="monotone" dataKey="gridImport" stackId="src" stroke="none" fill="#f87171b3" name="Grid" connectNulls={false} />
-          <Area type="monotone" dataKey="batteryDischarge" stackId="src" stroke="none" fill="#34d399b3" name="Powerwall" connectNulls={false} />
-          {/* Sinks (positive = below zero line) */}
-          <Area type="monotone" dataKey="home" stackId="sink" stroke="none" fill="#60a5fab3" name="Home" connectNulls={false} />
-          <Area type="monotone" dataKey="ev" stackId="sink" stroke="none" fill="#a78bfab3" name="EV" connectNulls={false} />
-          <Area type="monotone" dataKey="gridExport" stackId="sink" stroke="none" fill="#f87171b3" name="Grid Export" connectNulls={false} />
-          <Area type="monotone" dataKey="batteryCharge" stackId="sink" stroke="none" fill="#2dd4bfb3" name="Powerwall Charge" connectNulls={false} />
-        </AreaChart>
+          {/* Sources (positive) */}
+          <Bar dataKey="solar" stackId="a" fill="#facc15" name="Solar" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="gridImport" stackId="a" fill="#f87171" name="Grid" />
+          <Bar dataKey="pwSource" stackId="a" fill="#34d399" name="Powerwall" radius={[3, 3, 0, 0]} />
+          {/* Sinks (negative) */}
+          <Bar dataKey="home" stackId="a" fill="#60a5fa" name="Home" />
+          <Bar dataKey="ev" stackId="a" fill="#a78bfa" name="EV" />
+          <Bar dataKey="gridExport" stackId="a" fill="#f87171" name="Grid Export" />
+          <Bar dataKey="pwSink" stackId="a" fill="#2dd4bf" name="Powerwall" radius={[0, 0, 3, 3]} />
+        </BarChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-gray-500 mt-2">
         <span className="text-gray-400 font-medium">Sinks ↓</span>
