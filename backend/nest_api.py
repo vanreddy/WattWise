@@ -439,34 +439,28 @@ async def set_thermostat_mode(device_id: str, request: Request, user: dict = Dep
         logger.info("Nest set mode: device=%s mode=ECO account=%s", device_id, account_id)
         return {"status": "ok", "mode": "ECO", "eco_mode": "MANUAL_ECO"}
 
-    # Disable Eco first (if active), then set mode
+    # Disable Eco first (best-effort — may already be off)
+    try:
+        await _sdm_request(
+            pool, account_id, "POST",
+            f"devices/{device_id}:executeCommand",
+            json_body={
+                "command": "sdm.devices.commands.ThermostatEco.SetMode",
+                "params": {"mode": "OFF"},
+            },
+        )
+    except Exception as exc:
+        logger.debug("Eco disable skipped (likely already off): %s", exc)
+
+    # Set the thermostat mode
     await _sdm_request(
         pool, account_id, "POST",
         f"devices/{device_id}:executeCommand",
         json_body={
-            "command": "sdm.devices.commands.ThermostatEco.SetMode",
-            "params": {"mode": "OFF"},
+            "command": "sdm.devices.commands.ThermostatMode.SetMode",
+            "params": {"mode": target_mode},
         },
     )
-
-    if target_mode != "OFF":
-        await _sdm_request(
-            pool, account_id, "POST",
-            f"devices/{device_id}:executeCommand",
-            json_body={
-                "command": "sdm.devices.commands.ThermostatMode.SetMode",
-                "params": {"mode": target_mode},
-            },
-        )
-    else:
-        await _sdm_request(
-            pool, account_id, "POST",
-            f"devices/{device_id}:executeCommand",
-            json_body={
-                "command": "sdm.devices.commands.ThermostatMode.SetMode",
-                "params": {"mode": "OFF"},
-            },
-        )
 
     logger.info("Nest set mode: device=%s mode=%s account=%s", device_id, target_mode, account_id)
     return {"status": "ok", "mode": target_mode, "eco_mode": "OFF"}
