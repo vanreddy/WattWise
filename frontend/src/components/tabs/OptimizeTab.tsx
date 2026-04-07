@@ -22,10 +22,11 @@ import type { ReactNode } from "react";
 import type {
   SummaryResponse, DailySummary, Alert, NestDevice,
   SmartcarVehicle, SmartcarVehicleStatus,
-  OptimizerPlan, OptimizerLogEntry, OptimizerState, TimelineSegment,
+  OptimizerPlan, OptimizerLogEntry, OptimizerState,
 } from "@/lib/api";
 import { api } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import EnergyForecastChart from "@/components/EnergyForecastChart";
 
 /* ─── Types ─────────────────────────────────── */
 
@@ -440,64 +441,6 @@ function BMWCard({
 /* ═══ AUTO MODE COMPONENTS ══════════════════════ */
 /* ═══════════════════════════════════════════════ */
 
-const SEGMENT_COLORS: Record<string, string> = {
-  yellow: "rgba(234,179,8,0.4)",
-  green: "rgba(34,197,94,0.35)",
-  purple: "rgba(168,85,247,0.4)",
-  blue: "rgba(59,130,246,0.4)",
-  gray: "rgba(255,255,255,0.04)",
-  neutral: "rgba(255,255,255,0.03)",
-};
-
-function TimelineBar({ segments, currentHour }: { segments: TimelineSegment[]; currentHour: number }) {
-  // Map hours 6am–midnight (18 hours) to a bar
-  const barStart = 6;
-  const barEnd = 24;
-  const barSpan = barEnd - barStart;
-  const nowPct = Math.max(0, Math.min(100, ((currentHour - barStart) / barSpan) * 100));
-
-  return (
-    <div className="relative mt-1">
-      {/* Hour labels */}
-      <div className="flex justify-between text-[9px] text-gray-600 mb-1.5 px-0.5">
-        {[6, 9, 12, 15, 18, 21, 24].map(h => <span key={h}>{fmtHour(h % 24)}</span>)}
-      </div>
-      {/* Bar */}
-      <div className="h-6 bg-[#1a1f2e] rounded-md relative flex overflow-visible">
-        {segments.map((seg, i) => {
-          const start = Math.max(seg.start_hour, barStart);
-          const end = Math.min(seg.end_hour || seg.start_hour + 1, barEnd);
-          const widthPct = ((end - start) / barSpan) * 100;
-          if (widthPct <= 0) return null;
-          return (
-            <div key={i} className="h-full" style={{
-              width: `${widthPct}%`,
-              background: SEGMENT_COLORS[seg.color] || SEGMENT_COLORS.neutral,
-              borderRadius: i === 0 ? "6px 0 0 6px" : i === segments.length - 1 ? "0 6px 6px 0" : undefined,
-            }} />
-          );
-        })}
-        {/* NOW dot */}
-        {nowPct > 0 && nowPct < 100 && (
-          <div className="absolute top-[-4px] flex flex-col items-center z-10" style={{ left: `${nowPct}%` }}>
-            <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full border-2 border-[#111827] animate-pulse" />
-            <div className="w-0.5 h-5 bg-yellow-400/50" />
-          </div>
-        )}
-      </div>
-      {/* Legend */}
-      <div className="flex gap-2.5 mt-2 flex-wrap">
-        {segments.filter(s => s.color !== "neutral" && s.label).map((seg, i) => (
-          <div key={i} className="flex items-center gap-1 text-[9px] text-gray-500">
-            <div className="w-2 h-2 rounded-sm" style={{ background: SEGMENT_COLORS[seg.color] }} />
-            {seg.label}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ActivityLog({ entries }: { entries: OptimizerLogEntry[] }) {
   const DEVICE_COLORS: Record<string, string> = {
     powerwall: "bg-green-400", ev: "bg-purple-400", nest: "bg-blue-400",
@@ -830,20 +773,20 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
     }
   }
 
-  // ─── Plan summary text ───
-  const planSummary = plan
-    ? `${plan.total_solar_kwh > 30 ? "☀️ Good solar day" : plan.total_solar_kwh > 15 ? "⛅ Moderate solar" : "☁️ Low solar day"} (${plan.total_solar_kwh.toFixed(0)} kWh predicted).`
-    : null;
-
-  const currentHour = new Date().getHours();
-
   return (
     <div className="space-y-5">
+
+      {/* ═══ ENERGY FORECAST (shared — both modes) ═══ */}
+      <section>
+        <SectionLabel icon={<Sun size={12} className="text-yellow-400" />}>
+          Energy Forecast
+        </SectionLabel>
+        <EnergyForecastChart plan={plan} />
+      </section>
 
       {/* ═══ AUTO MODE TOGGLE ═══ */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          {/* Toggle */}
           <button onClick={toggleAutoMode} disabled={toggling}
             className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${
               autoMode ? "bg-yellow-400 shadow-[0_0_16px_rgba(234,179,8,0.15)]" : "bg-gray-700"
@@ -862,25 +805,6 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
       {/* ═══ AUTO MODE CONTENT ═══ */}
       {autoMode && (
         <>
-          {/* Today's Plan */}
-          {plan && (
-            <section>
-              <SectionLabel icon={<Clock size={12} className="text-gray-400" />}>
-                Today&apos;s Plan
-              </SectionLabel>
-              <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-                {planSummary && (
-                  <p className="text-[13px] text-gray-400 leading-relaxed mb-3">
-                    <span className="text-gray-200 font-semibold">{planSummary.split("(")[0]}</span>
-                    ({planSummary.split("(")[1]}
-                  </p>
-                )}
-                <TimelineBar segments={plan.timeline} currentHour={currentHour} />
-              </div>
-            </section>
-          )}
-
           {/* Devices (with schedule footers + inline controls) */}
           {hasDevices && (
             <section>
@@ -938,15 +862,6 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
                 </div>
               </div>
             </section>
-          )}
-
-          {/* No plan yet state */}
-          {!plan && (
-            <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.04] text-center">
-              <RefreshCw size={20} className="text-yellow-400/60 mx-auto mb-2 animate-spin" />
-              <p className="text-sm text-gray-400">Generating your first optimization plan...</p>
-              <p className="text-xs text-gray-600 mt-1">This usually takes a minute after enabling Auto mode.</p>
-            </div>
           )}
         </>
       )}
