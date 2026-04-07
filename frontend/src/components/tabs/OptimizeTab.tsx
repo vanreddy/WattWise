@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Zap,
   BatteryWarning,
@@ -170,8 +170,8 @@ function NestThermostatMini({
     .trim() || device.display_name || "Thermostat";
 
   return (
-    <div className="flex-none w-[calc(50%-5px)] min-w-[160px] snap-start">
-      <div className="bg-white/[0.02] border border-white/[0.04] rounded-[10px] p-2.5">
+    <div>
+      <div className="bg-white/[0.02] border border-white/[0.04] rounded-[10px] p-2.5 h-full">
         {/* Room label */}
         <div className="flex items-center gap-1 mb-1.5">
           <div className={`w-[5px] h-[5px] rounded-full ${dotColor}`} />
@@ -218,15 +218,13 @@ function NestThermostatMini({
   );
 }
 
-/* ─── Nest: card with horizontal scroll of thermostats ─── */
+/* ─── Nest: card with grid of thermostats ─── */
 
 function NestCard() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<NestDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -248,20 +246,6 @@ function NestCard() {
     if (user?.nest_connected) fetchStatus();
     else setLoading(false);
   }, [user?.nest_connected, fetchStatus]);
-
-  // Track scroll position for dots
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || devices.length <= 1) return;
-    const handleScroll = () => {
-      const scrollLeft = el.scrollLeft;
-      const itemWidth = el.scrollWidth / devices.length;
-      const idx = Math.round(scrollLeft / itemWidth);
-      setActiveIdx(Math.min(idx, devices.length - 1));
-    };
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, [devices.length]);
 
   if (!user?.nest_connected) return null;
 
@@ -310,32 +294,12 @@ function NestCard() {
         </button>
       </div>
 
-      {/* Horizontal scroll */}
-      <div
-        ref={scrollRef}
-        className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory -mx-3.5 px-3.5 pb-1"
-        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
-      >
+      {/* 2-column grid of thermostats */}
+      <div className="grid grid-cols-2 gap-2.5">
         {devices.map((d) => (
           <NestThermostatMini key={d.device_id} device={d} onRefresh={fetchStatus} />
         ))}
       </div>
-
-      {/* Scroll dots */}
-      {devices.length > 1 && (
-        <div className="flex justify-center gap-1.5 mt-2">
-          {devices.map((_, i) => (
-            <div
-              key={i}
-              className={`h-[5px] rounded-full transition-all duration-200 ${
-                i === activeIdx
-                  ? "w-[14px] bg-blue-400"
-                  : "w-[5px] bg-white/10"
-              }`}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
