@@ -7,6 +7,10 @@ import {
   changePassword,
   startTeslaAuth,
   completeTeslaAuth,
+  startNestAuth,
+  disconnectNest,
+  startSmartcarAuth,
+  disconnectSmartcar,
 } from "@/lib/auth";
 
 /* ─── Confirmation modal ─── */
@@ -74,6 +78,16 @@ export default function SettingsPage() {
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSuccess, setPwSuccess] = useState<string | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
+
+  // Nest state
+  const [nestLoading, setNestLoading] = useState(false);
+  const [nestError, setNestError] = useState<string | null>(null);
+  const [confirmNest, setConfirmNest] = useState(false);
+
+  // BMW (Smartcar) state
+  const [smartcarLoading, setSmartcarLoading] = useState(false);
+  const [smartcarError, setSmartcarError] = useState<string | null>(null);
+  const [confirmSmartcar, setConfirmSmartcar] = useState(false);
 
   // Confirmation modals
   const [confirmTesla, setConfirmTesla] = useState(false);
@@ -163,6 +177,74 @@ export default function SettingsPage() {
     }
   }
 
+  // ─── Nest handlers ───
+  async function handleNestConnect() {
+    setNestError(null);
+    setNestLoading(true);
+    try {
+      const data = await startNestAuth();
+      if ("status" in data && data.status === "already_connected") {
+        refreshUser?.();
+        return;
+      }
+      if ("authorization_url" in data) {
+        window.location.href = data.authorization_url;
+      }
+    } catch (err) {
+      setNestError(err instanceof Error ? err.message : "Failed to start Nest auth");
+    } finally {
+      setNestLoading(false);
+    }
+  }
+
+  async function confirmDisconnectNest() {
+    setNestError(null);
+    setNestLoading(true);
+    try {
+      await disconnectNest();
+      refreshUser?.();
+      setConfirmNest(false);
+    } catch (err) {
+      setNestError(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setNestLoading(false);
+    }
+  }
+
+  // ─── BMW (Smartcar) handlers ───
+  async function handleSmartcarConnect() {
+    setSmartcarError(null);
+    setSmartcarLoading(true);
+    try {
+      const data = await startSmartcarAuth();
+      if ("status" in data && data.status === "already_connected") {
+        refreshUser?.();
+        return;
+      }
+      if ("authorization_url" in data) {
+        window.location.href = data.authorization_url;
+      }
+    } catch (err) {
+      setSmartcarError(err instanceof Error ? err.message : "Failed to start Smartcar auth");
+    } finally {
+      setSmartcarLoading(false);
+    }
+  }
+
+  async function confirmDisconnectSmartcar() {
+    setSmartcarError(null);
+    setSmartcarLoading(true);
+    try {
+      await disconnectSmartcar();
+      refreshUser?.();
+      setConfirmSmartcar(false);
+    } catch (err) {
+      setSmartcarError(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setSmartcarLoading(false);
+    }
+  }
+
   // ─── Password handler ───
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -204,6 +286,24 @@ export default function SettingsPage() {
         onConfirm={confirmDisconnectTesla}
         onCancel={() => setConfirmTesla(false)}
         loading={teslaLoading}
+      />
+      <ConfirmModal
+        open={confirmNest}
+        title="Disconnect Nest?"
+        message="This will remove thermostat control and HVAC monitoring. You can reconnect anytime."
+        confirmLabel="Disconnect"
+        onConfirm={confirmDisconnectNest}
+        onCancel={() => setConfirmNest(false)}
+        loading={nestLoading}
+      />
+      <ConfirmModal
+        open={confirmSmartcar}
+        title="Disconnect BMW?"
+        message="This will remove battery monitoring and charge control for your BMW. You can reconnect anytime."
+        confirmLabel="Disconnect"
+        onConfirm={confirmDisconnectSmartcar}
+        onCancel={() => setConfirmSmartcar(false)}
+        loading={smartcarLoading}
       />
       <div className="max-w-lg mx-auto px-4 py-8 space-y-10">
         <h2 className="text-xl font-bold">Settings</h2>
@@ -325,7 +425,104 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* ─── Section 2: User ─── */}
+        {/* ─── Section 2: Connected Devices ─── */}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+            Connected Devices
+          </h3>
+
+          {/* Nest Thermostat */}
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3 text-sm">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🌡️</span>
+                <div>
+                  <span className="font-medium">Nest Thermostat</span>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {user.nest_connected
+                      ? "Connected — HVAC monitoring active"
+                      : "Not connected"}
+                  </p>
+                </div>
+              </div>
+              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                user.nest_connected
+                  ? "bg-green-900/30 text-green-400"
+                  : "bg-gray-800 text-gray-500"
+              }`}>
+                {user.nest_connected ? "Active" : "Offline"}
+              </span>
+            </div>
+            {user.nest_connected ? (
+              <button
+                onClick={() => setConfirmNest(true)}
+                className="text-xs text-red-400 hover:text-red-300"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={handleNestConnect}
+                disabled={nestLoading}
+                className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all"
+              >
+                {nestLoading ? "Connecting..." : "Connect Nest"}
+              </button>
+            )}
+            {nestError && (
+              <div className="bg-red-900/30 border border-red-800 text-red-300 text-xs rounded px-3 py-2">
+                {nestError}
+              </div>
+            )}
+          </div>
+
+          {/* BMW (Smartcar) */}
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3 text-sm">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🚗</span>
+                <div>
+                  <span className="font-medium">BMW iX</span>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {user.smartcar_connected
+                      ? "Connected — battery monitoring active"
+                      : "Not connected"}
+                  </p>
+                </div>
+              </div>
+              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                user.smartcar_connected
+                  ? "bg-green-900/30 text-green-400"
+                  : "bg-gray-800 text-gray-500"
+              }`}>
+                {user.smartcar_connected ? "Active" : "Offline"}
+              </span>
+            </div>
+            {user.smartcar_connected ? (
+              <button
+                onClick={() => setConfirmSmartcar(true)}
+                className="text-xs text-red-400 hover:text-red-300"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={handleSmartcarConnect}
+                disabled={smartcarLoading}
+                className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all"
+              >
+                {smartcarLoading ? "Connecting..." : "Connect BMW"}
+              </button>
+            )}
+            {smartcarError && (
+              <div className="bg-red-900/30 border border-red-800 text-red-300 text-xs rounded px-3 py-2">
+                {smartcarError}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ─── Section 3: User ─── */}
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
             User

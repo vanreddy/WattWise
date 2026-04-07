@@ -175,7 +175,9 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
         """SELECT u.id, u.email, u.role, u.account_id, u.created_at,
                   a.site_name, a.energy_site_id,
                   a.zip_code, a.latitude, a.longitude,
-                  a.solar_capacity_kw, a.rate_plan_name
+                  a.solar_capacity_kw, a.rate_plan_name,
+                  COALESCE(a.nest_connected, FALSE) AS nest_connected,
+                  COALESCE(a.smartcar_connected, FALSE) AS smartcar_connected
            FROM users u
            JOIN accounts a ON a.id = u.account_id
            WHERE u.id = $1""",
@@ -199,6 +201,8 @@ async def me(request: Request, user: dict = Depends(get_current_user)):
         "site_name": row["site_name"],
         "energy_site_id": row["energy_site_id"],
         "tesla_connected": tesla_cache is not None,
+        "nest_connected": row["nest_connected"],
+        "smartcar_connected": row["smartcar_connected"],
         "zip_code": row["zip_code"],
         "latitude": row["latitude"],
         "longitude": row["longitude"],

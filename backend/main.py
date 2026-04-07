@@ -19,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.aggregator import run_daily_aggregation
 from backend.api import router as api_router
 from backend.auth_api import router as auth_router
+from backend.nest_api import router as nest_router
+from backend.smartcar_api import router as smartcar_router
 from backend.poller import poll_and_check
 from backend.weekly_summary import run_weekly_summary
 
@@ -52,6 +54,8 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS solar_capacity_kw DOUBLE PRECISION",
         "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS rate_plan_name TEXT",
         "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS tariff_content JSONB",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS nest_connected BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS smartcar_connected BOOLEAN DEFAULT FALSE",
     ]:
         await pool.execute(col_sql)
 
@@ -165,6 +169,8 @@ app.add_middleware(
 )
 app.include_router(api_router)
 app.include_router(auth_router)
+app.include_router(nest_router)
+app.include_router(smartcar_router)
 
 
 @app.get("/health")

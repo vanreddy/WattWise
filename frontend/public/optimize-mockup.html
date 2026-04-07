@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SelfPower — Optimize</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep: #06060a;
+    --bg-base: #0a0a0f;
+    --bg-card: #111827;
+    --bg-card-hover: #151c2e;
+    --border: #1e293b;
+    --border-subtle: rgba(255,255,255,0.04);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-tertiary: #64748b;
+    --yellow: #eab308;
+    --yellow-glow: rgba(234,179,8,0.15);
+    --yellow-dim: rgba(234,179,8,0.08);
+    --green: #22c55e;
+    --green-glow: rgba(34,197,94,0.15);
+    --blue: #3b82f6;
+    --blue-glow: rgba(59,130,246,0.15);
+    --purple: #a855f7;
+    --purple-glow: rgba(168,85,247,0.15);
+    --red: #ef4444;
+    --red-glow: rgba(239,68,68,0.12);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --radius-xs: 6px;
+  }
+
+  html {
+    background: var(--bg-deep);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Ambient glow at top */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(234,179,8,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* ── Card System ── */
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0) 100%), var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.03),
+      0 1px 2px rgba(0,0,0,0.5),
+      0 4px 16px rgba(0,0,0,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--yellow); }
+    50% { opacity: 0.6; box-shadow: 0 0 12px var(--yellow); }
+  }
+
+  @keyframes slide-right {
+    from { transform: scaleX(0); transform-origin: left; }
+    to { transform: scaleX(1); transform-origin: left; }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .animate-in {
+    animation: fadeInUp 0.5s ease-out both;
+  }
+
+  .delay-1 { animation-delay: 0.06s; }
+  .delay-2 { animation-delay: 0.12s; }
+  .delay-3 { animation-delay: 0.18s; }
+  .delay-4 { animation-delay: 0.24s; }
+  .delay-5 { animation-delay: 0.30s; }
+  .delay-6 { animation-delay: 0.36s; }
+
+  /* ── Layout ── */
+  .page {
+    padding: 0 16px 100px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .section-label svg {
+    opacity: 0.7;
+  }
+
+  /* ═══════════════════════════════════
+     1. MASTER CONTROL BAR
+     ═══════════════════════════════════ */
+
+  .control-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(180deg, var(--bg-base) 60%, transparent 100%);
+    padding: 12px 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .auto-mode {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .auto-mode-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .auto-mode-sublabel {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 1px;
+  }
+
+  /* Toggle switch */
+  .toggle {
+    width: 44px;
+    height: 24px;
+    background: #2a2a35;
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  .toggle.active {
+    background: var(--yellow);
+    box-shadow: 0 0 16px var(--yellow-glow), 0 0 4px rgba(234,179,8,0.3);
+  }
+
+  .toggle-thumb {
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+
+  .toggle.active .toggle-thumb {
+    transform: translateX(20px);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3), 0 0 8px rgba(234,179,8,0.2);
+  }
+
+  /* Disable button */
+  .disable-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    white-space: nowrap;
+  }
+
+  .disable-btn:hover {
+    background: rgba(255,255,255,0.06);
+    color: var(--text-secondary);
+  }
+
+  /* Dropdown */
+  .dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: #1a1f2e;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    min-width: 200px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    pointer-events: none;
+    transition: all 0.2s ease;
+    z-index: 200;
+  }
+
+  .dropdown.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: all;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .dropdown-item:hover {
+    background: rgba(255,255,255,0.05);
+    color: var(--text-primary);
+  }
+
+  .dropdown-item svg {
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
+
+  /* Hidden helper */
+  .hidden { display: none !important; }
+
+  /* ── Disabled / grey mode ── */
+  .page.disabled {
+    filter: saturate(0) brightness(0.7);
+    opacity: 0.45;
+    pointer-events: none;
+    transition: all 0.4s ease;
+  }
+
+  .page:not(.disabled) {
+    filter: none;
+    opacity: 1;
+    transition: all 0.4s ease;
+  }
+
+  /* ═══════════════════════════════════
+     2. TODAY'S PLAN
+     ═══════════════════════════════════ */
+
+  .plan-card {
+    margin-bottom: 20px;
+  }
+
+  .plan-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .plan-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--yellow-dim);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .plan-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .plan-subtitle {
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
+  .plan-summary {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+
+  .plan-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  /* Timeline */
+  .timeline-container {
+    margin-bottom: 14px;
+  }
+
+  .timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+    padding: 0 2px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+
+  .timeline-bar {
+    position: relative;
+    height: 32px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    overflow: visible;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .timeline-segment {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    border-radius: 5px;
+    transition: opacity 0.3s ease;
+  }
+
+  .timeline-segment:hover {
+    opacity: 0.85;
+    z-index: 2;
+  }
+
+  /* Peak hours overlay */
+  .peak-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border: 1.5px dashed rgba(239,68,68,0.3);
+    border-radius: 6px;
+    background: rgba(239,68,68,0.03);
+    /* 4pm to 9pm = hour 10 to 15 of 18-hour window (6am-midnight) */
+    left: 55.55%;
+    right: 16.67%;
+  }
+
+  .peak-label {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: 600;
+    color: rgba(239,68,68,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+
+  /* Now indicator */
+  .now-indicator {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 2px;
+    background: var(--yellow);
+    z-index: 10;
+    border-radius: 1px;
+    /* ~12:15pm position in 6am-midnight = 6.25h/18h = 34.7% */
+    left: 34.7%;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .now-indicator::before {
+    content: 'NOW';
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 7px;
+    font-weight: 700;
+    color: var(--yellow);
+    letter-spacing: 0.12em;
+  }
+
+  .now-indicator::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -6px;
+    width: 14px;
+    height: 14px;
+    background: radial-gradient(circle, var(--yellow-glow), transparent);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  /* Timeline legend */
+  .timeline-legend {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    color: var(--text-tertiary);
+  }
+
+  .legend-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+  }
+
+  .plan-savings {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .plan-savings svg {
+    opacity: 0.7;
+  }
+
+  /* ═══════════════════════════════════
+     3. DEVICE STATUS CARDS
+     ═══════════════════════════════════ */
+
+  .devices-scroll {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 20px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .device-card {
+    flex: 0 0 140px;
+    scroll-snap-align: start;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .device-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: var(--radius);
+    pointer-events: none;
+  }
+
+  .device-card.pw::after {
+    background: radial-gradient(ellipse at top left, rgba(34,197,94,0.06) 0%, transparent 60%);
+  }
+
+  .device-card.nest::after {
+    background: radial-gradient(ellipse at top left, rgba(59,130,246,0.06) 0%, transparent 60%);
+  }
+
+  .device-card.ev::after {
+    background: radial-gradient(ellipse at top left, rgba(168,85,247,0.06) 0%, transparent 60%);
+  }
+
+  .device-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
+  .device-icon.pw { background: var(--green-glow); color: var(--green); }
+  .device-icon.nest { background: var(--blue-glow); color: var(--blue); }
+  .device-icon.ev { background: var(--purple-glow); color: var(--purple); }
+
+  .device-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+    margin-bottom: 2px;
+  }
+
+  .device-status {
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .device-status.pw { color: var(--green); }
+  .device-status.nest { color: var(--blue); }
+  .device-status.ev { color: var(--purple); }
+
+  .device-plan {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    line-height: 1.3;
+  }
+
+  /* ═══════════════════════════════════
+     4. CONTROLS
+     ═══════════════════════════════════ */
+
+  .controls-section {
+    margin-bottom: 20px;
+  }
+
+  .control-row {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .control-row:last-child {
+    border-bottom: none;
+  }
+
+  .control-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .control-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .control-label svg {
+    opacity: 0.5;
+  }
+
+  .control-value {
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .control-value.yellow { color: var(--yellow); }
+  .control-value.blue { color: var(--blue); }
+  .control-value.purple { color: var(--purple); }
+
+  /* Slider */
+  .slider-track {
+    position: relative;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    margin: 0 2px;
+  }
+
+  .slider-fill {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .slider-fill.yellow { background: linear-gradient(90deg, rgba(234,179,8,0.4), var(--yellow)); }
+  .slider-fill.blue { background: linear-gradient(90deg, var(--blue), rgba(59,130,246,0.7)); }
+  .slider-fill.purple { background: linear-gradient(90deg, var(--purple), rgba(168,85,247,0.7)); }
+
+  .slider-thumb {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4), 0 0 0 2px rgba(255,255,255,0.1);
+    cursor: grab;
+    transition: box-shadow 0.2s ease;
+    z-index: 2;
+  }
+
+  .slider-thumb:hover {
+    box-shadow: 0 1px 6px rgba(0,0,0,0.5), 0 0 0 3px rgba(255,255,255,0.15);
+  }
+
+  .slider-bounds {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 6px;
+  }
+
+  /* ═══════════════════════════════════
+     5. ACTIVITY LOG
+     ═══════════════════════════════════ */
+
+  .activity-section {
+    margin-bottom: 20px;
+  }
+
+  .activity-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    position: relative;
+  }
+
+  .activity-item:last-child {
+    border-bottom: none;
+  }
+
+  /* Timeline spine */
+  .activity-dot-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 2px;
+    position: relative;
+  }
+
+  .activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .activity-dot.purple { background: var(--purple); box-shadow: 0 0 6px var(--purple-glow); }
+  .activity-dot.blue { background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); }
+  .activity-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  .activity-dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow-glow); }
+  .activity-dot.gray { background: var(--text-tertiary); }
+
+  .activity-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    min-width: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .activity-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    flex: 1;
+  }
+
+  .activity-link {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: 8px 0;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .activity-link:hover {
+    color: var(--yellow);
+  }
+
+  /* ═══════════════════════════════════
+     6. THIS WEEK SUMMARY
+     ═══════════════════════════════════ */
+
+  .week-card {
+    margin-bottom: 24px;
+  }
+
+  .week-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .week-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .week-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .week-stat {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    text-align: center;
+  }
+
+  .week-stat-value {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .week-stat-value.green { color: var(--green); }
+  .week-stat-value.yellow { color: var(--yellow); }
+
+  .week-stat-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+    font-weight: 500;
+  }
+
+  .week-stat-delta {
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .week-stat-delta.up {
+    color: var(--green);
+    background: rgba(34,197,94,0.1);
+  }
+
+  /* ── Bottom nav mock ── */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 430px;
+    background: linear-gradient(180deg, transparent 0%, var(--bg-base) 20%);
+    padding: 8px 16px 20px;
+    display: flex;
+    justify-content: space-around;
+    z-index: 100;
+  }
+
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: color 0.2s ease;
+    padding: 4px 12px;
+  }
+
+  .nav-item.active {
+    color: var(--yellow);
+  }
+
+  .nav-item svg {
+    opacity: 0.6;
+  }
+
+  .nav-item.active svg {
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ MASTER CONTROL BAR ═══ -->
+<div class="control-bar animate-in">
+  <div class="auto-mode">
+    <div class="toggle active" id="autoToggle" onclick="toggleAuto()">
+      <div class="toggle-thumb"></div>
+    </div>
+    <div>
+      <div class="auto-mode-label">Auto Mode</div>
+      <div class="auto-mode-sublabel" id="autoSublabel">Optimizing your energy</div>
+    </div>
+  </div>
+  <div style="position: relative;" id="disableWrap" class="hidden">
+    <button class="disable-btn" id="disableBtn" onclick="toggleDropdown()">
+      Until tomorrow 9 AM ▾
+    </button>
+    <div class="dropdown" id="dropdown">
+      <div class="dropdown-item" onclick="disableUntil('tonight')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        Tonight (9 PM)
+      </div>
+      <div class="dropdown-item" onclick="disableUntil('tomorrow')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        Tomorrow morning (9 AM)
+      </div>
+      <div class="dropdown-item" onclick="disableUntil('manual')" style="border-top: 1px solid var(--border-subtle); margin-top: 4px; padding-top: 10px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        I turn it back on
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ PAGE CONTENT ═══ -->
+<div class="page" id="pageContent">
+
+  <!-- 2. TODAY'S PLAN -->
+  <div class="card plan-card animate-in delay-1">
+    <div class="plan-header">
+      <div class="plan-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </div>
+      <div>
+        <div class="plan-title">Today's Plan</div>
+        <div class="plan-subtitle">Updated 15 min ago</div>
+      </div>
+    </div>
+
+    <div class="plan-summary">☀️ Great solar day — 42 kWh predicted</div>
+    <div class="plan-detail">Pre-cool house at 1 PM, charge BMW 2–4 PM, bank Powerwall for evening peak</div>
+
+    <!-- Timeline -->
+    <div class="timeline-container">
+      <div class="timeline-labels">
+        <span>6 AM</span>
+        <span>9 AM</span>
+        <span>NOON</span>
+        <span>3 PM</span>
+        <span>6 PM</span>
+        <span>9 PM</span>
+        <span>12</span>
+      </div>
+      <div class="timeline-bar">
+        <!-- Solar production: 8am-5pm -->
+        <div class="timeline-segment" style="left: 11.1%; width: 50%; background: linear-gradient(90deg, rgba(234,179,8,0.15), rgba(234,179,8,0.35), rgba(234,179,8,0.15)); border: 1px solid rgba(234,179,8,0.2);" title="Solar Production 8am-5pm"></div>
+        <!-- PW charging: 9am-1pm -->
+        <div class="timeline-segment" style="left: 16.7%; width: 22.2%; background: rgba(34,197,94,0.3); border: 1px solid rgba(34,197,94,0.25); top: 4px; bottom: 15px;" title="Powerwall Charging"></div>
+        <!-- HVAC pre-cool: 1pm-3pm -->
+        <div class="timeline-segment" style="left: 38.9%; width: 11.1%; background: rgba(59,130,246,0.3); border: 1px solid rgba(59,130,246,0.25); top: 15px; bottom: 4px;" title="Pre-cool House"></div>
+        <!-- EV charging: 2pm-4pm -->
+        <div class="timeline-segment" style="left: 44.4%; width: 11.1%; background: rgba(168,85,247,0.3); border: 1px solid rgba(168,85,247,0.25); top: 4px; bottom: 15px;" title="EV Charging"></div>
+        <!-- PW discharge: 4pm-9pm (peak) -->
+        <div class="timeline-segment" style="left: 55.5%; width: 27.8%; background: linear-gradient(90deg, rgba(34,197,94,0.25), rgba(34,197,94,0.15)); border: 1px solid rgba(34,197,94,0.2); top: 4px; bottom: 15px;" title="Powerwall Discharge"></div>
+        <!-- Peak zone -->
+        <div class="peak-zone">
+          <span class="peak-label">PEAK</span>
+        </div>
+        <!-- Now indicator -->
+        <div class="now-indicator"></div>
+      </div>
+      <div class="timeline-legend">
+        <div class="legend-item"><div class="legend-dot" style="background: var(--yellow);"></div> Solar</div>
+        <div class="legend-item"><div class="legend-dot" style="background: var(--green);"></div> Powerwall</div>
+        <div class="legend-item"><div class="legend-dot" style="background: var(--blue);"></div> HVAC</div>
+        <div class="legend-item"><div class="legend-dot" style="background: var(--purple);"></div> EV</div>
+        <div class="legend-item"><div class="legend-dot" style="background: transparent; border: 1px dashed var(--red);"></div> Peak</div>
+      </div>
+    </div>
+
+    <div class="plan-savings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Projected savings: $4.20 today
+    </div>
+  </div>
+
+  <!-- 3. DEVICE STATUS -->
+  <div class="animate-in delay-2">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>
+      Devices
+    </div>
+    <div class="devices-scroll">
+      <!-- Powerwall -->
+      <div class="card device-card pw">
+        <div class="device-icon pw">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="6" y1="8" x2="18" y2="8"/><line x1="6" y1="13" x2="18" y2="13"/></svg>
+        </div>
+        <div class="device-value">72%</div>
+        <div class="device-status pw">Discharging</div>
+        <div class="device-plan">Hold until 9 PM</div>
+      </div>
+
+      <!-- Nest -->
+      <div class="card device-card nest">
+        <div class="device-icon nest">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+        </div>
+        <div class="device-value">74°F</div>
+        <div class="device-status nest">Pre-cooling → 72°</div>
+        <div class="device-plan">Eco mode at 4 PM</div>
+      </div>
+
+      <!-- BMW iX -->
+      <div class="card device-card ev">
+        <div class="device-icon ev">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M5 17l1-6h12l1 6M5 17H3v1h2m14 0h2v-1h-2m0 0"/><circle cx="7.5" cy="17" r="0.5" fill="currentColor"/><circle cx="16.5" cy="17" r="0.5" fill="currentColor"/><path d="M7 11l1-4h8l1 4"/></svg>
+        </div>
+        <div class="device-value">45%</div>
+        <div class="device-status ev">Charging → 60%</div>
+        <div class="device-plan">4.8 kW from solar</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. CONTROLS -->
+  <div class="animate-in delay-3">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      Your Preferences
+    </div>
+    <div class="card controls-section">
+      <!-- PW Reserve -->
+      <div class="control-row">
+        <div class="control-header">
+          <div class="control-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="6" y1="8" x2="18" y2="8"/></svg>
+            Powerwall Reserve
+          </div>
+          <div class="control-value yellow">20%</div>
+        </div>
+        <div class="slider-track">
+          <div class="slider-fill yellow" style="left: 0; width: 33.3%;"></div>
+          <div class="slider-thumb" style="left: 33.3%;"></div>
+        </div>
+        <div class="slider-bounds"><span>5%</span><span>50%</span></div>
+      </div>
+
+      <!-- Comfort Range -->
+      <div class="control-row">
+        <div class="control-header">
+          <div class="control-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+            Comfort Range
+          </div>
+          <div class="control-value blue">68°F – 78°F</div>
+        </div>
+        <div class="slider-track">
+          <div class="slider-fill blue" style="left: 32%; width: 40%;"></div>
+          <div class="slider-thumb" style="left: 32%;"></div>
+          <div class="slider-thumb" style="left: 72%;"></div>
+        </div>
+        <div class="slider-bounds"><span>60°F</span><span>85°F</span></div>
+      </div>
+
+      <!-- EV Charge Range -->
+      <div class="control-row">
+        <div class="control-header">
+          <div class="control-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M5 18h14M5 18l1-6h12l1 6"/><path d="M7 12l1-4h8l1 4"/></svg>
+            EV Charge Range
+          </div>
+          <div class="control-value purple">60% – 90%</div>
+        </div>
+        <div class="slider-track">
+          <div class="slider-fill purple" style="left: 50%; width: 37.5%;"></div>
+          <div class="slider-thumb" style="left: 50%;"></div>
+          <div class="slider-thumb" style="left: 87.5%;"></div>
+        </div>
+        <div class="slider-bounds"><span>20%</span><span>100%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. ACTIVITY LOG -->
+  <div class="animate-in delay-4" style="margin-top: 20px;">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Activity
+    </div>
+    <div class="card activity-section">
+      <div class="activity-list">
+
+        <div class="activity-item">
+          <div class="activity-dot-col"><div class="activity-dot purple"></div></div>
+          <div class="activity-time">12:05</div>
+          <div class="activity-text">Started BMW charging — solar surplus 4.2 kW</div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-dot-col"><div class="activity-dot blue"></div></div>
+          <div class="activity-time">12:00</div>
+          <div class="activity-text">Set Nest to 72°F — pre-cooling for peak hours</div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-dot-col"><div class="activity-dot green"></div></div>
+          <div class="activity-time">11:55</div>
+          <div class="activity-text">Powerwall charging — SoC 65%, target 85%</div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-dot-col"><div class="activity-dot yellow"></div></div>
+          <div class="activity-time">11:30</div>
+          <div class="activity-text">☀️ Solar exceeding forecast by 12% — re-planning</div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-dot-col"><div class="activity-dot gray"></div></div>
+          <div class="activity-time">7:15</div>
+          <div class="activity-text">Generated today's plan — 42 kWh solar predicted</div>
+        </div>
+
+        <div class="activity-item">
+          <div class="activity-dot-col"><div class="activity-dot yellow"></div></div>
+          <div class="activity-time">7:00</div>
+          <div class="activity-text">📱 Reminder sent: Plug in BMW for solar charging</div>
+        </div>
+
+      </div>
+      <div class="activity-link">View full history →</div>
+    </div>
+  </div>
+
+  <!-- 6. THIS WEEK -->
+  <div class="animate-in delay-5" style="margin-top: 20px;">
+    <div class="card week-card">
+      <div class="week-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><path d="M12 3l1.5 4.5H18l-3.5 2.5 1.5 4.5L12 12l-4 2.5 1.5-4.5L6 7.5h4.5z"/></svg>
+        <div class="week-title">This Week</div>
+      </div>
+      <div class="week-stats">
+        <div class="week-stat">
+          <div class="week-stat-value green">$18.40</div>
+          <div class="week-stat-label">Saved</div>
+          <div class="week-stat-delta up">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+            $4.20 vs last week
+          </div>
+        </div>
+        <div class="week-stat">
+          <div class="week-stat-value yellow">87%</div>
+          <div class="week-stat-label">Self-Powered</div>
+          <div class="week-stat-delta up">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+            6% vs manual
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ BOTTOM NAV ═══ -->
+<div class="bottom-nav">
+  <div class="nav-item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+    Flow
+  </div>
+  <div class="nav-item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    Impact
+  </div>
+  <div class="nav-item active">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+    Optimize
+  </div>
+</div>
+
+<script>
+  // ── Auto Mode Toggle ──
+  let autoEnabled = true;
+  let pausedUntil = null;
+
+  function toggleAuto() {
+    autoEnabled = !autoEnabled;
+    const toggle = document.getElementById('autoToggle');
+    const sublabel = document.getElementById('autoSublabel');
+
+    if (autoEnabled) {
+      toggle.classList.add('active');
+      sublabel.textContent = 'Optimizing your energy';
+      document.getElementById('disableWrap').classList.add('hidden');
+      document.getElementById('pageContent').classList.remove('disabled');
+      pausedUntil = null;
+    } else {
+      toggle.classList.remove('active');
+      document.getElementById('disableWrap').classList.remove('hidden');
+      document.getElementById('pageContent').classList.add('disabled');
+      // Default to tomorrow morning
+      disableUntil('tomorrow');
+    }
+  }
+
+  // ── Dropdown ──
+  let dropdownOpen = false;
+
+  function toggleDropdown() {
+    dropdownOpen = !dropdownOpen;
+    document.getElementById('dropdown').classList.toggle('open', dropdownOpen);
+  }
+
+  function disableUntil(option) {
+    dropdownOpen = false;
+    document.getElementById('dropdown').classList.remove('open');
+
+    // Turn off auto mode
+    autoEnabled = false;
+    document.getElementById('autoToggle').classList.remove('active');
+
+    const sublabel = document.getElementById('autoSublabel');
+
+    const sublabels = {
+      'tonight': 'Paused until tonight 9 PM',
+      'tomorrow': 'Paused until tomorrow 9 AM',
+      'manual': 'Paused until you turn it back on'
+    };
+
+    const btnLabels = {
+      'tonight': 'Until tonight 9 PM ▾',
+      'tomorrow': 'Until tomorrow 9 AM ▾',
+      'manual': 'Until I turn back on ▾'
+    };
+
+    sublabel.textContent = sublabels[option] || 'Automations disabled';
+    document.getElementById('disableBtn').textContent = btnLabels[option] || 'Until tomorrow 9 AM ▾';
+  }
+
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    if (dropdownOpen && !e.target.closest('.disable-btn') && !e.target.closest('.dropdown')) {
+      dropdownOpen = false;
+      document.getElementById('dropdown').classList.remove('open');
+    }
+  });
+</script>
+
+</body>
+</html>

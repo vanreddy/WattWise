@@ -10,6 +10,8 @@ export interface AuthUser {
   site_name: string | null;
   energy_site_id: string | null;
   tesla_connected: boolean;
+  nest_connected: boolean;
+  smartcar_connected: boolean;
   zip_code: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -201,4 +203,106 @@ export async function completeTeslaAuth(
   }
 
   return res.json();
+}
+
+// --------------- Nest (Google SDM) ---------------
+
+export async function startNestAuth(): Promise<
+  { authorization_url: string; state: string } | { status: string }
+> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/nest/auth/start`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to start Nest auth" }));
+    throw new Error(err.detail || "Failed to start Nest auth");
+  }
+
+  return res.json();
+}
+
+export async function completeNestAuth(code: string): Promise<{ status: string; devices: unknown[] }> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/nest/auth/complete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Nest authentication failed" }));
+    throw new Error(err.detail || "Nest authentication failed");
+  }
+
+  return res.json();
+}
+
+export async function disconnectNest(): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/nest/disconnect`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to disconnect Nest" }));
+    throw new Error(err.detail || "Failed to disconnect Nest");
+  }
+}
+
+// --------------- Smartcar (BMW) ---------------
+
+export async function startSmartcarAuth(): Promise<
+  { authorization_url: string; state: string } | { status: string }
+> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/smartcar/auth/start`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to start Smartcar auth" }));
+    throw new Error(err.detail || "Failed to start Smartcar auth");
+  }
+
+  return res.json();
+}
+
+export async function completeSmartcarAuth(code: string): Promise<{ status: string; vehicles: unknown[] }> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/smartcar/auth/complete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Smartcar authentication failed" }));
+    throw new Error(err.detail || "Smartcar authentication failed");
+  }
+
+  return res.json();
+}
+
+export async function disconnectSmartcar(): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/smartcar/disconnect`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to disconnect Smartcar" }));
+    throw new Error(err.detail || "Failed to disconnect Smartcar");
+  }
 }
