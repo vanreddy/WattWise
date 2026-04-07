@@ -116,25 +116,32 @@ function NestThermostatMini({
 
   const ambientF = cToF(device.ambient_temp_c);
   const coolSetpointF = cToF(device.cool_setpoint_c);
+  const heatSetpointF = cToF(device.heat_setpoint_c);
   const isEco = device.eco_mode === "MANUAL_ECO";
   const hvacStatus = device.hvac_status || "OFF";
   const mode = device.mode || "OFF";
 
+  // What's the active setpoint?
+  const setpointF = mode === "HEAT" ? heatSetpointF
+    : (mode === "COOL" || mode === "HEATCOOL") ? coolSetpointF
+    : null;
+
+  const hvacColor =
+    hvacStatus === "COOLING" ? "text-blue-400"
+    : hvacStatus === "HEATING" ? "text-orange-400"
+    : "text-gray-500";
+
+  const hvacIcon =
+    hvacStatus === "COOLING" ? "❄️"
+    : hvacStatus === "HEATING" ? "🔥"
+    : isEco ? "🍃"
+    : "";
+
   const hvacLabel =
-    hvacStatus === "COOLING" ? "❄️ Cooling"
-    : hvacStatus === "HEATING" ? "🔥 Heating"
+    hvacStatus === "COOLING" ? "Cooling"
+    : hvacStatus === "HEATING" ? "Heating"
+    : isEco ? "Eco"
     : "Idle";
-
-  const hvacBadgeStyle =
-    hvacStatus === "COOLING" ? "text-blue-400 bg-blue-500/10"
-    : hvacStatus === "HEATING" ? "text-orange-400 bg-orange-500/10"
-    : isEco ? "text-green-400 bg-green-500/10"
-    : "text-gray-500 bg-white/[0.04]";
-
-  const dotColor =
-    device.display_name?.toLowerCase().includes("bed") ? "bg-purple-400"
-    : device.display_name?.toLowerCase().includes("off") ? "bg-green-400"
-    : "bg-blue-400";
 
   async function adjustTemp(delta: number) {
     if (commanding) return;
@@ -164,55 +171,69 @@ function NestThermostatMini({
     }
   }
 
-  // Shorten display name: "Nest Thermostat - Living Room" → "Living Room"
+  // Extract room name: strip "Nest Thermostat" prefix if present
   const shortName = device.display_name
     ?.replace(/nest\s*(thermostat)?\s*[-–—]?\s*/i, "")
     .trim() || device.display_name || "Thermostat";
 
   return (
     <div>
-      <div className="bg-white/[0.02] border border-white/[0.04] rounded-[10px] p-2.5 h-full">
-        {/* Room label */}
-        <div className="flex items-center gap-1 mb-1.5">
-          <div className={`w-[5px] h-[5px] rounded-full ${dotColor}`} />
-          <span className="text-[10px] text-gray-500 font-medium">{shortName}</span>
+      <div className="bg-white/[0.02] border border-white/[0.04] rounded-[10px] p-3 h-full flex flex-col">
+        {/* Room name + HVAC status */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-semibold text-gray-300">{shortName}</span>
+          <span className={`text-[9px] font-medium ${hvacColor}`}>
+            {hvacIcon} {hvacLabel}
+          </span>
         </div>
-        {/* Temperature */}
-        <div className="text-[22px] font-bold leading-none">{fToDisplay(ambientF)}</div>
-        <div className="text-[9px] text-gray-500 mt-0.5">
-          {device.humidity_pct != null ? `${device.humidity_pct}% humidity` : ""}
-          {hvacStatus !== "OFF" && device.humidity_pct != null ? " · " : ""}
-          {hvacStatus !== "OFF" ? hvacLabel : isEco ? "🍃 Eco" : `Mode: ${mode}`}
+
+        {/* Current temp (big) + humidity */}
+        <div className="mb-3">
+          <span className="text-[26px] font-bold leading-none">{fToDisplay(ambientF)}</span>
+          {device.humidity_pct != null && (
+            <span className="text-[10px] text-gray-500 ml-1.5">{device.humidity_pct}%</span>
+          )}
         </div>
-        {/* Controls */}
-        <div className="flex items-center gap-1 mt-2">
-          <button
-            onClick={() => adjustTemp(-1)}
-            disabled={commanding || mode === "OFF"}
-            className="flex-1 h-7 flex items-center justify-center rounded-md bg-white/[0.04] border border-white/[0.06] text-gray-400 text-xs font-semibold hover:bg-white/[0.08] disabled:opacity-30 transition-colors"
-          >
-            −
-          </button>
-          <button
-            onClick={() => adjustTemp(1)}
-            disabled={commanding || mode === "OFF"}
-            className="flex-1 h-7 flex items-center justify-center rounded-md bg-white/[0.04] border border-white/[0.06] text-gray-400 text-xs font-semibold hover:bg-white/[0.08] disabled:opacity-30 transition-colors"
-          >
-            +
-          </button>
-          <button
-            onClick={toggleEco}
-            disabled={commanding}
-            className={`flex-[1.5] h-7 flex items-center justify-center gap-0.5 rounded-md text-[9px] font-medium transition-all border ${
-              isEco
-                ? "text-green-400 bg-green-500/[0.06] border-green-500/[0.15]"
-                : "text-gray-500 bg-white/[0.02] border-white/[0.06] hover:text-gray-300"
-            } disabled:opacity-50`}
-          >
-            <Leaf size={10} />
-            Eco
-          </button>
-        </div>
+
+        {/* Setpoint control: ▼ [target temp] ▲ */}
+        {mode !== "OFF" && !isEco && (
+          <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5 mb-2">
+            <button
+              onClick={() => adjustTemp(-1)}
+              disabled={commanding}
+              className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] active:bg-white/[0.16] disabled:opacity-30 transition-colors"
+            >
+              <ChevronDown size={16} />
+            </button>
+            <div className="text-center">
+              <div className="text-[10px] text-gray-500 leading-none">Set to</div>
+              <div className="text-sm font-bold text-blue-400 leading-tight">
+                {setpointF != null ? `${setpointF}°F` : "—"}
+              </div>
+            </div>
+            <button
+              onClick={() => adjustTemp(1)}
+              disabled={commanding}
+              className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] active:bg-white/[0.16] disabled:opacity-30 transition-colors"
+            >
+              <ChevronUp size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Eco toggle */}
+        <button
+          onClick={toggleEco}
+          disabled={commanding}
+          className={`mt-auto w-full flex items-center justify-center gap-1.5 text-[10px] font-medium py-1.5 rounded-lg transition-all border ${
+            isEco
+              ? "text-green-400 bg-green-500/[0.08] border-green-500/20"
+              : "text-gray-500 bg-white/[0.02] border-white/[0.06] hover:text-gray-300 hover:bg-white/[0.04]"
+          } disabled:opacity-50`}
+        >
+          <Leaf size={11} />
+          {isEco ? "Eco On" : "Eco Off"}
+        </button>
       </div>
     </div>
   );

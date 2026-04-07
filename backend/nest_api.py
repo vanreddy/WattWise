@@ -215,7 +215,7 @@ async def nest_auth_complete(body: NestCompleteRequest, request: Request, user: 
                 # Extract device ID from full name: enterprises/{pid}/devices/{did}
                 device_id = device["name"].split("/")[-1]
                 traits = device.get("traits", {})
-                display_name = traits.get("sdm.devices.traits.Info", {}).get("customName", "Thermostat")
+                display_name = _get_display_name(device)
                 devices.append({
                     "device_id": device_id,
                     "display_name": display_name,
@@ -259,6 +259,22 @@ async def nest_disconnect(request: Request, user: dict = Depends(get_current_use
     return {"status": "ok"}
 
 
+# ─── Helpers ───
+
+def _get_display_name(device: dict) -> str:
+    """Get best display name: customName → parentRelations room → 'Thermostat'."""
+    traits = device.get("traits", {})
+    custom = traits.get("sdm.devices.traits.Info", {}).get("customName", "")
+    if custom and custom.strip():
+        return custom.strip()
+    # Fall back to room name from parentRelations
+    for rel in device.get("parentRelations", []):
+        room = rel.get("displayName", "")
+        if room and room.strip():
+            return room.strip()
+    return "Thermostat"
+
+
 # ─── Device status ───
 
 @router.get("/devices")
@@ -275,7 +291,7 @@ async def list_devices(request: Request, user: dict = Depends(get_current_user))
             traits = device.get("traits", {})
             devices.append({
                 "device_id": device_id,
-                "display_name": traits.get("sdm.devices.traits.Info", {}).get("customName", "Thermostat"),
+                "display_name": _get_display_name(device),
                 "ambient_temp_c": traits.get("sdm.devices.traits.Temperature", {}).get("ambientTemperatureCelsius"),
                 "humidity_pct": traits.get("sdm.devices.traits.Humidity", {}).get("ambientHumidityPercent"),
                 "mode": traits.get("sdm.devices.traits.ThermostatMode", {}).get("mode"),
@@ -301,7 +317,7 @@ async def device_status(device_id: str, request: Request, user: dict = Depends(g
     ambient_c = traits.get("sdm.devices.traits.Temperature", {}).get("ambientTemperatureCelsius")
     return {
         "device_id": device_id,
-        "display_name": traits.get("sdm.devices.traits.Info", {}).get("customName", "Thermostat"),
+        "display_name": _get_display_name(result),
         "ambient_temp_c": ambient_c,
         "ambient_temp_f": round(ambient_c * 9/5 + 32, 1) if ambient_c is not None else None,
         "humidity_pct": traits.get("sdm.devices.traits.Humidity", {}).get("ambientHumidityPercent"),
