@@ -152,6 +152,70 @@ export interface Report {
   metadata: Record<string, unknown> | null;
 }
 
+/* ─── Nest types ─── */
+
+export interface NestDevice {
+  device_id: string;
+  display_name: string;
+  ambient_temp_c: number | null;
+  ambient_temp_f?: number | null;
+  humidity_pct: number | null;
+  mode: string | null;          // "HEAT" | "COOL" | "HEATCOOL" | "OFF"
+  available_modes?: string[];
+  hvac_status: string | null;   // "HEATING" | "COOLING" | "OFF"
+  heat_setpoint_c: number | null;
+  cool_setpoint_c: number | null;
+  eco_mode: string | null;      // "MANUAL_ECO" | "OFF"
+  connectivity: string | null;  // "ONLINE" | "OFFLINE"
+}
+
+/* ─── Smartcar types ─── */
+
+export interface SmartcarVehicle {
+  vehicle_id: string;
+  make?: string;
+  model?: string;
+  year?: number;
+}
+
+export interface SmartcarVehicleStatus {
+  vehicle_id: string;
+  percent_remaining?: number | null;
+  range_km?: number | null;
+  range_miles?: number | null;
+  charge_state?: string | null;   // "CHARGING" | "NOT_CHARGING" | "FULLY_CHARGED"
+  is_plugged_in?: boolean | null;
+}
+
+/* ─── Authenticated POST helper ─── */
+
+async function postJSON<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+  const token = getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (res.status === 401 && token) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      headers["Authorization"] = `Bearer ${newToken}`;
+      res = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    }
+  }
+
+  if (!res.ok) throw new Error(`API error: ${res.status} ${path}`);
+  return res.json();
+}
+
 export const api = {
   getSummary: () => fetchJSON<SummaryResponse>("/summary"),
   getDaily: (from?: string, to?: string) => {
@@ -195,4 +259,22 @@ export const api = {
     params.set("limit", String(limit));
     return fetchJSON<Report[]>(`/reports?${params}`);
   },
+
+  // ─── Nest ───
+  getNestDevices: () => fetchJSON<{ devices: NestDevice[] }>("/nest/devices"),
+  getNestDeviceStatus: (deviceId: string) =>
+    fetchJSON<NestDevice>(`/nest/devices/${deviceId}/status`),
+  nestSetCool: (deviceId: string, tempF: number) =>
+    postJSON<{ status: string }>(`/nest/devices/${deviceId}/set-cool`, { temp_f: tempF }),
+  nestSetEco: (deviceId: string, enabled: boolean) =>
+    postJSON<{ status: string }>(`/nest/devices/${deviceId}/set-eco`, { enabled }),
+
+  // ─── Smartcar (BMW) ───
+  getSmartcarVehicles: () => fetchJSON<{ vehicles: SmartcarVehicle[] }>("/smartcar/vehicles"),
+  getSmartcarVehicleStatus: (vehicleId: string) =>
+    fetchJSON<SmartcarVehicleStatus>(`/smartcar/vehicles/${vehicleId}/status`),
+  smartcarStartCharge: (vehicleId: string) =>
+    postJSON<{ status: string }>(`/smartcar/vehicles/${vehicleId}/charge/start`),
+  smartcarStopCharge: (vehicleId: string) =>
+    postJSON<{ status: string }>(`/smartcar/vehicles/${vehicleId}/charge/stop`),
 };

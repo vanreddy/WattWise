@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Zap,
   BatteryWarning,
@@ -14,9 +14,19 @@ import {
   Clock,
   WashingMachine,
   Settings,
+  ChevronUp,
+  ChevronDown,
+  Plug,
+  PlugZap,
+  Snowflake,
+  Leaf,
+  RefreshCw,
+  Battery,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { SummaryResponse, DailySummary, Alert } from "@/lib/api";
+import type { SummaryResponse, DailySummary, Alert, NestDevice, SmartcarVehicle, SmartcarVehicleStatus } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
 import HealthReportSection from "@/components/HealthReportSection";
 
 /* ─── Types ─────────────────────────────────── */
@@ -37,6 +47,397 @@ interface Props {
   alerts: Alert[];
 }
 
+/* ─── Helper: °C → °F ─── */
+function cToF(c: number | null): number | null {
+  if (c === null || c === undefined) return null;
+  return Math.round(c * 9 / 5 + 32);
+}
+
+function fToDisplay(f: number | null): string {
+  if (f === null) return "—";
+  return `${f}°F`;
+}
+
+/* ─── Device Status Cards ───────────────────── */
+
+function PowerwallCard({ summary }: { summary: SummaryResponse | null }) {
+  if (!summary) return null;
+  const { battery_pct, battery_w } = summary.current;
+  const isCharging = battery_w > 100;
+  const isDischarging = battery_w < -100;
+  const powerKw = Math.abs(battery_w / 1000).toFixed(1);
+
+  const statusText = isCharging
+    ? `Charging at ${powerKw} kW`
+    : isDischarging
+    ? `Discharging at ${powerKw} kW`
+    : "Idle";
+
+  const statusColor = isCharging
+    ? "text-green-400"
+    : isDischarging
+    ? "text-yellow-400"
+    : "text-gray-500";
+
+  // Battery fill bar
+  const pct = Math.max(0, Math.min(100, battery_pct));
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Battery size={18} className="text-emerald-400" />
+          <span className="text-sm font-semibold">Powerwall</span>
+        </div>
+        <span className="text-lg font-bold text-emerald-400">{Math.round(pct)}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-2">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-1000"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className={`text-xs ${statusColor}`}>{statusText}</p>
+    </div>
+  );
+}
+
+function NestCard() {
+  const { user } = useAuth();
+  const [device, setDevice] = useState<NestDevice | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [commanding, setCommanding] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await api.getNestDevices();
+      if (res.devices.length > 0) {
+        setDevice(res.devices[0]);
+        setError(null);
+      } else {
+        setError("No thermostats found");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.nest_connected) fetchStatus();
+    else setLoading(false);
+  }, [user?.nest_connected, fetchStatus]);
+
+  if (!user?.nest_connected) return null;
+
+  if (loading) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div className="flex items-center gap-2 mb-2">
+          <Thermometer size={18} className="text-blue-400" />
+          <span className="text-sm font-semibold">Nest</span>
+        </div>
+        <p className="text-xs text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error || !device) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div className="flex items-center gap-2 mb-2">
+          <Thermometer size={18} className="text-blue-400" />
+          <span className="text-sm font-semibold">Nest</span>
+        </div>
+        <p className="text-xs text-red-400">{error || "No device"}</p>
+      </div>
+    );
+  }
+
+  const ambientF = cToF(device.ambient_temp_c);
+  const coolSetpointF = cToF(device.cool_setpoint_c);
+  const heatSetpointF = cToF(device.heat_setpoint_c);
+  const isEco = device.eco_mode === "MANUAL_ECO";
+  const hvacStatus = device.hvac_status || "OFF";
+  const mode = device.mode || "OFF";
+
+  const hvacColor = hvacStatus === "COOLING"
+    ? "text-blue-400"
+    : hvacStatus === "HEATING"
+    ? "text-orange-400"
+    : "text-gray-500";
+
+  const hvacLabel = hvacStatus === "COOLING"
+    ? "Cooling"
+    : hvacStatus === "HEATING"
+    ? "Heating"
+    : "Idle";
+
+  async function adjustTemp(delta: number) {
+    if (!device || commanding) return;
+    const currentSetpoint = coolSetpointF ?? 72;
+    const newTemp = currentSetpoint + delta;
+    setCommanding(true);
+    try {
+      await api.nestSetCool(device.device_id, newTemp);
+      // Refresh status after command
+      await fetchStatus();
+    } catch {
+      // Silently fail — user sees no change
+    } finally {
+      setCommanding(false);
+    }
+  }
+
+  async function toggleEco() {
+    if (!device || commanding) return;
+    setCommanding(true);
+    try {
+      await api.nestSetEco(device.device_id, !isEco);
+      await fetchStatus();
+    } catch {
+      // Silently fail
+    } finally {
+      setCommanding(false);
+    }
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Thermometer size={18} className="text-blue-400" />
+          <span className="text-sm font-semibold">{device.display_name || "Nest"}</span>
+        </div>
+        <button onClick={() => fetchStatus()} className="text-gray-600 hover:text-gray-400 transition-colors">
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      {/* Current temp + HVAC status */}
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <span className="text-3xl font-bold">{fToDisplay(ambientF)}</span>
+          {device.humidity_pct != null && (
+            <span className="text-xs text-gray-500 ml-2">{device.humidity_pct}% humidity</span>
+          )}
+        </div>
+        <div className="text-right">
+          <div className={`flex items-center gap-1 text-xs font-medium ${hvacColor}`}>
+            {hvacStatus === "COOLING" && <Snowflake size={12} />}
+            {hvacStatus === "HEATING" && <Sun size={12} />}
+            {hvacLabel}
+          </div>
+          <p className="text-[10px] text-gray-600 mt-0.5">
+            Mode: {mode}{isEco ? " (Eco)" : ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Setpoint control */}
+      <div className="flex items-center justify-between bg-gray-800/50 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-400">
+          {mode === "COOL" || mode === "HEATCOOL" ? (
+            <span>Cool to <span className="text-blue-400 font-semibold">{fToDisplay(coolSetpointF)}</span></span>
+          ) : mode === "HEAT" ? (
+            <span>Heat to <span className="text-orange-400 font-semibold">{fToDisplay(heatSetpointF)}</span></span>
+          ) : (
+            <span className="text-gray-500">Thermostat off</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => adjustTemp(-1)}
+            disabled={commanding || mode === "OFF"}
+            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 transition-colors"
+          >
+            <ChevronDown size={14} />
+          </button>
+          <button
+            onClick={() => adjustTemp(1)}
+            disabled={commanding || mode === "OFF"}
+            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 transition-colors"
+          >
+            <ChevronUp size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Eco mode toggle */}
+      <button
+        onClick={toggleEco}
+        disabled={commanding}
+        className={`mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-lg transition-all ${
+          isEco
+            ? "bg-green-500/15 text-green-400 border border-green-500/30"
+            : "bg-gray-800/50 text-gray-500 border border-gray-700/50 hover:text-gray-300"
+        } disabled:opacity-50`}
+      >
+        <Leaf size={12} />
+        {isEco ? "Eco Mode On" : "Eco Mode Off"}
+      </button>
+    </div>
+  );
+}
+
+function BMWCard() {
+  const { user } = useAuth();
+  const [vehicle, setVehicle] = useState<SmartcarVehicle | null>(null);
+  const [status, setStatus] = useState<SmartcarVehicleStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [commanding, setCommanding] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const vehicles = await api.getSmartcarVehicles();
+      if (vehicles.vehicles.length > 0) {
+        const v = vehicles.vehicles[0];
+        setVehicle(v);
+        const s = await api.getSmartcarVehicleStatus(v.vehicle_id);
+        setStatus(s);
+        setError(null);
+      } else {
+        setError("No vehicles found");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.smartcar_connected) fetchStatus();
+    else setLoading(false);
+  }, [user?.smartcar_connected, fetchStatus]);
+
+  if (!user?.smartcar_connected) return null;
+
+  if (loading) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div className="flex items-center gap-2 mb-2">
+          <Car size={18} className="text-purple-400" />
+          <span className="text-sm font-semibold">BMW iX</span>
+        </div>
+        <p className="text-xs text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error || !status) {
+    return (
+      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div className="flex items-center gap-2 mb-2">
+          <Car size={18} className="text-purple-400" />
+          <span className="text-sm font-semibold">BMW iX</span>
+        </div>
+        <p className="text-xs text-red-400">{error || "No status"}</p>
+      </div>
+    );
+  }
+
+  const pct = status.percent_remaining != null ? Math.round(status.percent_remaining * 100) : null;
+  const isPlugged = status.is_plugged_in;
+  const chargeState = status.charge_state;
+  const isCharging = chargeState === "CHARGING";
+  const rangeMi = status.range_miles;
+  const label = vehicle ? `${vehicle.year || ""} ${vehicle.make || "BMW"} ${vehicle.model || "iX"}`.trim() : "BMW iX";
+
+  async function handleChargeToggle() {
+    if (!vehicle || commanding) return;
+    setCommanding(true);
+    try {
+      if (isCharging) {
+        await api.smartcarStopCharge(vehicle.vehicle_id);
+      } else {
+        await api.smartcarStartCharge(vehicle.vehicle_id);
+      }
+      // Wait a moment for car to process, then refresh
+      await new Promise(r => setTimeout(r, 2000));
+      await fetchStatus();
+    } catch {
+      // Silently fail
+    } finally {
+      setCommanding(false);
+    }
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Car size={18} className="text-purple-400" />
+          <span className="text-sm font-semibold">{label}</span>
+        </div>
+        <button onClick={() => fetchStatus()} className="text-gray-600 hover:text-gray-400 transition-colors">
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      {/* Battery level */}
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <span className="text-3xl font-bold">{pct != null ? `${pct}%` : "—"}</span>
+          {rangeMi != null && (
+            <span className="text-xs text-gray-500 ml-2">{Math.round(rangeMi)} mi range</span>
+          )}
+        </div>
+        <div className="text-right">
+          <div className={`flex items-center gap-1 text-xs font-medium ${
+            isCharging ? "text-green-400" : isPlugged ? "text-yellow-400" : "text-gray-500"
+          }`}>
+            {isCharging ? <PlugZap size={12} /> : <Plug size={12} />}
+            {isCharging ? "Charging" : isPlugged ? "Plugged in" : "Unplugged"}
+          </div>
+        </div>
+      </div>
+
+      {/* Battery bar */}
+      {pct != null && (
+        <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+          <div
+            className={`h-full rounded-full transition-all duration-1000 ${
+              pct < 20 ? "bg-red-500" : pct < 50 ? "bg-yellow-500" : "bg-purple-400"
+            }`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+
+      {/* Charge control */}
+      {isPlugged && (
+        <button
+          onClick={handleChargeToggle}
+          disabled={commanding}
+          className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg transition-all ${
+            isCharging
+              ? "bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
+              : "bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25"
+          } disabled:opacity-50`}
+        >
+          {commanding ? (
+            <RefreshCw size={12} className="animate-spin" />
+          ) : isCharging ? (
+            <><Plug size={12} /> Stop Charging</>
+          ) : (
+            <><PlugZap size={12} /> Start Charging</>
+          )}
+        </button>
+      )}
+
+      {!isPlugged && (
+        <div className="text-center py-1">
+          <p className="text-[10px] text-gray-600">Plug in to control charging</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Real-time suggestions ──────────────────── */
 
 function realtimeSuggestions(summary: SummaryResponse | null, daily: DailySummary[]): Suggestion[] {
@@ -50,7 +451,7 @@ function realtimeSuggestions(summary: SummaryResponse | null, daily: DailySummar
       icon: <Sun size={20} />,
       iconBg: "bg-yellow-500/20 text-yellow-400",
       title: "Use your solar surplus",
-      description: `You're exporting ${kw.toFixed(1)} kW to the grid at ~$0.07/kWh. That same energy powers your home at $0.32/kWh — 5× more valuable. Good time to run the dishwasher, laundry, or charge the EV.`,
+      description: `You're exporting ${kw.toFixed(1)} kW to the grid at ~$0.07/kWh. That same energy powers your home at $0.32/kWh — 5x more valuable. Good time to run the dishwasher, laundry, or charge the EV.`,
       savings: `$${(kw * 0.25).toFixed(2)}/hr potential`,
       priority: "high",
     });
@@ -62,7 +463,7 @@ function realtimeSuggestions(summary: SummaryResponse | null, daily: DailySummar
       icon: <Thermometer size={20} />,
       iconBg: "bg-blue-500/20 text-blue-400",
       title: "Pre-cool before peak pricing",
-      description: "Your home draw is high — likely running AC. Pre-cooling to 72°F by 3 PM lets you raise the thermostat during peak hours (4–9 PM) when electricity costs more.",
+      description: "Your home draw is high — likely running AC. Pre-cooling to 72°F by 3 PM lets you raise the thermostat during peak hours (4-9 PM) when electricity costs more.",
       savings: null,
       priority: "low",
     });
@@ -74,7 +475,7 @@ function realtimeSuggestions(summary: SummaryResponse | null, daily: DailySummar
       icon: <Clock size={20} />,
       iconBg: "bg-purple-500/20 text-purple-400",
       title: "EV charged during peak yesterday",
-      description: `You charged ${today.ev_peak_kwh.toFixed(1)} kWh during peak hours at $0.356/kWh. Scheduling for solar hours (10 am–2 pm) uses free solar instead.`,
+      description: `You charged ${today.ev_peak_kwh.toFixed(1)} kWh during peak hours at $0.356/kWh. Scheduling for solar hours (10 am-2 pm) uses free solar instead.`,
       savings: `$${(today.ev_peak_kwh * (0.356 - 0.319)).toFixed(2)}/day savings`,
       priority: "high",
     });
@@ -136,7 +537,7 @@ function rulesSuggestions(daily: DailySummary[]): Suggestion[] {
         icon: <Car size={20} />,
         iconBg: "bg-purple-500/20 text-purple-400",
         title: "Charge your EV during solar hours",
-        description: `Your EV is charging overnight at off-peak rates ($0.319/kWh). On NEM 3.0, charging during solar hours (10 am–2 pm) uses free solar instead — saving ~$${(avg * 0.25).toFixed(2)} per session. Set your Tesla departure time to 9 am.`,
+        description: `Your EV is charging overnight at off-peak rates ($0.319/kWh). On NEM 3.0, charging during solar hours (10 am-2 pm) uses free solar instead — saving ~$${(avg * 0.25).toFixed(2)} per session. Set your Tesla departure time to 9 am.`,
         savings: `~$${(avg * 0.25 * 15).toFixed(0)}/mo savings`,
         priority: "high",
       });
@@ -149,7 +550,7 @@ function rulesSuggestions(daily: DailySummary[]): Suggestion[] {
       icon: <WashingMachine size={20} />,
       iconBg: "bg-blue-500/20 text-blue-400",
       title: "Run appliances during solar hours",
-      description: `You're exporting ${avgExport.toFixed(0)} kWh/day at $0.07/kWh. Running your dishwasher, laundry, and dryer at 10 am uses free solar instead of overnight grid power at $0.319/kWh — a 5× difference.`,
+      description: `You're exporting ${avgExport.toFixed(0)} kWh/day at $0.07/kWh. Running your dishwasher, laundry, and dryer at 10 am uses free solar instead of overnight grid power at $0.319/kWh — a 5x difference.`,
       savings: null,
       priority: "medium",
     });
@@ -214,6 +615,7 @@ function SuggestionCard({ s }: { s: Suggestion }) {
 /* ─── Tab ────────────────────────────────────── */
 
 export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) {
+  const { user } = useAuth();
   const realtime  = useMemo(() => realtimeSuggestions(summary, daily), [summary, daily]);
   const strategic = useMemo(() => rulesSuggestions(daily), [daily]);
 
@@ -221,8 +623,25 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
   const narrative    = latest?.context_narrative;
   const backendActions = latest?.actions ?? [];
 
+  const hasDevices = user?.nest_connected || user?.smartcar_connected;
+
   return (
     <div className="space-y-6">
+
+      {/* ── Device Status Cards ── */}
+      {hasDevices && (
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
+            <Zap size={14} className="text-yellow-400" />
+            Devices
+          </h2>
+          <div className="space-y-3">
+            <PowerwallCard summary={summary} />
+            <NestCard />
+            <BMWCard />
+          </div>
+        </section>
+      )}
 
       {/* ── Health Report (onboarding + weekly) ── */}
       <HealthReportSection />
@@ -277,7 +696,7 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
       )}
 
       {/* ── Empty state ── */}
-      {realtime.length === 0 && strategic.length === 0 && !narrative && (
+      {!hasDevices && realtime.length === 0 && strategic.length === 0 && !narrative && (
         <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 text-center">
           <Lightbulb size={24} className="text-yellow-400/60 mx-auto mb-2" />
           <p className="text-sm text-gray-400">No recommendations right now.</p>
