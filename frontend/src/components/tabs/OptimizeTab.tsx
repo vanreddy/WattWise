@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   Zap,
   BatteryWarning,
@@ -9,11 +9,7 @@ import {
   Thermometer,
   TrendingDown,
   Lightbulb,
-  Sparkles,
-  CircleAlert,
   Clock,
-  WashingMachine,
-  Settings,
   ChevronUp,
   ChevronDown,
   Plug,
@@ -27,7 +23,6 @@ import type { ReactNode } from "react";
 import type { SummaryResponse, DailySummary, Alert, NestDevice, SmartcarVehicle, SmartcarVehicleStatus } from "@/lib/api";
 import { api } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
-import HealthReportSection from "@/components/HealthReportSection";
 
 /* ─── Types ─────────────────────────────────── */
 
@@ -58,7 +53,7 @@ function fToDisplay(f: number | null): string {
   return `${f}°F`;
 }
 
-/* ─── Device Status Cards ───────────────────── */
+/* ─── Device Cards (unified style) ─────────── */
 
 function PowerwallCard({ summary }: { summary: SummaryResponse | null }) {
   if (!summary) return null;
@@ -79,41 +74,165 @@ function PowerwallCard({ summary }: { summary: SummaryResponse | null }) {
     ? "text-yellow-400"
     : "text-gray-500";
 
-  // Battery fill bar
   const pct = Math.max(0, Math.min(100, battery_pct));
+  const kwhEstimate = (pct / 100 * 13.5).toFixed(1); // 13.5 kWh Powerwall capacity
 
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Battery size={18} className="text-emerald-400" />
-          <span className="text-sm font-semibold">Powerwall</span>
+    <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      <div className="flex items-center gap-2.5 mb-2.5">
+        <div className="w-[34px] h-[34px] rounded-[9px] bg-green-500/10 flex items-center justify-center">
+          <Battery size={16} className="text-emerald-400" />
         </div>
-        <span className="text-lg font-bold text-emerald-400">{Math.round(pct)}%</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold">Powerwall</div>
+          <div className={`text-[10px] ${statusColor}`}>{statusText}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-xl font-bold text-emerald-400">{Math.round(pct)}%</div>
+          <div className="text-[10px] text-gray-500">{kwhEstimate} kWh</div>
+        </div>
       </div>
-      <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-2">
+      <div className="w-full h-[5px] bg-[#1a1f2e] rounded-full overflow-hidden">
         <div
           className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-1000"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className={`text-xs ${statusColor}`}>{statusText}</p>
     </div>
   );
 }
 
+/* ─── Nest: single thermostat mini card ─── */
+
+function NestThermostatMini({
+  device,
+  onRefresh,
+}: {
+  device: NestDevice;
+  onRefresh: () => void;
+}) {
+  const [commanding, setCommanding] = useState(false);
+
+  const ambientF = cToF(device.ambient_temp_c);
+  const coolSetpointF = cToF(device.cool_setpoint_c);
+  const isEco = device.eco_mode === "MANUAL_ECO";
+  const hvacStatus = device.hvac_status || "OFF";
+  const mode = device.mode || "OFF";
+
+  const hvacLabel =
+    hvacStatus === "COOLING" ? "❄️ Cooling"
+    : hvacStatus === "HEATING" ? "🔥 Heating"
+    : "Idle";
+
+  const hvacBadgeStyle =
+    hvacStatus === "COOLING" ? "text-blue-400 bg-blue-500/10"
+    : hvacStatus === "HEATING" ? "text-orange-400 bg-orange-500/10"
+    : isEco ? "text-green-400 bg-green-500/10"
+    : "text-gray-500 bg-white/[0.04]";
+
+  const dotColor =
+    device.display_name?.toLowerCase().includes("bed") ? "bg-purple-400"
+    : device.display_name?.toLowerCase().includes("off") ? "bg-green-400"
+    : "bg-blue-400";
+
+  async function adjustTemp(delta: number) {
+    if (commanding) return;
+    const currentSetpoint = coolSetpointF ?? 72;
+    const newTemp = currentSetpoint + delta;
+    setCommanding(true);
+    try {
+      await api.nestSetCool(device.device_id, newTemp);
+      onRefresh();
+    } catch {
+      // Silently fail
+    } finally {
+      setCommanding(false);
+    }
+  }
+
+  async function toggleEco() {
+    if (commanding) return;
+    setCommanding(true);
+    try {
+      await api.nestSetEco(device.device_id, !isEco);
+      onRefresh();
+    } catch {
+      // Silently fail
+    } finally {
+      setCommanding(false);
+    }
+  }
+
+  // Shorten display name: "Nest Thermostat - Living Room" → "Living Room"
+  const shortName = device.display_name
+    ?.replace(/nest\s*(thermostat)?\s*[-–—]?\s*/i, "")
+    .trim() || device.display_name || "Thermostat";
+
+  return (
+    <div className="flex-none w-[calc(50%-5px)] min-w-[160px] snap-start">
+      <div className="bg-white/[0.02] border border-white/[0.04] rounded-[10px] p-2.5">
+        {/* Room label */}
+        <div className="flex items-center gap-1 mb-1.5">
+          <div className={`w-[5px] h-[5px] rounded-full ${dotColor}`} />
+          <span className="text-[10px] text-gray-500 font-medium">{shortName}</span>
+        </div>
+        {/* Temperature */}
+        <div className="text-[22px] font-bold leading-none">{fToDisplay(ambientF)}</div>
+        <div className="text-[9px] text-gray-500 mt-0.5">
+          {device.humidity_pct != null ? `${device.humidity_pct}% humidity` : ""}
+          {hvacStatus !== "OFF" && device.humidity_pct != null ? " · " : ""}
+          {hvacStatus !== "OFF" ? hvacLabel : isEco ? "🍃 Eco" : `Mode: ${mode}`}
+        </div>
+        {/* Controls */}
+        <div className="flex items-center gap-1 mt-2">
+          <button
+            onClick={() => adjustTemp(-1)}
+            disabled={commanding || mode === "OFF"}
+            className="flex-1 h-7 flex items-center justify-center rounded-md bg-white/[0.04] border border-white/[0.06] text-gray-400 text-xs font-semibold hover:bg-white/[0.08] disabled:opacity-30 transition-colors"
+          >
+            −
+          </button>
+          <button
+            onClick={() => adjustTemp(1)}
+            disabled={commanding || mode === "OFF"}
+            className="flex-1 h-7 flex items-center justify-center rounded-md bg-white/[0.04] border border-white/[0.06] text-gray-400 text-xs font-semibold hover:bg-white/[0.08] disabled:opacity-30 transition-colors"
+          >
+            +
+          </button>
+          <button
+            onClick={toggleEco}
+            disabled={commanding}
+            className={`flex-[1.5] h-7 flex items-center justify-center gap-0.5 rounded-md text-[9px] font-medium transition-all border ${
+              isEco
+                ? "text-green-400 bg-green-500/[0.06] border-green-500/[0.15]"
+                : "text-gray-500 bg-white/[0.02] border-white/[0.06] hover:text-gray-300"
+            } disabled:opacity-50`}
+          >
+            <Leaf size={10} />
+            Eco
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Nest: card with horizontal scroll of thermostats ─── */
+
 function NestCard() {
   const { user } = useAuth();
-  const [device, setDevice] = useState<NestDevice | null>(null);
+  const [devices, setDevices] = useState<NestDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [commanding, setCommanding] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await api.getNestDevices();
       if (res.devices.length > 0) {
-        setDevice(res.devices[0]);
+        setDevices(res.devices);
         setError(null);
       } else {
         setError("No thermostats found");
@@ -130,154 +249,93 @@ function NestCard() {
     else setLoading(false);
   }, [user?.nest_connected, fetchStatus]);
 
+  // Track scroll position for dots
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || devices.length <= 1) return;
+    const handleScroll = () => {
+      const scrollLeft = el.scrollLeft;
+      const itemWidth = el.scrollWidth / devices.length;
+      const idx = Math.round(scrollLeft / itemWidth);
+      setActiveIdx(Math.min(idx, devices.length - 1));
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [devices.length]);
+
   if (!user?.nest_connected) return null;
 
   if (loading) {
     return (
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04]">
         <div className="flex items-center gap-2 mb-2">
-          <Thermometer size={18} className="text-blue-400" />
-          <span className="text-sm font-semibold">Nest</span>
+          <div className="w-[34px] h-[34px] rounded-[9px] bg-blue-500/10 flex items-center justify-center">
+            <Thermometer size={16} className="text-blue-400" />
+          </div>
+          <span className="text-[13px] font-semibold">Nest Thermostats</span>
         </div>
-        <p className="text-xs text-gray-500">Loading...</p>
+        <p className="text-[10px] text-gray-500">Loading...</p>
       </div>
     );
   }
 
-  if (error || !device) {
+  if (error || devices.length === 0) {
     return (
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04]">
         <div className="flex items-center gap-2 mb-2">
-          <Thermometer size={18} className="text-blue-400" />
-          <span className="text-sm font-semibold">Nest</span>
+          <div className="w-[34px] h-[34px] rounded-[9px] bg-blue-500/10 flex items-center justify-center">
+            <Thermometer size={16} className="text-blue-400" />
+          </div>
+          <span className="text-[13px] font-semibold">Nest Thermostats</span>
         </div>
-        <p className="text-xs text-red-400">{error || "No device"}</p>
+        <p className="text-[10px] text-red-400">{error || "No devices"}</p>
       </div>
     );
-  }
-
-  const ambientF = cToF(device.ambient_temp_c);
-  const coolSetpointF = cToF(device.cool_setpoint_c);
-  const heatSetpointF = cToF(device.heat_setpoint_c);
-  const isEco = device.eco_mode === "MANUAL_ECO";
-  const hvacStatus = device.hvac_status || "OFF";
-  const mode = device.mode || "OFF";
-
-  const hvacColor = hvacStatus === "COOLING"
-    ? "text-blue-400"
-    : hvacStatus === "HEATING"
-    ? "text-orange-400"
-    : "text-gray-500";
-
-  const hvacLabel = hvacStatus === "COOLING"
-    ? "Cooling"
-    : hvacStatus === "HEATING"
-    ? "Heating"
-    : "Idle";
-
-  async function adjustTemp(delta: number) {
-    if (!device || commanding) return;
-    const currentSetpoint = coolSetpointF ?? 72;
-    const newTemp = currentSetpoint + delta;
-    setCommanding(true);
-    try {
-      await api.nestSetCool(device.device_id, newTemp);
-      // Refresh status after command
-      await fetchStatus();
-    } catch {
-      // Silently fail — user sees no change
-    } finally {
-      setCommanding(false);
-    }
-  }
-
-  async function toggleEco() {
-    if (!device || commanding) return;
-    setCommanding(true);
-    try {
-      await api.nestSetEco(device.device_id, !isEco);
-      await fetchStatus();
-    } catch {
-      // Silently fail
-    } finally {
-      setCommanding(false);
-    }
   }
 
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Thermometer size={18} className="text-blue-400" />
-          <span className="text-sm font-semibold">{device.display_name || "Nest"}</span>
+    <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      {/* Header */}
+      <div className="flex items-center gap-2.5 mb-2.5">
+        <div className="w-[34px] h-[34px] rounded-[9px] bg-blue-500/10 flex items-center justify-center">
+          <Thermometer size={16} className="text-blue-400" />
         </div>
-        <button onClick={() => fetchStatus()} className="text-gray-600 hover:text-gray-400 transition-colors">
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold">Nest Thermostats</div>
+          <div className="text-[10px] text-gray-500">{devices.length} device{devices.length !== 1 ? "s" : ""}</div>
+        </div>
+        <button onClick={fetchStatus} className="text-gray-600 hover:text-gray-400 transition-colors">
           <RefreshCw size={14} />
         </button>
       </div>
 
-      {/* Current temp + HVAC status */}
-      <div className="flex items-end justify-between mb-3">
-        <div>
-          <span className="text-3xl font-bold">{fToDisplay(ambientF)}</span>
-          {device.humidity_pct != null && (
-            <span className="text-xs text-gray-500 ml-2">{device.humidity_pct}% humidity</span>
-          )}
-        </div>
-        <div className="text-right">
-          <div className={`flex items-center gap-1 text-xs font-medium ${hvacColor}`}>
-            {hvacStatus === "COOLING" && <Snowflake size={12} />}
-            {hvacStatus === "HEATING" && <Sun size={12} />}
-            {hvacLabel}
-          </div>
-          <p className="text-[10px] text-gray-600 mt-0.5">
-            Mode: {mode}{isEco ? " (Eco)" : ""}
-          </p>
-        </div>
-      </div>
-
-      {/* Setpoint control */}
-      <div className="flex items-center justify-between bg-gray-800/50 rounded-lg px-3 py-2">
-        <div className="text-xs text-gray-400">
-          {mode === "COOL" || mode === "HEATCOOL" ? (
-            <span>Cool to <span className="text-blue-400 font-semibold">{fToDisplay(coolSetpointF)}</span></span>
-          ) : mode === "HEAT" ? (
-            <span>Heat to <span className="text-orange-400 font-semibold">{fToDisplay(heatSetpointF)}</span></span>
-          ) : (
-            <span className="text-gray-500">Thermostat off</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => adjustTemp(-1)}
-            disabled={commanding || mode === "OFF"}
-            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 transition-colors"
-          >
-            <ChevronDown size={14} />
-          </button>
-          <button
-            onClick={() => adjustTemp(1)}
-            disabled={commanding || mode === "OFF"}
-            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-30 transition-colors"
-          >
-            <ChevronUp size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Eco mode toggle */}
-      <button
-        onClick={toggleEco}
-        disabled={commanding}
-        className={`mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-lg transition-all ${
-          isEco
-            ? "bg-green-500/15 text-green-400 border border-green-500/30"
-            : "bg-gray-800/50 text-gray-500 border border-gray-700/50 hover:text-gray-300"
-        } disabled:opacity-50`}
+      {/* Horizontal scroll */}
+      <div
+        ref={scrollRef}
+        className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory -mx-3.5 px-3.5 pb-1"
+        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
       >
-        <Leaf size={12} />
-        {isEco ? "Eco Mode On" : "Eco Mode Off"}
-      </button>
+        {devices.map((d) => (
+          <NestThermostatMini key={d.device_id} device={d} onRefresh={fetchStatus} />
+        ))}
+      </div>
+
+      {/* Scroll dots */}
+      {devices.length > 1 && (
+        <div className="flex justify-center gap-1.5 mt-2">
+          {devices.map((_, i) => (
+            <div
+              key={i}
+              className={`h-[5px] rounded-full transition-all duration-200 ${
+                i === activeIdx
+                  ? "w-[14px] bg-blue-400"
+                  : "w-[5px] bg-white/10"
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -318,24 +376,28 @@ function BMWCard() {
 
   if (loading) {
     return (
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-        <div className="flex items-center gap-2 mb-2">
-          <Car size={18} className="text-purple-400" />
-          <span className="text-sm font-semibold">BMW iX</span>
+      <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04]">
+        <div className="flex items-center gap-2">
+          <div className="w-[34px] h-[34px] rounded-[9px] bg-purple-500/10 flex items-center justify-center">
+            <Car size={16} className="text-purple-400" />
+          </div>
+          <span className="text-[13px] font-semibold">BMW iX</span>
         </div>
-        <p className="text-xs text-gray-500">Loading...</p>
+        <p className="text-[10px] text-gray-500 mt-2">Loading...</p>
       </div>
     );
   }
 
   if (error || !status) {
     return (
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-        <div className="flex items-center gap-2 mb-2">
-          <Car size={18} className="text-purple-400" />
-          <span className="text-sm font-semibold">BMW iX</span>
+      <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04]">
+        <div className="flex items-center gap-2">
+          <div className="w-[34px] h-[34px] rounded-[9px] bg-purple-500/10 flex items-center justify-center">
+            <Car size={16} className="text-purple-400" />
+          </div>
+          <span className="text-[13px] font-semibold">BMW iX</span>
         </div>
-        <p className="text-xs text-red-400">{error || "No status"}</p>
+        <p className="text-[10px] text-red-400 mt-2">{error || "No status"}</p>
       </div>
     );
   }
@@ -347,6 +409,9 @@ function BMWCard() {
   const rangeMi = status.range_miles;
   const label = vehicle ? `${vehicle.year || ""} ${vehicle.make || "BMW"} ${vehicle.model || "iX"}`.trim() : "BMW iX";
 
+  const plugStatus = isCharging ? "Charging" : isPlugged ? "⚡ Plugged in · Not charging" : "Unplugged";
+  const plugColor = isCharging ? "text-green-400" : isPlugged ? "text-yellow-400" : "text-gray-500";
+
   async function handleChargeToggle() {
     if (!vehicle || commanding) return;
     setCommanding(true);
@@ -356,7 +421,6 @@ function BMWCard() {
       } else {
         await api.smartcarStartCharge(vehicle.vehicle_id);
       }
-      // Wait a moment for car to process, then refresh
       await new Promise(r => setTimeout(r, 2000));
       await fetchStatus();
     } catch {
@@ -367,42 +431,26 @@ function BMWCard() {
   }
 
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Car size={18} className="text-purple-400" />
-          <span className="text-sm font-semibold">{label}</span>
+    <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      <div className="flex items-center gap-2.5 mb-2.5">
+        <div className="w-[34px] h-[34px] rounded-[9px] bg-purple-500/10 flex items-center justify-center">
+          <Car size={16} className="text-purple-400" />
         </div>
-        <button onClick={() => fetchStatus()} className="text-gray-600 hover:text-gray-400 transition-colors">
-          <RefreshCw size={14} />
-        </button>
-      </div>
-
-      {/* Battery level */}
-      <div className="flex items-end justify-between mb-3">
-        <div>
-          <span className="text-3xl font-bold">{pct != null ? `${pct}%` : "—"}</span>
-          {rangeMi != null && (
-            <span className="text-xs text-gray-500 ml-2">{Math.round(rangeMi)} mi range</span>
-          )}
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold">{label}</div>
+          <div className={`text-[10px] ${plugColor}`}>{plugStatus}</div>
         </div>
         <div className="text-right">
-          <div className={`flex items-center gap-1 text-xs font-medium ${
-            isCharging ? "text-green-400" : isPlugged ? "text-yellow-400" : "text-gray-500"
-          }`}>
-            {isCharging ? <PlugZap size={12} /> : <Plug size={12} />}
-            {isCharging ? "Charging" : isPlugged ? "Plugged in" : "Unplugged"}
-          </div>
+          <div className="text-xl font-bold text-purple-400">{pct != null ? `${pct}%` : "—"}</div>
+          {rangeMi != null && <div className="text-[10px] text-gray-500">{Math.round(rangeMi)} mi</div>}
         </div>
       </div>
 
-      {/* Battery bar */}
       {pct != null && (
-        <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+        <div className="w-full h-[5px] bg-[#1a1f2e] rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-1000 ${
-              pct < 20 ? "bg-red-500" : pct < 50 ? "bg-yellow-500" : "bg-purple-400"
-            }`}
+            className="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-1000"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -410,29 +458,29 @@ function BMWCard() {
 
       {/* Charge control */}
       {isPlugged && (
-        <button
-          onClick={handleChargeToggle}
-          disabled={commanding}
-          className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg transition-all ${
-            isCharging
-              ? "bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
-              : "bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25"
-          } disabled:opacity-50`}
-        >
-          {commanding ? (
-            <RefreshCw size={12} className="animate-spin" />
-          ) : isCharging ? (
-            <><Plug size={12} /> Stop Charging</>
-          ) : (
-            <><PlugZap size={12} /> Start Charging</>
-          )}
-        </button>
+        <div className="mt-2 pt-2 border-t border-white/[0.04]">
+          <button
+            onClick={handleChargeToggle}
+            disabled={commanding}
+            className={`w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold py-2 rounded-lg transition-all border ${
+              isCharging
+                ? "bg-red-500/[0.08] text-red-400 border-red-500/20 hover:bg-red-500/[0.14]"
+                : "bg-green-500/[0.08] text-green-400 border-green-500/20 hover:bg-green-500/[0.14]"
+            } disabled:opacity-50`}
+          >
+            {commanding ? (
+              <RefreshCw size={12} className="animate-spin" />
+            ) : isCharging ? (
+              <><Plug size={12} /> Stop Charging</>
+            ) : (
+              <><PlugZap size={12} /> Start Charging</>
+            )}
+          </button>
+        </div>
       )}
 
       {!isPlugged && (
-        <div className="text-center py-1">
-          <p className="text-[10px] text-gray-600">Plug in to control charging</p>
-        </div>
+        <p className="text-[10px] text-gray-600 text-center mt-2">Plug in to control charging</p>
       )}
     </div>
   );
@@ -514,69 +562,6 @@ function realtimeSuggestions(summary: SummaryResponse | null, daily: DailySummar
   return out;
 }
 
-/* ─── 7-day rules-based recommendations ──────── */
-
-function rulesSuggestions(daily: DailySummary[]): Suggestion[] {
-  const out: Suggestion[] = [];
-  const last7 = daily.slice(0, 7);
-  if (last7.length === 0) return out;
-
-  const solarDays = last7.filter(d => d.solar_generated_kwh > 5);
-  const avgExport = solarDays.length > 0
-    ? solarDays.reduce((s, d) => s + d.total_export_kwh, 0) / solarDays.length
-    : 0;
-  const highExporter = avgExport > 5;
-
-  if (highExporter) {
-    const evDays = last7.filter(d => d.ev_kwh > 2);
-    const offPeakHeavy = evDays.filter(d => d.ev_off_peak_kwh > d.ev_kwh * 0.6);
-    if (offPeakHeavy.length >= 2) {
-      const avg = evDays.reduce((s, d) => s + d.ev_kwh, 0) / evDays.length;
-      out.push({
-        id: "ev-solar-charging",
-        icon: <Car size={20} />,
-        iconBg: "bg-purple-500/20 text-purple-400",
-        title: "Charge your EV during solar hours",
-        description: `Your EV is charging overnight at off-peak rates ($0.319/kWh). On NEM 3.0, charging during solar hours (10 am-2 pm) uses free solar instead — saving ~$${(avg * 0.25).toFixed(2)} per session. Set your Tesla departure time to 9 am.`,
-        savings: `~$${(avg * 0.25 * 15).toFixed(0)}/mo savings`,
-        priority: "high",
-      });
-    }
-  }
-
-  if (highExporter && avgExport > 8) {
-    out.push({
-      id: "shift-loads-solar",
-      icon: <WashingMachine size={20} />,
-      iconBg: "bg-blue-500/20 text-blue-400",
-      title: "Run appliances during solar hours",
-      description: `You're exporting ${avgExport.toFixed(0)} kWh/day at $0.07/kWh. Running your dishwasher, laundry, and dryer at 10 am uses free solar instead of overnight grid power at $0.319/kWh — a 5x difference.`,
-      savings: null,
-      priority: "medium",
-    });
-  }
-
-  if (last7.length >= 3) {
-    const lowCoverage = last7.filter(
-      d => (d.battery_peak_coverage_pct ?? 0) < 30 && d.battery_depletion_hour === null && d.peak_import_kwh > 2
-    );
-    if (lowCoverage.length >= 3) {
-      const avgPeak = lowCoverage.reduce((s, d) => s + d.peak_import_kwh, 0) / lowCoverage.length;
-      out.push({
-        id: "powerwall-self-powered",
-        icon: <Settings size={20} />,
-        iconBg: "bg-emerald-500/20 text-emerald-400",
-        title: "Set Powerwall to Self-Powered mode",
-        description: `Powerwall covered less than 30% of peak hours on ${lowCoverage.length} of the last ${last7.length} days, while importing ${avgPeak.toFixed(1)} kWh/day during peak. In the Tesla app, set your Powerwall to "Self-Powered" mode.`,
-        savings: null,
-        priority: "high",
-      });
-    }
-  }
-
-  return out;
-}
-
 /* ─── Shared UI pieces ───────────────────────── */
 
 function PriorityBadge({ priority }: { priority: Suggestion["priority"] }) {
@@ -586,7 +571,7 @@ function PriorityBadge({ priority }: { priority: Suggestion["priority"] }) {
     low:    "bg-gray-500/15 text-gray-400 border-gray-500/30",
   };
   return (
-    <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${styles[priority]}`}>
+    <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${styles[priority]}`}>
       {priority}
     </span>
   );
@@ -594,17 +579,18 @@ function PriorityBadge({ priority }: { priority: Suggestion["priority"] }) {
 
 function SuggestionCard({ s }: { s: Suggestion }) {
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-gray-700 transition-colors">
-      <div className="flex items-start gap-3">
-        <div className={`rounded-lg p-2 shrink-0 ${s.iconBg}`}>{s.icon}</div>
+    <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      <div className="flex items-start gap-2.5">
+        <div className={`w-9 h-9 rounded-[10px] shrink-0 flex items-center justify-center ${s.iconBg}`}>{s.icon}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <h3 className="text-sm font-semibold text-gray-200">{s.title}</h3>
+            <h3 className="text-xs font-semibold text-gray-200">{s.title}</h3>
             <PriorityBadge priority={s.priority} />
           </div>
-          <p className="text-xs text-gray-400 leading-relaxed">{s.description}</p>
+          <p className="text-[11px] text-gray-500 leading-relaxed">{s.description}</p>
           {s.savings && (
-            <p className="text-xs font-semibold text-emerald-400 mt-2">{s.savings}</p>
+            <p className="text-[11px] font-semibold text-emerald-400 mt-1.5">{s.savings}</p>
           )}
         </div>
       </div>
@@ -612,30 +598,47 @@ function SuggestionCard({ s }: { s: Suggestion }) {
   );
 }
 
-/* ─── Tab ────────────────────────────────────── */
+/* ─── Section Label ─── */
+
+function SectionLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 mb-2.5 flex items-center gap-1.5">
+      {icon}
+      {children}
+    </h2>
+  );
+}
+
+/* ─── Tab (Manual Mode) ────────────────────── */
 
 export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) {
   const { user } = useAuth();
-  const realtime  = useMemo(() => realtimeSuggestions(summary, daily), [summary, daily]);
-  const strategic = useMemo(() => rulesSuggestions(daily), [daily]);
-
-  const latest       = daily[0] ?? null;
-  const narrative    = latest?.context_narrative;
-  const backendActions = latest?.actions ?? [];
+  const realtime = useMemo(() => realtimeSuggestions(summary, daily), [summary, daily]);
 
   const hasDevices = user?.nest_connected || user?.smartcar_connected;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* ── Device Status Cards ── */}
+      {/* ── Right Now (top of page) ── */}
+      {realtime.length > 0 && (
+        <section>
+          <SectionLabel icon={<Zap size={12} className="text-yellow-400" />}>
+            Right Now
+          </SectionLabel>
+          <div className="space-y-2.5">
+            {realtime.map(s => <SuggestionCard key={s.id} s={s} />)}
+          </div>
+        </section>
+      )}
+
+      {/* ── Devices ── */}
       {hasDevices && (
         <section>
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
-            <Zap size={14} className="text-yellow-400" />
+          <SectionLabel icon={<Battery size={12} className="text-gray-400" />}>
             Devices
-          </h2>
-          <div className="space-y-3">
+          </SectionLabel>
+          <div className="space-y-2.5">
             <PowerwallCard summary={summary} />
             <NestCard />
             <BMWCard />
@@ -643,63 +646,12 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
         </section>
       )}
 
-      {/* ── Health Report (onboarding + weekly) ── */}
-      <HealthReportSection />
-
-      {/* ── Right Now ── */}
-      {realtime.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
-            <Zap size={14} className="text-yellow-400" />
-            Right Now
-          </h2>
-          <div className="space-y-3">
-            {realtime.map(s => <SuggestionCard key={s.id} s={s} />)}
-          </div>
-        </section>
-      )}
-
-      {/* ── AI Daily Insight ── */}
-      {narrative && (
-        <section>
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
-            <Sparkles size={14} className="text-purple-400" />
-            Daily Insight
-          </h2>
-          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-            <p className="text-sm text-gray-300 leading-relaxed">{narrative}</p>
-            {backendActions.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {backendActions.map((action, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <CircleAlert size={14} className="text-yellow-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-gray-400 leading-relaxed">{action}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ── 7-day Recommendations ── */}
-      {strategic.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-1.5">
-            <Lightbulb size={14} className="text-yellow-400" />
-            Recommendations
-          </h2>
-          <div className="space-y-3">
-            {strategic.map(s => <SuggestionCard key={s.id} s={s} />)}
-          </div>
-        </section>
-      )}
-
       {/* ── Empty state ── */}
-      {!hasDevices && realtime.length === 0 && strategic.length === 0 && !narrative && (
-        <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 text-center">
+      {!hasDevices && realtime.length === 0 && (
+        <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.04] text-center">
           <Lightbulb size={24} className="text-yellow-400/60 mx-auto mb-2" />
           <p className="text-sm text-gray-400">No recommendations right now.</p>
+          <p className="text-xs text-gray-600 mt-1">Connect your devices in Settings to get started.</p>
         </div>
       )}
 

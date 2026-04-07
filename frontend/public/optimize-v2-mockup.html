@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SelfPower — Optimize v2</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep: #06060a;
+    --bg-base: #0a0a0f;
+    --bg-card: #111827;
+    --border: #1e293b;
+    --border-subtle: rgba(255,255,255,0.04);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-tertiary: #64748b;
+    --yellow: #eab308;
+    --yellow-glow: rgba(234,179,8,0.15);
+    --green: #22c55e;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --red: #ef4444;
+    --orange: #f97316;
+    --radius: 14px;
+    --radius-sm: 10px;
+  }
+
+  html { background: var(--bg-deep); -webkit-font-smoothing: antialiased; }
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(234,179,8,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  ::-webkit-scrollbar { width: 0; }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-now {
+    0%, 100% { box-shadow: 0 0 4px var(--yellow), 0 0 8px var(--yellow); opacity: 1; }
+    50% { box-shadow: 0 0 8px var(--yellow), 0 0 16px var(--yellow); opacity: 0.7; }
+  }
+
+  .animate-in { animation: fadeInUp 0.45s ease-out both; }
+  .delay-1 { animation-delay: 0.05s; }
+  .delay-2 { animation-delay: 0.1s; }
+  .delay-3 { animation-delay: 0.15s; }
+  .delay-4 { animation-delay: 0.2s; }
+  .delay-5 { animation-delay: 0.25s; }
+  .delay-6 { animation-delay: 0.3s; }
+  .delay-7 { animation-delay: 0.35s; }
+
+  .hidden { display: none !important; }
+
+  /* ── Card ── */
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0) 100%), var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 14px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 2px 8px rgba(0,0,0,0.4);
+    position: relative;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ═══ CONTROL BAR ═══ */
+  .control-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(180deg, var(--bg-base) 60%, transparent 100%);
+    padding: 12px 16px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .auto-mode { display: flex; align-items: center; gap: 10px; }
+  .auto-mode-label { font-size: 14px; font-weight: 600; }
+  .auto-mode-sublabel { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; }
+
+  .toggle {
+    width: 44px; height: 24px;
+    background: #2a2a35;
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+  .toggle.active {
+    background: var(--yellow);
+    box-shadow: 0 0 16px var(--yellow-glow), 0 0 4px rgba(234,179,8,0.3);
+  }
+  .toggle-thumb {
+    width: 20px; height: 20px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px; left: 2px;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .toggle.active .toggle-thumb { transform: translateX(20px); }
+
+  .disable-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .disable-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+
+  .dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: #1a1f2e;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    min-width: 200px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    pointer-events: none;
+    transition: all 0.2s;
+    z-index: 200;
+  }
+  .dropdown.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: all; }
+  .dropdown-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .dropdown-item:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+
+  .page { padding: 0 16px 100px; position: relative; z-index: 1; }
+
+  .mode-content { transition: opacity 0.4s ease; }
+  .mode-content.hidden-mode { display: none; }
+
+  /* ═══ UNIFIED DEVICE CARD ═══ */
+  .device-card { margin-bottom: 10px; }
+
+  .device-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .device-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .device-card-info { flex: 1; min-width: 0; }
+  .device-card-name { font-size: 13px; font-weight: 600; }
+  .device-card-status { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; }
+  .device-card-value { font-size: 20px; font-weight: 700; text-align: right; flex-shrink: 0; line-height: 1; }
+  .device-card-subvalue { font-size: 10px; color: var(--text-tertiary); text-align: right; margin-top: 3px; }
+
+  .progress-bar {
+    width: 100%;
+    height: 5px;
+    background: #1a1f2e;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 8px 0 4px;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s ease;
+  }
+
+  /* Auto mode: scheduled action footer */
+  .schedule-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    font-size: 10px;
+    color: var(--text-tertiary);
+  }
+  .schedule-footer .schedule-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    flex-shrink: 0;
+  }
+
+  /* Manual mode: controls footer */
+  .controls-footer {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .temp-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .temp-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.06);
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .temp-btn:hover { background: rgba(255,255,255,0.1); }
+
+  .eco-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px;
+    border-radius: 8px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 6px;
+  }
+  .eco-btn.off { color: var(--text-tertiary); background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
+  .eco-btn.on { color: var(--green); background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); }
+
+  .charge-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 9px;
+    border-radius: 8px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--green);
+    background: rgba(34,197,94,0.08);
+    border-color: rgba(34,197,94,0.2);
+  }
+  .charge-btn:hover { background: rgba(34,197,94,0.14); }
+
+  /* ── Nest horizontal scroll ── */
+  .nest-scroll {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    margin: 0 -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .nest-scroll::-webkit-scrollbar { display: none; }
+  .nest-scroll .nest-item {
+    flex: 0 0 auto;
+    width: calc(50% - 5px);
+    min-width: 160px;
+    scroll-snap-align: start;
+  }
+  .nest-inner {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .nest-room-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .nest-room-label .dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  }
+  .nest-temp { font-size: 22px; font-weight: 700; line-height: 1; }
+  .nest-detail { font-size: 9px; color: var(--text-tertiary); margin-top: 3px; }
+  .nest-hvac-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-top: 6px;
+  }
+
+  /* Nest mini controls (manual mode) */
+  .nest-mini-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .nest-mini-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .nest-mini-btn:hover { background: rgba(255,255,255,0.08); }
+  .nest-eco-mini {
+    flex: 1.5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px;
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid;
+  }
+  .nest-eco-mini.off { color: var(--text-tertiary); background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
+  .nest-eco-mini.on { color: var(--green); background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.15); }
+
+  /* ── Scroll indicator dots ── */
+  .scroll-dots {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .scroll-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    transition: all 0.2s;
+  }
+  .scroll-dot.active { background: var(--blue); width: 14px; border-radius: 3px; }
+
+  /* ═══ TIMELINE ═══ */
+  .plan-summary {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .plan-summary strong { color: var(--text-primary); font-weight: 600; }
+
+  .timeline-container { position: relative; margin-top: 4px; }
+  .timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+  .timeline-bar {
+    height: 24px;
+    background: #1a1f2e;
+    border-radius: 6px;
+    position: relative;
+    overflow: visible;
+    display: flex;
+  }
+  .timeline-segment {
+    height: 100%;
+    position: relative;
+    transition: opacity 0.3s;
+  }
+  .timeline-segment:first-child { border-radius: 6px 0 0 6px; }
+  .timeline-segment:last-child { border-radius: 0 6px 6px 0; }
+
+  .timeline-now {
+    position: absolute;
+    top: -4px;
+    width: 10px;
+    height: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 10;
+  }
+  .timeline-now-dot {
+    width: 10px; height: 10px;
+    background: var(--yellow);
+    border-radius: 50%;
+    border: 2px solid var(--bg-card);
+    animation: pulse-now 2s ease-in-out infinite;
+  }
+  .timeline-now-line { width: 2px; flex: 1; background: var(--yellow); opacity: 0.5; }
+
+  .timeline-legend { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--text-tertiary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  /* ═══ CONTROLS SECTION ═══ */
+  .control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .control-row:last-child { border-bottom: none; }
+  .control-label { font-size: 12px; color: var(--text-secondary); }
+  .control-value { font-size: 12px; font-weight: 600; color: var(--text-primary); min-width: 80px; text-align: right; }
+
+  .slider-track {
+    width: 120px; height: 4px;
+    background: #1a1f2e;
+    border-radius: 2px;
+    position: relative;
+    margin: 0 8px;
+  }
+  .slider-fill {
+    height: 100%;
+    background: var(--yellow);
+    border-radius: 2px;
+    position: relative;
+  }
+  .slider-thumb {
+    width: 14px; height: 14px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    right: -7px; top: -5px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+
+  .range-track {
+    width: 120px; height: 4px;
+    background: #1a1f2e;
+    border-radius: 2px;
+    position: relative;
+    margin: 0 8px;
+  }
+  .range-fill {
+    height: 100%;
+    background: var(--yellow);
+    border-radius: 2px;
+    position: absolute;
+  }
+  .range-thumb {
+    width: 12px; height: 12px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: -4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+
+  /* ═══ ACTIVITY LOG ═══ */
+  .log-entry {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    font-size: 11px;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: var(--text-tertiary); font-weight: 500; white-space: nowrap; flex-shrink: 0; width: 36px; }
+  .log-text { color: var(--text-secondary); line-height: 1.4; }
+  .log-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+
+  /* Week summary */
+  .week-stat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+  }
+  .week-stat-label { font-size: 12px; color: var(--text-secondary); }
+  .week-stat-value { font-size: 14px; font-weight: 700; }
+  .week-stat-delta { font-size: 10px; color: var(--green); margin-left: 4px; }
+
+  /* ═══ SUGGESTION CARDS ═══ */
+  .suggestion-card { display: flex; gap: 10px; align-items: flex-start; }
+  .suggestion-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 16px;
+  }
+  .suggestion-content { flex: 1; min-width: 0; }
+  .suggestion-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+  .suggestion-title { font-size: 12px; font-weight: 600; }
+  .priority-badge {
+    font-size: 9px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 20px;
+    border: 1px solid;
+    flex-shrink: 0;
+  }
+  .priority-high { color: var(--red); background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); }
+  .priority-medium { color: var(--yellow); background: rgba(234,179,8,0.08); border-color: rgba(234,179,8,0.2); }
+  .suggestion-desc { font-size: 11px; color: var(--text-tertiary); line-height: 1.5; }
+  .suggestion-savings { font-size: 11px; font-weight: 600; color: var(--green); margin-top: 4px; }
+
+  /* Health chips */
+  .health-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .health-chip {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    color: var(--text-secondary);
+  }
+  .chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .chip-savings { color: var(--text-tertiary); font-size: 9px; }
+
+  .section { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<!-- ═══ CONTROL BAR ═══ -->
+<div class="control-bar">
+  <div class="auto-mode">
+    <div class="toggle active" id="autoToggle" onclick="toggleAutoMode()">
+      <div class="toggle-thumb"></div>
+    </div>
+    <div>
+      <div class="auto-mode-label">Auto Mode</div>
+      <div class="auto-mode-sublabel" id="autoSublabel">Optimizing your energy</div>
+    </div>
+  </div>
+  <div style="position: relative;" id="disableWrap" class="hidden">
+    <button class="disable-btn" id="disableBtn" onclick="toggleDropdown()">Until tomorrow 9 AM ▾</button>
+    <div class="dropdown" id="dropdown">
+      <div class="dropdown-item" onclick="disableUntil('tonight')">🌙 Tonight (9 PM)</div>
+      <div class="dropdown-item" onclick="disableUntil('tomorrow')">☀️ Tomorrow morning (9 AM)</div>
+      <div class="dropdown-item" onclick="disableUntil('manual')" style="border-top: 1px solid rgba(255,255,255,0.04); margin-top: 4px; padding-top: 10px;">🔒 I turn it back on</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ AUTO MODE CONTENT ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="page mode-content" id="autoContent">
+
+  <!-- Today's Plan -->
+  <div class="section animate-in delay-1">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Today's Plan
+    </div>
+    <div class="card">
+      <div class="plan-summary">
+        ☀️ <strong>Good solar day</strong> (38 kWh predicted). Pre-cool house at 1pm, charge BMW 2–4pm, bank Powerwall for evening peak.
+      </div>
+      <div class="timeline-container">
+        <div class="timeline-labels">
+          <span>6am</span><span>9am</span><span>12pm</span><span>3pm</span><span>6pm</span><span>9pm</span><span>12am</span>
+        </div>
+        <div class="timeline-bar">
+          <div class="timeline-segment" style="width: 16.7%; background: rgba(234,179,8,0.35);"></div>
+          <div class="timeline-segment" style="width: 16.7%; background: rgba(234,179,8,0.5);"></div>
+          <div class="timeline-segment" style="width: 5.5%; background: rgba(234,179,8,0.35);"></div>
+          <div class="timeline-segment" style="width: 5.5%; background: rgba(59,130,246,0.5);"></div>
+          <div class="timeline-segment" style="width: 11.1%; background: rgba(168,85,247,0.5);"></div>
+          <div class="timeline-segment" style="width: 27.8%; background: rgba(34,197,94,0.4);"></div>
+          <div class="timeline-segment" style="width: 16.7%; background: rgba(255,255,255,0.03);"></div>
+          <div class="timeline-now" style="left: 44%;">
+            <div class="timeline-now-dot"></div>
+            <div class="timeline-now-line"></div>
+          </div>
+        </div>
+        <div class="timeline-legend">
+          <div class="legend-item"><div class="legend-dot" style="background: rgba(234,179,8,0.5);"></div>Charge PW</div>
+          <div class="legend-item"><div class="legend-dot" style="background: rgba(59,130,246,0.5);"></div>Pre-cool</div>
+          <div class="legend-item"><div class="legend-dot" style="background: rgba(168,85,247,0.5);"></div>Charge EV</div>
+          <div class="legend-item"><div class="legend-dot" style="background: rgba(34,197,94,0.4);"></div>PW Discharge</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DEVICES (AUTO) ── -->
+  <div class="section animate-in delay-2">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><line x1="23" y1="10" x2="23" y2="14"/></svg>
+      Devices
+    </div>
+
+    <!-- Powerwall -->
+    <div class="card device-card">
+      <div class="device-card-header">
+        <div class="device-card-icon" style="background: rgba(34,197,94,0.1);">🔋</div>
+        <div class="device-card-info">
+          <div class="device-card-name">Powerwall</div>
+          <div class="device-card-status" style="color: var(--green);">Charging at 3.2 kW</div>
+        </div>
+        <div>
+          <div class="device-card-value" style="color: var(--green);">72%</div>
+          <div class="device-card-subvalue">10.1 kWh</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 72%; background: linear-gradient(90deg, #059669, #22c55e);"></div>
+      </div>
+      <div class="schedule-footer">
+        <div class="schedule-icon" style="background: rgba(234,179,8,0.12); color: var(--yellow);">⏱</div>
+        <span>Charging from solar → discharge at <strong style="color: var(--text-secondary);">4:00 PM</strong> for peak</span>
+      </div>
+      <div class="controls-footer">
+        <div class="control-row" style="padding: 6px 0 0; border: none;">
+          <div class="control-label">Reserve</div>
+          <div style="display: flex; align-items: center;">
+            <div class="slider-track">
+              <div class="slider-fill" style="width: 20%;"><div class="slider-thumb"></div></div>
+            </div>
+            <div class="control-value" style="min-width: 36px;">20%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nest (3 thermostats in scrollable row) -->
+    <div class="card device-card">
+      <div class="device-card-header">
+        <div class="device-card-icon" style="background: rgba(59,130,246,0.1);">🌡️</div>
+        <div class="device-card-info">
+          <div class="device-card-name">Nest Thermostats</div>
+          <div class="device-card-status">3 devices</div>
+        </div>
+      </div>
+      <div class="nest-scroll">
+        <!-- Living Room -->
+        <div class="nest-item">
+          <div class="nest-inner">
+            <div class="nest-room-label"><div class="dot" style="background: var(--blue);"></div>Living Room</div>
+            <div class="nest-temp">74°F</div>
+            <div class="nest-detail">47% humidity · Idle</div>
+            <div class="nest-mini-controls">
+              <button class="nest-mini-btn">−</button>
+              <button class="nest-mini-btn">+</button>
+              <button class="nest-eco-mini off">🍃 Eco</button>
+            </div>
+          </div>
+        </div>
+        <!-- Bedroom -->
+        <div class="nest-item">
+          <div class="nest-inner">
+            <div class="nest-room-label"><div class="dot" style="background: var(--purple);"></div>Bedroom</div>
+            <div class="nest-temp">72°F</div>
+            <div class="nest-detail">51% humidity · ❄️ Cooling</div>
+            <div class="nest-mini-controls">
+              <button class="nest-mini-btn">−</button>
+              <button class="nest-mini-btn">+</button>
+              <button class="nest-eco-mini off">🍃 Eco</button>
+            </div>
+          </div>
+        </div>
+        <!-- Office -->
+        <div class="nest-item">
+          <div class="nest-inner">
+            <div class="nest-room-label"><div class="dot" style="background: var(--green);"></div>Office</div>
+            <div class="nest-temp">76°F</div>
+            <div class="nest-detail">44% humidity · 🍃 Eco</div>
+            <div class="nest-mini-controls">
+              <button class="nest-mini-btn">−</button>
+              <button class="nest-mini-btn">+</button>
+              <button class="nest-eco-mini on">🍃 Eco</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-dots">
+        <div class="scroll-dot active"></div>
+        <div class="scroll-dot"></div>
+        <div class="scroll-dot"></div>
+      </div>
+      <div class="schedule-footer">
+        <div class="schedule-icon" style="background: rgba(59,130,246,0.12); color: var(--blue);">⏱</div>
+        <span>Pre-cool all to <strong style="color: var(--text-secondary);">70°F at 1 PM</strong> → eco at 4 PM</span>
+      </div>
+    </div>
+
+    <!-- BMW iX -->
+    <div class="card device-card">
+      <div class="device-card-header">
+        <div class="device-card-icon" style="background: rgba(168,85,247,0.1);">🚗</div>
+        <div class="device-card-info">
+          <div class="device-card-name">BMW iX</div>
+          <div class="device-card-status" style="color: var(--yellow);">⚡ Plugged in · Not charging</div>
+        </div>
+        <div>
+          <div class="device-card-value" style="color: var(--purple);">45%</div>
+          <div class="device-card-subvalue">122 mi</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 45%; background: linear-gradient(90deg, #7c3aed, #a855f7);"></div>
+      </div>
+      <div class="schedule-footer">
+        <div class="schedule-icon" style="background: rgba(168,85,247,0.12); color: var(--purple);">⏱</div>
+        <span>Charge <strong style="color: var(--text-secondary);">2–4 PM</strong> from solar+PW → target 80%</span>
+      </div>
+      <div class="controls-footer">
+        <div class="control-row" style="padding: 6px 0 0; border: none;">
+          <div class="control-label">EV Target</div>
+          <div style="display: flex; align-items: center;">
+            <div class="range-track">
+              <div class="range-fill" style="left: 30%; width: 30%;">
+                <div class="range-thumb" style="left: -6px;"></div>
+                <div class="range-thumb" style="right: -6px;"></div>
+              </div>
+            </div>
+            <div class="control-value" style="min-width: 60px;">60 – 90%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity Log -->
+  <div class="section animate-in delay-4">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+      Activity
+    </div>
+    <div class="card">
+      <div class="log-entry">
+        <div class="log-time">12:05</div>
+        <div class="log-dot" style="background: var(--purple);"></div>
+        <div class="log-text">Started BMW charging (solar surplus 4kW)</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">12:00</div>
+        <div class="log-dot" style="background: var(--blue);"></div>
+        <div class="log-text">Set Nest Living Room to 72°F (pre-cool for peak)</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">11:55</div>
+        <div class="log-dot" style="background: var(--green);"></div>
+        <div class="log-text">PW switched to charge (SoC 65%)</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">11:30</div>
+        <div class="log-dot" style="background: var(--yellow);"></div>
+        <div class="log-text">Solar surplus detected (5.2 kW export)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- This Week -->
+  <div class="section animate-in delay-5">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      This Week
+    </div>
+    <div class="card">
+      <div class="week-stat">
+        <div class="week-stat-label">Automations saved</div>
+        <div class="week-stat-value" style="color: var(--green);">~$12.40</div>
+      </div>
+      <div class="week-stat" style="border-top: 1px solid rgba(255,255,255,0.03); padding-top: 10px;">
+        <div class="week-stat-label">Self-powered</div>
+        <div>
+          <span class="week-stat-value" style="color: var(--yellow);">84%</span>
+          <span class="week-stat-delta">↑6% vs manual</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ MANUAL MODE CONTENT ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="page mode-content hidden-mode" id="manualContent">
+
+  <!-- Right Now (top of manual mode) -->
+  <div class="section animate-in delay-1">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Right Now
+    </div>
+    <div class="card">
+      <div class="suggestion-card">
+        <div class="suggestion-icon" style="background: rgba(234,179,8,0.12);">☀️</div>
+        <div class="suggestion-content">
+          <div class="suggestion-header">
+            <div class="suggestion-title">Use your solar surplus</div>
+            <span class="priority-badge priority-high">High</span>
+          </div>
+          <div class="suggestion-desc">You're exporting 4.2 kW to the grid at ~$0.07/kWh. That same energy powers your home at $0.32/kWh — 5x more valuable. Plug in the BMW or pre-cool the house.</div>
+          <div class="suggestion-savings">$1.05/hr potential</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DEVICES (MANUAL) ── -->
+  <div class="section animate-in delay-2">
+    <div class="section-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><line x1="23" y1="10" x2="23" y2="14"/></svg>
+      Devices
+    </div>
+
+    <!-- Powerwall -->
+    <div class="card device-card">
+      <div class="device-card-header">
+        <div class="device-card-icon" style="background: rgba(34,197,94,0.1);">🔋</div>
+        <div class="device-card-info">
+          <div class="device-card-name">Powerwall</div>
+          <div class="device-card-status" style="color: var(--green);">Charging at 0.8 kW</div>
+        </div>
+        <div>
+          <div class="device-card-value" style="color: var(--green);">65%</div>
+          <div class="device-card-subvalue">9.1 kWh</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 65%; background: linear-gradient(90deg, #059669, #22c55e);"></div>
+      </div>
+    </div>
+
+    <!-- Nest (3 thermostats with controls) -->
+    <div class="card device-card">
+      <div class="device-card-header">
+        <div class="device-card-icon" style="background: rgba(59,130,246,0.1);">🌡️</div>
+        <div class="device-card-info">
+          <div class="device-card-name">Nest Thermostats</div>
+          <div class="device-card-status">3 devices · Swipe for controls</div>
+        </div>
+      </div>
+      <div class="nest-scroll">
+        <!-- Living Room -->
+        <div class="nest-item">
+          <div class="nest-inner">
+            <div class="nest-room-label"><div class="dot" style="background: var(--blue);"></div>Living Room</div>
+            <div class="nest-temp">73°F</div>
+            <div class="nest-detail">47% humidity · Idle</div>
+            <div class="nest-mini-controls">
+              <button class="nest-mini-btn">−</button>
+              <button class="nest-mini-btn">+</button>
+              <button class="nest-eco-mini off">🍃 Eco</button>
+            </div>
+          </div>
+        </div>
+        <!-- Bedroom -->
+        <div class="nest-item">
+          <div class="nest-inner">
+            <div class="nest-room-label"><div class="dot" style="background: var(--purple);"></div>Bedroom</div>
+            <div class="nest-temp">72°F</div>
+            <div class="nest-detail">51% humidity · ❄️ Cooling</div>
+            <div class="nest-mini-controls">
+              <button class="nest-mini-btn">−</button>
+              <button class="nest-mini-btn">+</button>
+              <button class="nest-eco-mini off">🍃 Eco</button>
+            </div>
+          </div>
+        </div>
+        <!-- Office -->
+        <div class="nest-item">
+          <div class="nest-inner">
+            <div class="nest-room-label"><div class="dot" style="background: var(--green);"></div>Office</div>
+            <div class="nest-temp">76°F</div>
+            <div class="nest-detail">44% humidity · 🍃 Eco</div>
+            <div class="nest-mini-controls">
+              <button class="nest-mini-btn">−</button>
+              <button class="nest-mini-btn">+</button>
+              <button class="nest-eco-mini on">🍃 Eco</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-dots" id="manualNestDots">
+        <div class="scroll-dot active"></div>
+        <div class="scroll-dot"></div>
+        <div class="scroll-dot"></div>
+      </div>
+    </div>
+
+    <!-- BMW iX -->
+    <div class="card device-card">
+      <div class="device-card-header">
+        <div class="device-card-icon" style="background: rgba(168,85,247,0.1);">🚗</div>
+        <div class="device-card-info">
+          <div class="device-card-name">BMW iX</div>
+          <div class="device-card-status" style="color: var(--yellow);">⚡ Plugged in · Not charging</div>
+        </div>
+        <div>
+          <div class="device-card-value" style="color: var(--purple);">45%</div>
+          <div class="device-card-subvalue">122 mi</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 45%; background: linear-gradient(90deg, #7c3aed, #a855f7);"></div>
+      </div>
+      <div class="controls-footer">
+        <button class="charge-btn">⚡ Start Charging</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let autoEnabled = true;
+  let dropdownOpen = false;
+
+  function toggleAutoMode() {
+    autoEnabled = !autoEnabled;
+    const toggle = document.getElementById('autoToggle');
+    const sublabel = document.getElementById('autoSublabel');
+    const autoContent = document.getElementById('autoContent');
+    const manualContent = document.getElementById('manualContent');
+
+    if (autoEnabled) {
+      toggle.classList.add('active');
+      sublabel.textContent = 'Optimizing your energy';
+      document.getElementById('disableWrap').classList.add('hidden');
+      autoContent.classList.remove('hidden-mode');
+      manualContent.classList.add('hidden-mode');
+    } else {
+      toggle.classList.remove('active');
+      document.getElementById('disableWrap').classList.remove('hidden');
+      disableUntil('tomorrow');
+      autoContent.classList.add('hidden-mode');
+      manualContent.classList.remove('hidden-mode');
+    }
+  }
+
+  function toggleDropdown() {
+    dropdownOpen = !dropdownOpen;
+    document.getElementById('dropdown').classList.toggle('open', dropdownOpen);
+  }
+
+  function disableUntil(option) {
+    dropdownOpen = false;
+    document.getElementById('dropdown').classList.remove('open');
+    const sublabel = document.getElementById('autoSublabel');
+    const sublabels = {
+      'tonight': 'Paused until tonight 9 PM',
+      'tomorrow': 'Paused until tomorrow 9 AM',
+      'manual': 'Paused until you turn it back on'
+    };
+    const btnLabels = {
+      'tonight': 'Until tonight 9 PM ▾',
+      'tomorrow': 'Until tomorrow 9 AM ▾',
+      'manual': 'Until I turn back on ▾'
+    };
+    sublabel.textContent = sublabels[option] || 'Automations disabled';
+    document.getElementById('disableBtn').textContent = btnLabels[option] || 'Until tomorrow 9 AM ▾';
+  }
+
+  document.addEventListener('click', function(e) {
+    if (dropdownOpen && !e.target.closest('#disableWrap')) {
+      dropdownOpen = false;
+      document.getElementById('dropdown').classList.remove('open');
+    }
+  });
+</script>
+</body>
+</html>
