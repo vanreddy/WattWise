@@ -17,6 +17,9 @@ import {
   RefreshCw,
   Battery,
   Activity,
+  Settings2,
+  Minus,
+  Plus,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
@@ -124,7 +127,7 @@ function PowerwallCard({
 
 /* ─── Nest Thermostat Mini Card ─── */
 
-function NestThermostatMini({ device, onRefresh }: { device: NestDevice; onRefresh: () => void }) {
+function NestThermostatMini({ device, onRefresh, readOnly }: { device: NestDevice; onRefresh: () => void; readOnly?: boolean }) {
   const [commanding, setCommanding] = useState(false);
   const ambientF = cToF(device.ambient_temp_c);
   const coolSetpointF = cToF(device.cool_setpoint_c);
@@ -170,34 +173,50 @@ function NestThermostatMini({ device, onRefresh }: { device: NestDevice; onRefre
           <span className="text-[26px] font-bold leading-none">{fToDisplay(ambientF)}</span>
           {device.humidity_pct != null && <span className="text-[10px] text-gray-500 ml-1.5">{device.humidity_pct}%</span>}
         </div>
-        <div className="flex gap-0.5 bg-white/[0.03] rounded-lg p-0.5 mb-2">
-          {([
-            { key: "OFF", label: "Off", color: "text-gray-400 bg-white/[0.08]" },
-            { key: "COOL", label: "Cool", color: "text-blue-400 bg-blue-500/[0.15]" },
-            { key: "HEAT", label: "Heat", color: "text-orange-400 bg-orange-500/[0.15]" },
-            { key: "ECO", label: "Eco", color: "text-green-400 bg-green-500/[0.15]" },
-          ] as const).map(({ key, label, color }) => (
-            <button key={key} onClick={() => switchMode(key)} disabled={commanding}
-              className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold transition-all disabled:opacity-50 ${effectiveMode === key ? color : "text-gray-600 hover:text-gray-400"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {(effectiveMode === "COOL" || effectiveMode === "HEAT" || effectiveMode === "HEATCOOL") && (
-          <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5">
-            <button onClick={() => adjustTemp(-1)} disabled={commanding}
-              className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
-              <ChevronDown size={16} />
-            </button>
-            <div className="text-center">
-              <div className="text-[10px] text-gray-500 leading-none">Set to</div>
-              <div className="text-sm font-bold text-blue-400 leading-tight">{setpointF != null ? `${setpointF}°F` : "—"}</div>
-            </div>
-            <button onClick={() => adjustTemp(1)} disabled={commanding}
-              className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
-              <ChevronUp size={16} />
-            </button>
+        {readOnly ? (
+          /* Auto mode: show current mode as a static badge */
+          <div className="flex items-center gap-1.5 mt-auto">
+            <span className={`text-[9px] font-semibold px-2 py-1 rounded-md ${
+              effectiveMode === "COOL" ? "text-blue-400 bg-blue-500/[0.12]" :
+              effectiveMode === "HEAT" ? "text-orange-400 bg-orange-500/[0.12]" :
+              effectiveMode === "ECO" ? "text-green-400 bg-green-500/[0.12]" :
+              "text-gray-500 bg-white/[0.05]"
+            }`}>{effectiveMode}</span>
+            {setpointF != null && <span className="text-[10px] text-gray-500">→ {setpointF}°F</span>}
           </div>
+        ) : (
+          /* Manual mode: full controls */
+          <>
+            <div className="flex gap-0.5 bg-white/[0.03] rounded-lg p-0.5 mb-2">
+              {([
+                { key: "OFF", label: "Off", color: "text-gray-400 bg-white/[0.08]" },
+                { key: "COOL", label: "Cool", color: "text-blue-400 bg-blue-500/[0.15]" },
+                { key: "HEAT", label: "Heat", color: "text-orange-400 bg-orange-500/[0.15]" },
+                { key: "ECO", label: "Eco", color: "text-green-400 bg-green-500/[0.15]" },
+              ] as const).map(({ key, label, color }) => (
+                <button key={key} onClick={() => switchMode(key)} disabled={commanding}
+                  className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold transition-all disabled:opacity-50 ${effectiveMode === key ? color : "text-gray-600 hover:text-gray-400"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {(effectiveMode === "COOL" || effectiveMode === "HEAT" || effectiveMode === "HEATCOOL") && (
+              <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5">
+                <button onClick={() => adjustTemp(-1)} disabled={commanding}
+                  className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
+                  <ChevronDown size={16} />
+                </button>
+                <div className="text-center">
+                  <div className="text-[10px] text-gray-500 leading-none">Set to</div>
+                  <div className="text-sm font-bold text-blue-400 leading-tight">{setpointF != null ? `${setpointF}°F` : "—"}</div>
+                </div>
+                <button onClick={() => adjustTemp(1)} disabled={commanding}
+                  className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
+                  <ChevronUp size={16} />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -206,7 +225,7 @@ function NestThermostatMini({ device, onRefresh }: { device: NestDevice; onRefre
 
 /* ─── Nest Card ─── */
 
-function NestCard({ scheduleLine }: { scheduleLine?: string }) {
+function NestCard({ scheduleLine, readOnly }: { scheduleLine?: string; readOnly?: boolean }) {
   const { user } = useAuth();
   const [devices, setDevices] = useState<NestDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,7 +268,7 @@ function NestCard({ scheduleLine }: { scheduleLine?: string }) {
         <button onClick={fetchStatus} className="text-gray-600 hover:text-gray-400 transition-colors"><RefreshCw size={14} /></button>
       </div>
       <div className="grid grid-cols-2 gap-2.5">
-        {devices.map(d => <NestThermostatMini key={d.device_id} device={d} onRefresh={fetchStatus} />)}
+        {devices.map(d => <NestThermostatMini key={d.device_id} device={d} onRefresh={fetchStatus} readOnly={readOnly} />)}
       </div>
       {scheduleLine && (
         <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-white/[0.04] text-[10px] text-gray-500">
@@ -443,6 +462,183 @@ function ActivityLog({ entries }: { entries: OptimizerLogEntry[] }) {
 }
 
 /* ═══════════════════════════════════════════════ */
+/* ═══ CONTROLS MODULE ══════════════════════════ */
+/* ═══════════════════════════════════════════════ */
+
+function StepperControl({
+  label,
+  sublabel,
+  value,
+  unit,
+  min,
+  max,
+  step = 1,
+  color = "text-yellow-400",
+  onChange,
+}: {
+  label: string;
+  sublabel?: string;
+  value: number;
+  unit: string;
+  min: number;
+  max: number;
+  step?: number;
+  color?: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] font-medium text-gray-300">{label}</div>
+        {sublabel && <div className="text-[10px] text-gray-600">{sublabel}</div>}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onChange(Math.max(min, value - step))}
+          disabled={value <= min}
+          className="w-7 h-7 flex items-center justify-center rounded-md bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors"
+        >
+          <Minus size={13} />
+        </button>
+        <span className={`text-sm font-bold ${color} w-14 text-center tabular-nums`}>
+          {value}{unit}
+        </span>
+        <button
+          onClick={() => onChange(Math.min(max, value + step))}
+          disabled={value >= max}
+          className="w-7 h-7 flex items-center justify-center rounded-md bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RangeStepperControl({
+  label,
+  sublabel,
+  low,
+  high,
+  unit,
+  min,
+  max,
+  step = 1,
+  lowColor = "text-blue-400",
+  highColor = "text-red-400",
+  onChangeLow,
+  onChangeHigh,
+}: {
+  label: string;
+  sublabel?: string;
+  low: number;
+  high: number;
+  unit: string;
+  min: number;
+  max: number;
+  step?: number;
+  lowColor?: string;
+  highColor?: string;
+  onChangeLow: (v: number) => void;
+  onChangeHigh: (v: number) => void;
+}) {
+  return (
+    <div className="py-2.5">
+      <div className="flex items-center justify-between mb-1.5">
+        <div>
+          <div className="text-[12px] font-medium text-gray-300">{label}</div>
+          {sublabel && <div className="text-[10px] text-gray-600">{sublabel}</div>}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button onClick={() => onChangeLow(Math.max(min, low - step))} disabled={low <= min}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
+            <Minus size={11} />
+          </button>
+          <span className={`text-[12px] font-bold ${lowColor} w-10 text-center tabular-nums`}>{low}{unit}</span>
+          <button onClick={() => onChangeLow(Math.min(high - step, low + step))} disabled={low >= high - step}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
+            <Plus size={11} />
+          </button>
+        </div>
+        <span className="text-[10px] text-gray-600">to</span>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onChangeHigh(Math.max(low + step, high - step))} disabled={high <= low + step}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
+            <Minus size={11} />
+          </button>
+          <span className={`text-[12px] font-bold ${highColor} w-10 text-center tabular-nums`}>{high}{unit}</span>
+          <button onClick={() => onChangeHigh(Math.min(max, high + step))} disabled={high >= max}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
+            <Plus size={11} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ControlsModule({
+  optState,
+  onUpdate,
+}: {
+  optState: OptimizerState;
+  onUpdate: (updates: Partial<OptimizerState>) => void;
+}) {
+  return (
+    <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+
+      <StepperControl
+        label="Powerwall Reserve"
+        sublabel="Minimum battery kept for backup"
+        value={optState.pw_reserve_pct}
+        unit="%"
+        min={0}
+        max={100}
+        step={5}
+        color="text-emerald-400"
+        onChange={(v) => onUpdate({ pw_reserve_pct: v })}
+      />
+
+      <div className="border-t border-white/[0.03]" />
+
+      <RangeStepperControl
+        label="Comfort Range"
+        sublabel="Algorithm keeps indoor temp within this band"
+        low={optState.comfort_min_f}
+        high={optState.comfort_max_f}
+        unit="°"
+        min={60}
+        max={85}
+        lowColor="text-blue-400"
+        highColor="text-orange-400"
+        onChangeLow={(v) => onUpdate({ comfort_min_f: v })}
+        onChangeHigh={(v) => onUpdate({ comfort_max_f: v })}
+      />
+
+      <div className="border-t border-white/[0.03]" />
+
+      <RangeStepperControl
+        label="EV Charge Target"
+        sublabel="Charge between these levels using solar"
+        low={optState.ev_min_pct}
+        high={optState.ev_max_pct}
+        unit="%"
+        min={20}
+        max={100}
+        step={5}
+        lowColor="text-purple-400"
+        highColor="text-purple-300"
+        onChangeLow={(v) => onUpdate({ ev_min_pct: v })}
+        onChangeHigh={(v) => onUpdate({ ev_max_pct: v })}
+      />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════ */
 /* ═══ REAL-TIME SUGGESTIONS ═════════════════════ */
 /* ═══════════════════════════════════════════════ */
 
@@ -560,6 +756,18 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
     fetchOptimizerData();
     const interval = setInterval(fetchOptimizerData, 60000); // Refresh every 60s
     return () => clearInterval(interval);
+  }, [fetchOptimizerData]);
+
+  // Update optimizer controls (debounced save to backend)
+  const updateControl = useCallback(async (updates: Partial<OptimizerState>) => {
+    // Optimistic local update
+    setOptState(prev => prev ? { ...prev, ...updates } : prev);
+    try {
+      await api.updateOptimizerState(updates as Record<string, unknown>);
+    } catch {
+      // Revert on error by refetching
+      fetchOptimizerData();
+    }
   }, [fetchOptimizerData]);
 
   // Toggle auto mode
@@ -683,9 +891,19 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
               </SectionLabel>
               <div className="space-y-2.5">
                 <PowerwallCard summary={summary} scheduleLine={pwSchedule} />
-                <NestCard scheduleLine={nestSchedule} />
+                <NestCard scheduleLine={nestSchedule} readOnly />
                 <BMWCard scheduleLine={evSchedule} />
               </div>
+            </section>
+          )}
+
+          {/* Controls */}
+          {optState && (
+            <section>
+              <SectionLabel icon={<Settings2 size={12} className="text-gray-400" />}>
+                Controls
+              </SectionLabel>
+              <ControlsModule optState={optState} onUpdate={updateControl} />
             </section>
           )}
 
