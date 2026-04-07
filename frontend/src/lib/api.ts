@@ -187,6 +187,68 @@ export interface SmartcarVehicleStatus {
   is_plugged_in?: boolean | null;
 }
 
+/* ─── Optimizer Types ─── */
+
+export interface TimelineSegment {
+  action: string;
+  start_hour: number;
+  end_hour: number;
+  color: string;
+  label: string;
+}
+
+export interface HourPlanEntry {
+  hour: number;
+  is_peak: boolean;
+  pw_action: string;
+  ev_action: string;
+  hvac_action: string;
+  hvac_setpoint_f: number | null;
+  surplus_w: number;
+  solar_w: number;
+  base_load_w: number;
+  reason: string;
+}
+
+export interface OptimizerPlan {
+  generated_at: string;
+  hours: HourPlanEntry[];
+  timeline: TimelineSegment[];
+  total_solar_kwh: number;
+  total_savings_est: number;
+  predictions: {
+    solar: Record<string, number>;
+    load: Record<string, number>;
+    temp: Record<string, number>;
+  };
+  device_state: {
+    pw_soc_pct: number;
+    ev_soc_pct: number;
+    ev_plugged_in: boolean;
+    indoor_temp_f: number;
+    hvac_mode: string;
+  };
+}
+
+export interface OptimizerLogEntry {
+  ts: string;
+  action: string;
+  device: string;
+  reason: string;
+  details: Record<string, unknown>;
+}
+
+export interface OptimizerState {
+  auto_mode: boolean;
+  disabled_until: string | null;
+  pw_reserve_pct: number;
+  comfort_min_f: number;
+  comfort_max_f: number;
+  ev_min_pct: number;
+  ev_max_pct: number;
+  device_overrides: Record<string, string | null>;
+}
+
 /* ─── Authenticated POST helper ─── */
 
 async function postJSON<T>(path: string, body?: Record<string, unknown>): Promise<T> {
@@ -279,4 +341,12 @@ export const api = {
     postJSON<{ status: string }>(`/smartcar/vehicles/${vehicleId}/charge/start`),
   smartcarStopCharge: (vehicleId: string) =>
     postJSON<{ status: string }>(`/smartcar/vehicles/${vehicleId}/charge/stop`),
+
+  // ─── Optimizer ───
+  getOptimizerPlan: () => fetchJSON<{ plan: OptimizerPlan | null }>("/optimizer/plan"),
+  getOptimizerLog: (hours = 24) => fetchJSON<{ entries: OptimizerLogEntry[] }>(`/optimizer/log?hours=${hours}`),
+  getOptimizerState: () => fetchJSON<OptimizerState>("/optimizer/state"),
+  updateOptimizerState: (updates: Partial<OptimizerState>) =>
+    postJSON<{ status: string }>("/optimizer/state", updates),
+  triggerOptimizer: () => postJSON<{ status: string; plan_summary?: string }>("/optimizer/run"),
 };
