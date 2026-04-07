@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import type { OptimizerPlan, HourPlanEntry } from "@/lib/api";
 
 /* ─── Types ─── */
@@ -75,35 +75,47 @@ export default function EnergyForecastChart({ plan }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
 
   /* ─── Extract data from plan or use samples ─── */
+
+  // Build lookup maps from plan.hours (keyed by actual clock hour, not offset)
+  const { solarByHour, loadByHour } = useMemo(() => {
+    const solar: Record<number, number> = {};
+    const load: Record<number, number> = {};
+    if (plan?.hours) {
+      for (const h of plan.hours) {
+        solar[h.hour] = (h.solar_w ?? 0) / 1000; // watts → kW
+        load[h.hour] = (h.base_load_w ?? 0) / 1000;
+      }
+    }
+    return { solarByHour: solar, loadByHour: load };
+  }, [plan]);
+
+  const hasPlanData = plan?.hours && plan.hours.length > 0;
+
   const getSolarKw = useCallback(
     (h: number): number => {
-      if (plan?.predictions?.solar) {
-        const key = String(h);
-        if (key in plan.predictions.solar) return plan.predictions.solar[key] / 1000;
-        // Interpolate between hours
-        const lo = Math.floor(h), hi = Math.ceil(h);
-        const loVal = plan.predictions.solar[String(lo)] ?? 0;
-        const hiVal = plan.predictions.solar[String(hi)] ?? 0;
-        return (loVal + (hiVal - loVal) * (h - lo)) / 1000;
+      if (hasPlanData) {
+        const lo = Math.floor(h), hi = Math.ceil(h) % 24;
+        const loVal = solarByHour[lo] ?? 0;
+        const hiVal = solarByHour[hi] ?? 0;
+        // Interpolate for smooth curve between integer hours
+        return loVal + (hiVal - loVal) * (h - lo);
       }
       return sampleSolarKw(h);
     },
-    [plan]
+    [hasPlanData, solarByHour]
   );
 
   const getLoadKw = useCallback(
     (h: number): number => {
-      if (plan?.predictions?.load) {
-        const key = String(h);
-        if (key in plan.predictions.load) return plan.predictions.load[key] / 1000;
-        const lo = Math.floor(h), hi = Math.ceil(h);
-        const loVal = plan.predictions.load[String(lo)] ?? 0;
-        const hiVal = plan.predictions.load[String(hi)] ?? 0;
-        return (loVal + (hiVal - loVal) * (h - lo)) / 1000;
+      if (hasPlanData) {
+        const lo = Math.floor(h), hi = Math.ceil(h) % 24;
+        const loVal = loadByHour[lo] ?? 0;
+        const hiVal = loadByHour[hi] ?? 0;
+        return loVal + (hiVal - loVal) * (h - lo);
       }
       return sampleLoadKw(h);
     },
-    [plan]
+    [hasPlanData, loadByHour]
   );
 
   /* ─── Extract swim lane segments from plan hours ─── */
