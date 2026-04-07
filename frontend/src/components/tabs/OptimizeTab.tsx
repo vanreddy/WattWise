@@ -15,7 +15,6 @@ import {
   Plug,
   PlugZap,
   Snowflake,
-  Leaf,
   RefreshCw,
   Battery,
 } from "lucide-react";
@@ -143,6 +142,9 @@ function NestThermostatMini({
     : isEco ? "Eco"
     : "Idle";
 
+  // The effective mode (combining mode + eco state)
+  const effectiveMode = isEco ? "ECO" : mode;
+
   async function adjustTemp(delta: number) {
     if (commanding) return;
     const currentSetpoint = coolSetpointF ?? 72;
@@ -158,11 +160,11 @@ function NestThermostatMini({
     }
   }
 
-  async function toggleEco() {
-    if (commanding) return;
+  async function switchMode(newMode: string) {
+    if (commanding || newMode === effectiveMode) return;
     setCommanding(true);
     try {
-      await api.nestSetEco(device.device_id, !isEco);
+      await api.nestSetMode(device.device_id, newMode);
       onRefresh();
     } catch {
       // Silently fail
@@ -195,9 +197,32 @@ function NestThermostatMini({
           )}
         </div>
 
-        {/* Setpoint control: ▼ [target temp] ▲ */}
-        {mode !== "OFF" && !isEco && (
-          <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5 mb-2">
+        {/* Mode selector: Off | Cool | Heat | Eco */}
+        <div className="flex gap-0.5 bg-white/[0.03] rounded-lg p-0.5 mb-2">
+          {([
+            { key: "OFF",  label: "Off",  color: "text-gray-400 bg-white/[0.08]" },
+            { key: "COOL", label: "Cool", color: "text-blue-400 bg-blue-500/[0.15]" },
+            { key: "HEAT", label: "Heat", color: "text-orange-400 bg-orange-500/[0.15]" },
+            { key: "ECO",  label: "Eco",  color: "text-green-400 bg-green-500/[0.15]" },
+          ] as const).map(({ key, label, color }) => (
+            <button
+              key={key}
+              onClick={() => switchMode(key)}
+              disabled={commanding}
+              className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold transition-all disabled:opacity-50 ${
+                effectiveMode === key
+                  ? color
+                  : "text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Setpoint control: ▼ [Set to 72°F] ▲ — only when Cool or Heat */}
+        {(effectiveMode === "COOL" || effectiveMode === "HEAT" || effectiveMode === "HEATCOOL") && (
+          <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5">
             <button
               onClick={() => adjustTemp(-1)}
               disabled={commanding}
@@ -220,20 +245,6 @@ function NestThermostatMini({
             </button>
           </div>
         )}
-
-        {/* Eco toggle */}
-        <button
-          onClick={toggleEco}
-          disabled={commanding}
-          className={`mt-auto w-full flex items-center justify-center gap-1.5 text-[10px] font-medium py-1.5 rounded-lg transition-all border ${
-            isEco
-              ? "text-green-400 bg-green-500/[0.08] border-green-500/20"
-              : "text-gray-500 bg-white/[0.02] border-white/[0.06] hover:text-gray-300 hover:bg-white/[0.04]"
-          } disabled:opacity-50`}
-        >
-          <Leaf size={11} />
-          {isEco ? "Eco On" : "Eco Off"}
-        </button>
       </div>
     </div>
   );

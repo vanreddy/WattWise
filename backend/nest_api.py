@@ -412,3 +412,61 @@ async def set_eco_mode(device_id: str, request: Request, user: dict = Depends(ge
 
     logger.info("Nest eco mode: device=%s enabled=%s account=%s", device_id, enabled, account_id)
     return {"status": "ok", "eco_mode": mode}
+
+
+@router.post("/devices/{device_id}/set-mode")
+async def set_thermostat_mode(device_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Set thermostat mode. Body: {"mode": "COOL" | "HEAT" | "HEATCOOL" | "OFF"}
+
+    If switching away from Eco, first disable Eco, then set the mode.
+    If switching TO Eco, just enable Eco (keeps underlying mode).
+    """
+    pool = request.app.state.pool
+    account_id = UUID(user["account_id"])
+    body = await request.json()
+    target_mode = body.get("mode", "OFF").upper()
+
+    if target_mode == "ECO":
+        # Enable Eco mode
+        await _sdm_request(
+            pool, account_id, "POST",
+            f"devices/{device_id}:executeCommand",
+            json_body={
+                "command": "sdm.devices.commands.ThermostatEco.SetMode",
+                "params": {"mode": "MANUAL_ECO"},
+            },
+        )
+        logger.info("Nest set mode: device=%s mode=ECO account=%s", device_id, account_id)
+        return {"status": "ok", "mode": "ECO", "eco_mode": "MANUAL_ECO"}
+
+    # Disable Eco first (if active), then set mode
+    await _sdm_request(
+        pool, account_id, "POST",
+        f"devices/{device_id}:executeCommand",
+        json_body={
+            "command": "sdm.devices.commands.ThermostatEco.SetMode",
+            "params": {"mode": "OFF"},
+        },
+    )
+
+    if target_mode != "OFF":
+        await _sdm_request(
+            pool, account_id, "POST",
+            f"devices/{device_id}:executeCommand",
+            json_body={
+                "command": "sdm.devices.commands.ThermostatMode.SetMode",
+                "params": {"mode": target_mode},
+            },
+        )
+    else:
+        await _sdm_request(
+            pool, account_id, "POST",
+            f"devices/{device_id}:executeCommand",
+            json_body={
+                "command": "sdm.devices.commands.ThermostatMode.SetMode",
+                "params": {"mode": "OFF"},
+            },
+        )
+
+    logger.info("Nest set mode: device=%s mode=%s account=%s", device_id, target_mode, account_id)
+    return {"status": "ok", "mode": target_mode, "eco_mode": "OFF"}

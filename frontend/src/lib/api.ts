@@ -268,6 +268,8 @@ export const api = {
     postJSON<{ status: string }>(`/nest/devices/${deviceId}/set-cool`, { temp_f: tempF }),
   nestSetEco: (deviceId: string, enabled: boolean) =>
     postJSON<{ status: string }>(`/nest/devices/${deviceId}/set-eco`, { enabled }),
+  nestSetMode: (deviceId: string, mode: string) =>
+    postJSON<{ status: string }>(`/nest/devices/${deviceId}/set-mode`, { mode }),
 
   // ─── Smartcar (BMW) ───
   getSmartcarVehicles: () => fetchJSON<{ vehicles: SmartcarVehicle[] }>("/smartcar/vehicles"),
