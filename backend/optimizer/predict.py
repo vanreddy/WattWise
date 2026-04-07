@@ -266,6 +266,11 @@ async def predict_solar(
 
 # ─── Base Load Prediction ───
 
+# Wall Connector power data became available after this date.
+# Before this, vehicle_w was always 0 (backfill API doesn't include it).
+VEHICLE_W_RELIABLE_AFTER = date_type(2026, 3, 21)
+
+
 async def predict_base_load(
     pool: asyncpg.Pool,
     account_id,
@@ -273,22 +278,35 @@ async def predict_base_load(
 ) -> dict[int, float]:
     """Predict base load (watts, excluding HVAC/EV) for each hour in the next 24h.
 
-    Uses last 4 same-weekday profiles.
+    Uses last 4 same-weekday profiles where vehicle_w data is reliable
+    (after Wall Connector integration went live on 2026-03-21).
+    Falls back to older data only if not enough reliable days exist.
     """
     now = now or datetime.now(timezone.utc)
     weekday = now.weekday()  # 0=Monday
 
-    # Find same-weekday days in last 28 days
-    same_weekdays = []
-    for days_ago in range(1, 29):
+    # Find same-weekday days in last 56 days, preferring ones with reliable EV data
+    reliable_days = []
+    fallback_days = []
+    for days_ago in range(1, 57):
         d = now - timedelta(days=days_ago)
         if d.weekday() == weekday:
-            same_weekdays.append(d.date())
-        if len(same_weekdays) >= 4:
+            if d.date() >= VEHICLE_W_RELIABLE_AFTER:
+                reliable_days.append(d.date())
+            else:
+                fallback_days.append(d.date())
+        if len(reliable_days) >= 4:
             break
+
+    # Use reliable days first; pad with fallback if needed (min 2 days)
+    same_weekdays = reliable_days
+    if len(same_weekdays) < 2:
+        same_weekdays.extend(fallback_days[:4 - len(same_weekdays)])
 
     if not same_weekdays:
         return {h: 500.0 for h in range(24)}  # Default 500W base
+
+    has_reliable_ev = len(reliable_days) > 0
 
     rows = await pool.fetch("""
         SELECT
@@ -302,7 +320,10 @@ async def predict_base_load(
         ORDER BY hour_ts
     """, account_id, same_weekdays)
 
-    # Average by hour, strip EV (HVAC harder to strip without separate metering)
+    # Strip EV charging from home load.
+    # For days with reliable vehicle_w, subtraction works directly.
+    # For older days (vehicle_w=0), the EV load is baked into home_w —
+    # we accept the noise since reliable days will increasingly dominate.
     hourly_loads: dict[int, list[float]] = {}
     for row in rows:
         hr = row["hour_ts"].hour
@@ -315,6 +336,11 @@ async def predict_base_load(
         target_hour = (local_hour + offset) % 24
         vals = hourly_loads.get(target_hour, [])
         predictions[offset] = round(sum(vals) / len(vals), 1) if vals else 500.0
+
+    logger.info(
+        "Base load prediction: %d reliable days, %d fallback days, has_ev_data=%s",
+        len(reliable_days), len(same_weekdays) - len(reliable_days), has_reliable_ev,
+    )
 
     return predictions
 
