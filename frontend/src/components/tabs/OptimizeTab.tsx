@@ -17,9 +17,6 @@ import {
   RefreshCw,
   Battery,
   Activity,
-  Settings2,
-  Minus,
-  Plus,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
@@ -73,9 +70,13 @@ function fmtHour(h: number): string {
 function PowerwallCard({
   summary,
   scheduleLine,
+  reservePct,
+  onReserveChange,
 }: {
   summary: SummaryResponse | null;
   scheduleLine?: string;
+  reservePct?: number;
+  onReserveChange?: (v: number) => void;
 }) {
   if (!summary) return null;
   const { battery_pct, battery_w } = summary.current;
@@ -120,6 +121,17 @@ function PowerwallCard({
           <span className="w-4 h-4 rounded bg-yellow-500/10 flex items-center justify-center text-yellow-400 text-[9px]">⏱</span>
           <span dangerouslySetInnerHTML={{ __html: scheduleLine }} />
         </div>
+      )}
+      {reservePct != null && onReserveChange && (
+        <InlineSlider
+          label="Reserve"
+          value={reservePct}
+          min={0}
+          max={100}
+          step={5}
+          formatValue={v => `${v}%`}
+          onChange={onReserveChange}
+        />
       )}
     </div>
   );
@@ -225,7 +237,21 @@ function NestThermostatMini({ device, onRefresh, readOnly }: { device: NestDevic
 
 /* ─── Nest Card ─── */
 
-function NestCard({ scheduleLine, readOnly }: { scheduleLine?: string; readOnly?: boolean }) {
+function NestCard({
+  scheduleLine,
+  readOnly,
+  comfortMin,
+  comfortMax,
+  onComfortMinChange,
+  onComfortMaxChange,
+}: {
+  scheduleLine?: string;
+  readOnly?: boolean;
+  comfortMin?: number;
+  comfortMax?: number;
+  onComfortMinChange?: (v: number) => void;
+  onComfortMaxChange?: (v: number) => void;
+}) {
   const { user } = useAuth();
   const [devices, setDevices] = useState<NestDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,13 +302,37 @@ function NestCard({ scheduleLine, readOnly }: { scheduleLine?: string; readOnly?
           <span dangerouslySetInnerHTML={{ __html: scheduleLine }} />
         </div>
       )}
+      {comfortMin != null && comfortMax != null && onComfortMinChange && onComfortMaxChange && (
+        <InlineRangeSlider
+          label="Comfort"
+          low={comfortMin}
+          high={comfortMax}
+          min={60}
+          max={85}
+          formatValue={(lo, hi) => `${lo}–${hi}°`}
+          onChangeLow={onComfortMinChange}
+          onChangeHigh={onComfortMaxChange}
+        />
+      )}
     </div>
   );
 }
 
 /* ─── BMW Card ─── */
 
-function BMWCard({ scheduleLine }: { scheduleLine?: string }) {
+function BMWCard({
+  scheduleLine,
+  evMinPct,
+  evMaxPct,
+  onEvMinChange,
+  onEvMaxChange,
+}: {
+  scheduleLine?: string;
+  evMinPct?: number;
+  evMaxPct?: number;
+  onEvMinChange?: (v: number) => void;
+  onEvMaxChange?: (v: number) => void;
+}) {
   const { user } = useAuth();
   const [vehicle, setVehicle] = useState<SmartcarVehicle | null>(null);
   const [status, setStatus] = useState<SmartcarVehicleStatus | null>(null);
@@ -368,6 +418,19 @@ function BMWCard({ scheduleLine }: { scheduleLine?: string }) {
           <span className="w-4 h-4 rounded bg-purple-500/10 flex items-center justify-center text-purple-400 text-[9px]">⏱</span>
           <span dangerouslySetInnerHTML={{ __html: scheduleLine }} />
         </div>
+      )}
+      {evMinPct != null && evMaxPct != null && onEvMinChange && onEvMaxChange && (
+        <InlineRangeSlider
+          label="EV Target"
+          low={evMinPct}
+          high={evMaxPct}
+          min={20}
+          max={100}
+          step={5}
+          formatValue={(lo, hi) => `${lo}–${hi}%`}
+          onChangeLow={onEvMinChange}
+          onChangeHigh={onEvMaxChange}
+        />
       )}
     </div>
   );
@@ -462,178 +525,113 @@ function ActivityLog({ entries }: { entries: OptimizerLogEntry[] }) {
 }
 
 /* ═══════════════════════════════════════════════ */
-/* ═══ CONTROLS MODULE ══════════════════════════ */
+/* ═══ INLINE SLIDER CONTROLS ═══════════════════ */
 /* ═══════════════════════════════════════════════ */
 
-function StepperControl({
+function InlineSlider({
   label,
-  sublabel,
   value,
-  unit,
   min,
   max,
   step = 1,
-  color = "text-yellow-400",
+  formatValue,
   onChange,
 }: {
   label: string;
-  sublabel?: string;
   value: number;
-  unit: string;
   min: number;
   max: number;
   step?: number;
-  color?: string;
+  formatValue: (v: number) => string;
   onChange: (v: number) => void;
 }) {
+  const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div className="flex items-center justify-between py-2.5">
-      <div className="flex-1 min-w-0">
-        <div className="text-[12px] font-medium text-gray-300">{label}</div>
-        {sublabel && <div className="text-[10px] text-gray-600">{sublabel}</div>}
-      </div>
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={() => onChange(Math.max(min, value - step))}
-          disabled={value <= min}
-          className="w-7 h-7 flex items-center justify-center rounded-md bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors"
-        >
-          <Minus size={13} />
-        </button>
-        <span className={`text-sm font-bold ${color} w-14 text-center tabular-nums`}>
-          {value}{unit}
-        </span>
-        <button
-          onClick={() => onChange(Math.min(max, value + step))}
-          disabled={value >= max}
-          className="w-7 h-7 flex items-center justify-center rounded-md bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors"
-        >
-          <Plus size={13} />
-        </button>
+    <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-white/[0.04]">
+      <span className="text-[11px] text-gray-500 shrink-0">{label}</span>
+      <div className="flex items-center gap-2 flex-1 justify-end">
+        <div className="relative w-[120px] h-[4px] bg-[#1a1f2e] rounded-full">
+          <div className="h-full rounded-full bg-yellow-400/60" style={{ width: `${pct}%` }} />
+          <input
+            type="range" min={min} max={max} step={step} value={value}
+            onChange={e => onChange(Number(e.target.value))}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-[14px] h-[14px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none"
+            style={{ left: `calc(${pct}% - 7px)` }}
+          />
+        </div>
+        <span className="text-[12px] font-semibold text-gray-200 tabular-nums min-w-[36px] text-right">{formatValue(value)}</span>
       </div>
     </div>
   );
 }
 
-function RangeStepperControl({
+function InlineRangeSlider({
   label,
-  sublabel,
   low,
   high,
-  unit,
   min,
   max,
   step = 1,
-  lowColor = "text-blue-400",
-  highColor = "text-red-400",
+  formatValue,
   onChangeLow,
   onChangeHigh,
 }: {
   label: string;
-  sublabel?: string;
   low: number;
   high: number;
-  unit: string;
   min: number;
   max: number;
   step?: number;
-  lowColor?: string;
-  highColor?: string;
+  formatValue: (lo: number, hi: number) => string;
   onChangeLow: (v: number) => void;
   onChangeHigh: (v: number) => void;
 }) {
+  const range = max - min;
+  const loPct = ((low - min) / range) * 100;
+  const hiPct = ((high - min) / range) * 100;
   return (
-    <div className="py-2.5">
-      <div className="flex items-center justify-between mb-1.5">
-        <div>
-          <div className="text-[12px] font-medium text-gray-300">{label}</div>
-          {sublabel && <div className="text-[10px] text-gray-600">{sublabel}</div>}
+    <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-white/[0.04]">
+      <span className="text-[11px] text-gray-500 shrink-0">{label}</span>
+      <div className="flex items-center gap-2 flex-1 justify-end">
+        <div className="relative w-[120px] h-[4px] bg-[#1a1f2e] rounded-full">
+          {/* Filled range between low and high */}
+          <div
+            className="absolute h-full rounded-full bg-yellow-400/60"
+            style={{ left: `${loPct}%`, width: `${hiPct - loPct}%` }}
+          />
+          {/* Low thumb - invisible input overlay */}
+          <input
+            type="range" min={min} max={max} step={step} value={low}
+            onChange={e => {
+              const v = Number(e.target.value);
+              if (v < high) onChangeLow(v);
+            }}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          />
+          {/* High thumb - invisible input overlay */}
+          <input
+            type="range" min={min} max={max} step={step} value={high}
+            onChange={e => {
+              const v = Number(e.target.value);
+              if (v > low) onChangeHigh(v);
+            }}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+          />
+          {/* Visual thumb dots */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-[12px] h-[12px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none z-30"
+            style={{ left: `calc(${loPct}% - 6px)` }}
+          />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-[12px] h-[12px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none z-30"
+            style={{ left: `calc(${hiPct}% - 6px)` }}
+          />
         </div>
+        <span className="text-[12px] font-semibold text-gray-200 tabular-nums min-w-[60px] text-right">{formatValue(low, high)}</span>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1">
-          <button onClick={() => onChangeLow(Math.max(min, low - step))} disabled={low <= min}
-            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
-            <Minus size={11} />
-          </button>
-          <span className={`text-[12px] font-bold ${lowColor} w-10 text-center tabular-nums`}>{low}{unit}</span>
-          <button onClick={() => onChangeLow(Math.min(high - step, low + step))} disabled={low >= high - step}
-            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
-            <Plus size={11} />
-          </button>
-        </div>
-        <span className="text-[10px] text-gray-600">to</span>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onChangeHigh(Math.max(low + step, high - step))} disabled={high <= low + step}
-            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
-            <Minus size={11} />
-          </button>
-          <span className={`text-[12px] font-bold ${highColor} w-10 text-center tabular-nums`}>{high}{unit}</span>
-          <button onClick={() => onChangeHigh(Math.min(max, high + step))} disabled={high >= max}
-            className="w-6 h-6 flex items-center justify-center rounded bg-white/[0.05] text-gray-400 hover:bg-white/[0.1] disabled:opacity-25 transition-colors">
-            <Plus size={11} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ControlsModule({
-  optState,
-  onUpdate,
-}: {
-  optState: OptimizerState;
-  onUpdate: (updates: Partial<OptimizerState>) => void;
-}) {
-  return (
-    <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-
-      <StepperControl
-        label="Powerwall Reserve"
-        sublabel="Minimum battery kept for backup"
-        value={optState.pw_reserve_pct}
-        unit="%"
-        min={0}
-        max={100}
-        step={5}
-        color="text-emerald-400"
-        onChange={(v) => onUpdate({ pw_reserve_pct: v })}
-      />
-
-      <div className="border-t border-white/[0.03]" />
-
-      <RangeStepperControl
-        label="Comfort Range"
-        sublabel="Algorithm keeps indoor temp within this band"
-        low={optState.comfort_min_f}
-        high={optState.comfort_max_f}
-        unit="°"
-        min={60}
-        max={85}
-        lowColor="text-blue-400"
-        highColor="text-orange-400"
-        onChangeLow={(v) => onUpdate({ comfort_min_f: v })}
-        onChangeHigh={(v) => onUpdate({ comfort_max_f: v })}
-      />
-
-      <div className="border-t border-white/[0.03]" />
-
-      <RangeStepperControl
-        label="EV Charge Target"
-        sublabel="Charge between these levels using solar"
-        low={optState.ev_min_pct}
-        high={optState.ev_max_pct}
-        unit="%"
-        min={20}
-        max={100}
-        step={5}
-        lowColor="text-purple-400"
-        highColor="text-purple-300"
-        onChangeLow={(v) => onUpdate({ ev_min_pct: v })}
-        onChangeHigh={(v) => onUpdate({ ev_max_pct: v })}
-      />
     </div>
   );
 }
@@ -883,27 +881,35 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
             </section>
           )}
 
-          {/* Devices (with schedule footers) */}
+          {/* Devices (with schedule footers + inline controls) */}
           {hasDevices && (
             <section>
               <SectionLabel icon={<Battery size={12} className="text-gray-400" />}>
                 Devices
               </SectionLabel>
               <div className="space-y-2.5">
-                <PowerwallCard summary={summary} scheduleLine={pwSchedule} />
-                <NestCard scheduleLine={nestSchedule} readOnly />
-                <BMWCard scheduleLine={evSchedule} />
+                <PowerwallCard
+                  summary={summary}
+                  scheduleLine={pwSchedule}
+                  reservePct={optState?.pw_reserve_pct}
+                  onReserveChange={v => updateControl({ pw_reserve_pct: v })}
+                />
+                <NestCard
+                  scheduleLine={nestSchedule}
+                  readOnly
+                  comfortMin={optState?.comfort_min_f}
+                  comfortMax={optState?.comfort_max_f}
+                  onComfortMinChange={v => updateControl({ comfort_min_f: v })}
+                  onComfortMaxChange={v => updateControl({ comfort_max_f: v })}
+                />
+                <BMWCard
+                  scheduleLine={evSchedule}
+                  evMinPct={optState?.ev_min_pct}
+                  evMaxPct={optState?.ev_max_pct}
+                  onEvMinChange={v => updateControl({ ev_min_pct: v })}
+                  onEvMaxChange={v => updateControl({ ev_max_pct: v })}
+                />
               </div>
-            </section>
-          )}
-
-          {/* Controls */}
-          {optState && (
-            <section>
-              <SectionLabel icon={<Settings2 size={12} className="text-gray-400" />}>
-                Controls
-              </SectionLabel>
-              <ControlsModule optState={optState} onUpdate={updateControl} />
             </section>
           )}
 
