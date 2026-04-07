@@ -59,6 +59,46 @@ async def lifespan(app: FastAPI):
     ]:
         await pool.execute(col_sql)
 
+    # Optimizer tables
+    await pool.execute("""
+        CREATE TABLE IF NOT EXISTS optimizer_log (
+            id SERIAL PRIMARY KEY,
+            account_id UUID REFERENCES accounts(id),
+            ts TIMESTAMPTZ NOT NULL,
+            action TEXT NOT NULL,
+            device TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            details JSONB DEFAULT '{}',
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    await pool.execute("""
+        CREATE TABLE IF NOT EXISTS optimizer_state (
+            account_id UUID PRIMARY KEY REFERENCES accounts(id),
+            auto_mode BOOLEAN DEFAULT TRUE,
+            disabled_until TIMESTAMPTZ,
+            pw_reserve_pct INT DEFAULT 20,
+            comfort_min_f INT DEFAULT 68,
+            comfort_max_f INT DEFAULT 78,
+            ev_min_pct INT DEFAULT 60,
+            ev_max_pct INT DEFAULT 90,
+            device_overrides JSONB DEFAULT '{}',
+            current_plan JSONB,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    await pool.execute("""
+        CREATE TABLE IF NOT EXISTS weather_history (
+            id SERIAL PRIMARY KEY,
+            account_id UUID REFERENCES accounts(id),
+            ts TIMESTAMPTZ NOT NULL,
+            cloud_cover_pct FLOAT,
+            temp_f FLOAT,
+            conditions TEXT,
+            UNIQUE(account_id, ts)
+        )
+    """)
+
     # Fix kv_store: replace single-column PK with composite (key, account_id)
     try:
         pk_col_count = await pool.fetchval("""
@@ -146,11 +186,16 @@ async def lifespan(app: FastAPI):
         run_daily_aggregation, "cron", hour=6, minute=50, args=[pool], id="daily",
     )
 
-    # Weekly summary disabled (no notification channel)
+    # Optimizer — every hour at :05 (after poller has fresh data)
+    from backend.optimizer.engine import run_all_accounts as run_optimizer
+    scheduler.add_job(
+        run_optimizer, "interval", hours=1, minutes=0, args=[pool], id="optimizer",
+        next_run_time=dt_cls.now() + __import__("datetime").timedelta(minutes=2),
+    )
 
     scheduler.start()
 
-    logger.info("WattWise started — poller, daily, weekly jobs")
+    logger.info("WattWise started — poller, daily, optimizer jobs")
 
     yield
 
@@ -171,6 +216,9 @@ app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(nest_router)
 app.include_router(smartcar_router)
+
+from backend.optimizer.api import router as optimizer_router
+app.include_router(optimizer_router)
 
 
 @app.get("/health")
