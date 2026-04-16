@@ -78,21 +78,18 @@ export default function EnergyForecastChart({ plan }: Props) {
 
   // Build lookup maps from plan.hours
   // IMPORTANT: plan hours are in UTC — convert to local time for display
-  const tzOffsetHours = useMemo(() => new Date().getTimezoneOffset() / 60, []);
-
   const { solarByHour, loadByHour } = useMemo(() => {
     const solar: Record<number, number> = {};
     const load: Record<number, number> = {};
     if (plan?.hours) {
       for (const h of plan.hours) {
-        // Convert UTC hour → local hour
-        const localHour = (h.hour - tzOffsetHours + 24) % 24;
-        solar[localHour] = (h.solar_w ?? 0) / 1000; // watts → kW
-        load[localHour] = (h.base_load_w ?? 0) / 1000;
+        // plan.hours[].hour is already a local clock hour (set by backend score.py)
+        solar[h.hour] = (h.solar_w ?? 0) / 1000; // watts → kW
+        load[h.hour] = (h.base_load_w ?? 0) / 1000;
       }
     }
     return { solarByHour: solar, loadByHour: load };
-  }, [plan, tzOffsetHours]);
+  }, [plan]);
 
   const hasPlanData = plan?.hours && plan.hours.length > 0;
 
@@ -156,11 +153,10 @@ export default function EnergyForecastChart({ plan }: Props) {
       return segs;
     }
 
-    // Convert UTC hours to local for display
-    const toLocal = (utcH: number) => (utcH - tzOffsetHours + 24) % 24;
-    const pwActions = hours.map(h => ({ hour: toLocal(h.hour), action: h.pw_action })).sort((a, b) => a.hour - b.hour);
-    const evActions = hours.map(h => ({ hour: toLocal(h.hour), action: h.ev_action })).sort((a, b) => a.hour - b.hour);
-    const hvacActions = hours.map(h => ({ hour: toLocal(h.hour), action: h.hvac_action })).sort((a, b) => a.hour - b.hour);
+    // plan.hours[].hour is already local — no conversion needed
+    const pwActions = hours.map(h => ({ hour: h.hour, action: h.pw_action })).sort((a, b) => a.hour - b.hour);
+    const evActions = hours.map(h => ({ hour: h.hour, action: h.ev_action })).sort((a, b) => a.hour - b.hour);
+    const hvacActions = hours.map(h => ({ hour: h.hour, action: h.hvac_action })).sort((a, b) => a.hour - b.hour);
 
     pw.push(
       ...collapse(pwActions, { charge: "rgba(34,197,94,0.55)", discharge: "rgba(249,115,22,0.55)" })

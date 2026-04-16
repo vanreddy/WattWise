@@ -68,8 +68,9 @@ function PowerwallCard({
 }) {
   if (!summary) return null;
   const { battery_pct, battery_w } = summary.current;
-  const isCharging = battery_w > 100;
-  const isDischarging = battery_w < -100;
+  // Tesla convention: battery_w > 0 = discharging, battery_w < 0 = charging
+  const isDischarging = battery_w > 100;
+  const isCharging = battery_w < -100;
   const powerKw = Math.abs(battery_w / 1000).toFixed(1);
 
   const statusText = isCharging
