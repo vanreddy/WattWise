@@ -11,6 +11,7 @@ import math
 import os
 from datetime import datetime, timedelta, timezone, date as date_type
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import asyncpg
 import httpx
@@ -23,6 +24,9 @@ OWM_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY", "")
 OWM_BASE = "https://api.openweathermap.org/data/3.0/onecall"
 CLOUD_COVER_COEFF = 0.8  # 100% clouds → 20% of clear-sky output
 DECAY_FACTOR = 0.85      # Exponential decay for historical weighting
+
+# Account timezone — used to map UTC timestamps to local clock hours
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 # ─── Seasonal Clear-Sky Model ───
 # Alamo, CA latitude — used to compute solar declination and day length
@@ -166,7 +170,8 @@ async def predict_solar(
     Returns: {hour_offset: predicted_watts, ...} where offset 0 = current hour.
     """
     now = now or datetime.now(timezone.utc)
-    local_hour = now.hour  # Simplified — use account timezone later
+    local_now = now.astimezone(LOCAL_TZ)
+    local_hour = local_now.hour
 
     # Step 1: Fetch last 14 days of hourly solar data
     rows = await pool.fetch("""
@@ -184,14 +189,17 @@ async def predict_solar(
         logger.warning("No solar history for prediction — returning zeros")
         return {h: 0.0 for h in range(24)}
 
-    # Organize by day → hour
-    # day_data[days_ago][hour] = avg_solar_w
+    # Organize by day → local hour
+    # day_data[days_ago][local_hour] = avg_solar_w
+    today_local = local_now.date()
     day_data: dict[int, dict[int, float]] = {}
     for row in rows:
         hour_ts = row["hour_ts"]
-        days_ago = (now.date() - hour_ts.date()).days
+        # Convert UTC timestamp to local for correct day/hour grouping
+        local_ts = hour_ts.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        days_ago = (today_local - local_ts.date()).days
         if 1 <= days_ago <= 14:
-            hr = hour_ts.hour
+            hr = local_ts.hour
             day_data.setdefault(days_ago, {})[hr] = row["avg_solar_w"]
 
     # Step 2: Get historical weather (cloud cover) for normalization
@@ -204,7 +212,8 @@ async def predict_solar(
 
     hist_clouds: dict[str, float] = {}
     for wr in weather_rows:
-        key = f"{wr['ts'].date()}_{wr['ts'].hour}"
+        local_wts = wr['ts'].astimezone(LOCAL_TZ) if wr['ts'].tzinfo else wr['ts'].replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        key = f"{local_wts.date()}_{local_wts.hour}"
         hist_clouds[key] = wr["cloud_cover_pct"] or 0.0
 
     # Step 3: Seasonal detrend at daily level + weather normalization
@@ -215,13 +224,13 @@ async def predict_solar(
     # Average those ratios, multiply by today's potential → predicted daily kWh
     # Then distribute across hours using today's clear-sky shape + weather forecast
 
-    today_potential = clear_sky_potential(now.date())
-    today_shape = clear_sky_hourly_shape(now.date())
+    today_potential = clear_sky_potential(today_local)
+    today_shape = clear_sky_hourly_shape(today_local)
 
     daily_ratios: list[tuple[float, float]] = []  # (ratio_kwh, weight)
     for days_ago, hours in sorted(day_data.items()):
         weight = DECAY_FACTOR ** (days_ago - 1)
-        hist_date = (now - timedelta(days=days_ago)).date()
+        hist_date = (today_local - timedelta(days=days_ago))
         hist_potential = clear_sky_potential(hist_date)
 
         # Weather-normalize each hour, then sum to daily kWh
@@ -248,7 +257,9 @@ async def predict_solar(
 
     forecast_clouds: dict[int, float] = {}
     for f in weather_forecast:
-        forecast_clouds[f["hour"]] = f["clouds_pct"]
+        # Convert UTC forecast hour to local hour
+        local_fhr = f["dt"].astimezone(LOCAL_TZ).hour if "dt" in f else f["hour"]
+        forecast_clouds[local_fhr] = f["clouds_pct"]
 
     predictions: dict[int, float] = {}
     for offset in range(24):
@@ -283,13 +294,14 @@ async def predict_base_load(
     Falls back to older data only if not enough reliable days exist.
     """
     now = now or datetime.now(timezone.utc)
-    weekday = now.weekday()  # 0=Monday
+    local_now = now.astimezone(LOCAL_TZ)
+    weekday = local_now.weekday()  # 0=Monday
 
     # Find same-weekday days in last 56 days, preferring ones with reliable EV data
     reliable_days = []
     fallback_days = []
     for days_ago in range(1, 57):
-        d = now - timedelta(days=days_ago)
+        d = local_now - timedelta(days=days_ago)
         if d.weekday() == weekday:
             if d.date() >= VEHICLE_W_RELIABLE_AFTER:
                 reliable_days.append(d.date())
@@ -326,11 +338,12 @@ async def predict_base_load(
     # we accept the noise since reliable days will increasingly dominate.
     hourly_loads: dict[int, list[float]] = {}
     for row in rows:
-        hr = row["hour_ts"].hour
+        local_ts = row["hour_ts"].replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        hr = local_ts.hour
         base = max(0, row["avg_home_w"] - row["avg_ev_w"])
         hourly_loads.setdefault(hr, []).append(base)
 
-    local_hour = now.hour
+    local_hour = local_now.hour
     predictions: dict[int, float] = {}
     for offset in range(24):
         target_hour = (local_hour + offset) % 24
@@ -350,11 +363,13 @@ async def predict_base_load(
 def extract_temp_forecast(weather_forecast: list[dict], now: Optional[datetime] = None) -> dict[int, float]:
     """Extract outdoor temperature (°F) for next 24 hours from weather forecast."""
     now = now or datetime.now(timezone.utc)
-    local_hour = now.hour
+    local_now = now.astimezone(LOCAL_TZ)
+    local_hour = local_now.hour
 
     temp_by_hour: dict[int, float] = {}
     for f in weather_forecast:
-        temp_by_hour[f["hour"]] = f["temp_f"]
+        local_fhr = f["dt"].astimezone(LOCAL_TZ).hour if "dt" in f else f["hour"]
+        temp_by_hour[local_fhr] = f["temp_f"]
 
     predictions: dict[int, float] = {}
     for offset in range(24):

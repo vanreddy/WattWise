@@ -9,6 +9,9 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +232,7 @@ def generate_plan(
     Peak hours get fixed behavior (no scoring).
     """
     now = now or datetime.now(timezone.utc)
-    local_hour = now.hour
+    local_hour = now.astimezone(LOCAL_TZ).hour
     plan = DayPlan(generated_at=now)
     total_savings = 0.0
 
