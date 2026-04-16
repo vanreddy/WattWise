@@ -230,24 +230,6 @@ export interface OptimizerPlan {
   };
 }
 
-export interface OptimizerLogEntry {
-  ts: string;
-  action: string;
-  device: string;
-  reason: string;
-  details: Record<string, unknown>;
-}
-
-export interface OptimizerState {
-  auto_mode: boolean;
-  disabled_until: string | null;
-  pw_reserve_pct: number;
-  comfort_min_f: number;
-  comfort_max_f: number;
-  ev_min_pct: number;
-  ev_max_pct: number;
-  device_overrides: Record<string, string | null>;
-}
 
 /* ─── Authenticated POST helper ─── */
 
@@ -344,9 +326,4 @@ export const api = {
 
   // ─── Optimizer ───
   getOptimizerPlan: () => fetchJSON<{ plan: OptimizerPlan | null }>("/optimizer/plan"),
-  getOptimizerLog: (hours = 24) => fetchJSON<{ entries: OptimizerLogEntry[] }>(`/optimizer/log?hours=${hours}`),
-  getOptimizerState: () => fetchJSON<OptimizerState>("/optimizer/state"),
-  updateOptimizerState: (updates: Partial<OptimizerState>) =>
-    postJSON<{ status: string }>("/optimizer/state", updates),
-  triggerOptimizer: () => postJSON<{ status: string; plan_summary?: string }>("/optimizer/run"),
 };

@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
-  Zap,
   BatteryWarning,
   Sun,
   Car,
@@ -16,13 +15,12 @@ import {
   PlugZap,
   RefreshCw,
   Battery,
-  Activity,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
   SummaryResponse, DailySummary, Alert, NestDevice,
   SmartcarVehicle, SmartcarVehicleStatus,
-  OptimizerPlan, OptimizerLogEntry, OptimizerState,
+  OptimizerPlan,
 } from "@/lib/api";
 import { api } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
@@ -58,11 +56,6 @@ function fToDisplay(f: number | null): string {
   return `${f}°F`;
 }
 
-function fmtHour(h: number): string {
-  if (h === 0 || h === 24) return "12am";
-  if (h === 12) return "12pm";
-  return h < 12 ? `${h}am` : `${h - 12}pm`;
-}
 
 /* ═══════════════════════════════════════════════ */
 /* ═══ SHARED DEVICE CARDS ═══════════════════════ */
@@ -70,14 +63,8 @@ function fmtHour(h: number): string {
 
 function PowerwallCard({
   summary,
-  scheduleLine,
-  reservePct,
-  onReserveChange,
 }: {
   summary: SummaryResponse | null;
-  scheduleLine?: string;
-  reservePct?: number;
-  onReserveChange?: (v: number) => void;
 }) {
   if (!summary) return null;
   const { battery_pct, battery_w } = summary.current;
@@ -117,30 +104,13 @@ function PowerwallCard({
           style={{ width: `${pct}%` }}
         />
       </div>
-      {scheduleLine && (
-        <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-white/[0.04] text-[10px] text-gray-500">
-          <span className="w-4 h-4 rounded bg-yellow-500/10 flex items-center justify-center text-yellow-400 text-[9px]">⏱</span>
-          <span dangerouslySetInnerHTML={{ __html: scheduleLine }} />
-        </div>
-      )}
-      {reservePct != null && onReserveChange && (
-        <InlineSlider
-          label="Reserve"
-          value={reservePct}
-          min={0}
-          max={100}
-          step={5}
-          formatValue={v => `${v}%`}
-          onChange={onReserveChange}
-        />
-      )}
     </div>
   );
 }
 
 /* ─── Nest Thermostat Mini Card ─── */
 
-function NestThermostatMini({ device, onRefresh, readOnly }: { device: NestDevice; onRefresh: () => void; readOnly?: boolean }) {
+function NestThermostatMini({ device, onRefresh }: { device: NestDevice; onRefresh: () => void }) {
   const [commanding, setCommanding] = useState(false);
   const ambientF = cToF(device.ambient_temp_c);
   const coolSetpointF = cToF(device.cool_setpoint_c);
@@ -186,50 +156,34 @@ function NestThermostatMini({ device, onRefresh, readOnly }: { device: NestDevic
           <span className="text-[26px] font-bold leading-none">{fToDisplay(ambientF)}</span>
           {device.humidity_pct != null && <span className="text-[10px] text-gray-500 ml-1.5">{device.humidity_pct}%</span>}
         </div>
-        {readOnly ? (
-          /* Auto mode: show current mode as a static badge */
-          <div className="flex items-center gap-1.5 mt-auto">
-            <span className={`text-[9px] font-semibold px-2 py-1 rounded-md ${
-              effectiveMode === "COOL" ? "text-blue-400 bg-blue-500/[0.12]" :
-              effectiveMode === "HEAT" ? "text-orange-400 bg-orange-500/[0.12]" :
-              effectiveMode === "ECO" ? "text-green-400 bg-green-500/[0.12]" :
-              "text-gray-500 bg-white/[0.05]"
-            }`}>{effectiveMode}</span>
-            {setpointF != null && <span className="text-[10px] text-gray-500">→ {setpointF}°F</span>}
-          </div>
-        ) : (
-          /* Manual mode: full controls */
-          <>
-            <div className="flex gap-0.5 bg-white/[0.03] rounded-lg p-0.5 mb-2">
-              {([
-                { key: "OFF", label: "Off", color: "text-gray-400 bg-white/[0.08]" },
-                { key: "COOL", label: "Cool", color: "text-blue-400 bg-blue-500/[0.15]" },
-                { key: "HEAT", label: "Heat", color: "text-orange-400 bg-orange-500/[0.15]" },
-                { key: "ECO", label: "Eco", color: "text-green-400 bg-green-500/[0.15]" },
-              ] as const).map(({ key, label, color }) => (
-                <button key={key} onClick={() => switchMode(key)} disabled={commanding}
-                  className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold transition-all disabled:opacity-50 ${effectiveMode === key ? color : "text-gray-600 hover:text-gray-400"}`}>
-                  {label}
-                </button>
-              ))}
+        <div className="flex gap-0.5 bg-white/[0.03] rounded-lg p-0.5 mb-2">
+          {([
+            { key: "OFF", label: "Off", color: "text-gray-400 bg-white/[0.08]" },
+            { key: "COOL", label: "Cool", color: "text-blue-400 bg-blue-500/[0.15]" },
+            { key: "HEAT", label: "Heat", color: "text-orange-400 bg-orange-500/[0.15]" },
+            { key: "ECO", label: "Eco", color: "text-green-400 bg-green-500/[0.15]" },
+          ] as const).map(({ key, label, color }) => (
+            <button key={key} onClick={() => switchMode(key)} disabled={commanding}
+              className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold transition-all disabled:opacity-50 ${effectiveMode === key ? color : "text-gray-600 hover:text-gray-400"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {(effectiveMode === "COOL" || effectiveMode === "HEAT" || effectiveMode === "HEATCOOL") && (
+          <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5">
+            <button onClick={() => adjustTemp(-1)} disabled={commanding}
+              className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
+              <ChevronDown size={16} />
+            </button>
+            <div className="text-center">
+              <div className="text-[10px] text-gray-500 leading-none">Set to</div>
+              <div className="text-sm font-bold text-blue-400 leading-tight">{setpointF != null ? `${setpointF}°F` : "—"}</div>
             </div>
-            {(effectiveMode === "COOL" || effectiveMode === "HEAT" || effectiveMode === "HEATCOOL") && (
-              <div className="flex items-center justify-between bg-white/[0.03] rounded-lg px-2 py-1.5">
-                <button onClick={() => adjustTemp(-1)} disabled={commanding}
-                  className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
-                  <ChevronDown size={16} />
-                </button>
-                <div className="text-center">
-                  <div className="text-[10px] text-gray-500 leading-none">Set to</div>
-                  <div className="text-sm font-bold text-blue-400 leading-tight">{setpointF != null ? `${setpointF}°F` : "—"}</div>
-                </div>
-                <button onClick={() => adjustTemp(1)} disabled={commanding}
-                  className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
-                  <ChevronUp size={16} />
-                </button>
-              </div>
-            )}
-          </>
+            <button onClick={() => adjustTemp(1)} disabled={commanding}
+              className="w-8 h-8 flex items-center justify-center rounded-md bg-white/[0.06] text-gray-300 text-sm font-bold hover:bg-white/[0.12] disabled:opacity-30 transition-colors">
+              <ChevronUp size={16} />
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -238,21 +192,7 @@ function NestThermostatMini({ device, onRefresh, readOnly }: { device: NestDevic
 
 /* ─── Nest Card ─── */
 
-function NestCard({
-  scheduleLine,
-  readOnly,
-  comfortMin,
-  comfortMax,
-  onComfortMinChange,
-  onComfortMaxChange,
-}: {
-  scheduleLine?: string;
-  readOnly?: boolean;
-  comfortMin?: number;
-  comfortMax?: number;
-  onComfortMinChange?: (v: number) => void;
-  onComfortMaxChange?: (v: number) => void;
-}) {
+function NestCard() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<NestDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -295,45 +235,15 @@ function NestCard({
         <button onClick={fetchStatus} className="text-gray-600 hover:text-gray-400 transition-colors"><RefreshCw size={14} /></button>
       </div>
       <div className="grid grid-cols-2 gap-2.5">
-        {devices.map(d => <NestThermostatMini key={d.device_id} device={d} onRefresh={fetchStatus} readOnly={readOnly} />)}
+        {devices.map(d => <NestThermostatMini key={d.device_id} device={d} onRefresh={fetchStatus} />)}
       </div>
-      {scheduleLine && (
-        <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-white/[0.04] text-[10px] text-gray-500">
-          <span className="w-4 h-4 rounded bg-blue-500/10 flex items-center justify-center text-blue-400 text-[9px]">⏱</span>
-          <span dangerouslySetInnerHTML={{ __html: scheduleLine }} />
-        </div>
-      )}
-      {comfortMin != null && comfortMax != null && onComfortMinChange && onComfortMaxChange && (
-        <InlineRangeSlider
-          label="Comfort"
-          low={comfortMin}
-          high={comfortMax}
-          min={60}
-          max={85}
-          formatValue={(lo, hi) => `${lo}–${hi}°`}
-          onChangeLow={onComfortMinChange}
-          onChangeHigh={onComfortMaxChange}
-        />
-      )}
     </div>
   );
 }
 
 /* ─── BMW Card ─── */
 
-function BMWCard({
-  scheduleLine,
-  evMinPct,
-  evMaxPct,
-  onEvMinChange,
-  onEvMaxChange,
-}: {
-  scheduleLine?: string;
-  evMinPct?: number;
-  evMaxPct?: number;
-  onEvMinChange?: (v: number) => void;
-  onEvMaxChange?: (v: number) => void;
-}) {
+function BMWCard() {
   const { user } = useAuth();
   const [vehicle, setVehicle] = useState<SmartcarVehicle | null>(null);
   const [status, setStatus] = useState<SmartcarVehicleStatus | null>(null);
@@ -406,7 +316,7 @@ function BMWCard({
           <div className="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-1000" style={{ width: `${pct}%` }} />
         </div>
       )}
-      {isPlugged && !scheduleLine && (
+      {isPlugged && (
         <div className="mt-2 pt-2 border-t border-white/[0.04]">
           <button onClick={handleChargeToggle} disabled={commanding}
             className={`w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold py-2 rounded-lg transition-all border ${isCharging ? "bg-red-500/[0.08] text-red-400 border-red-500/20" : "bg-green-500/[0.08] text-green-400 border-green-500/20"} disabled:opacity-50`}>
@@ -414,167 +324,6 @@ function BMWCard({
           </button>
         </div>
       )}
-      {scheduleLine && (
-        <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-white/[0.04] text-[10px] text-gray-500">
-          <span className="w-4 h-4 rounded bg-purple-500/10 flex items-center justify-center text-purple-400 text-[9px]">⏱</span>
-          <span dangerouslySetInnerHTML={{ __html: scheduleLine }} />
-        </div>
-      )}
-      {evMinPct != null && evMaxPct != null && onEvMinChange && onEvMaxChange && (
-        <InlineRangeSlider
-          label="EV Target"
-          low={evMinPct}
-          high={evMaxPct}
-          min={20}
-          max={100}
-          step={5}
-          formatValue={(lo, hi) => `${lo}–${hi}%`}
-          onChangeLow={onEvMinChange}
-          onChangeHigh={onEvMaxChange}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════ */
-/* ═══ AUTO MODE COMPONENTS ══════════════════════ */
-/* ═══════════════════════════════════════════════ */
-
-function ActivityLog({ entries }: { entries: OptimizerLogEntry[] }) {
-  const DEVICE_COLORS: Record<string, string> = {
-    powerwall: "bg-green-400", ev: "bg-purple-400", nest: "bg-blue-400",
-  };
-
-  if (entries.length === 0) return (
-    <div className="text-[11px] text-gray-600 text-center py-3">No activity yet today</div>
-  );
-
-  return (
-    <div>
-      {entries.slice(0, 6).map((e, i) => {
-        const d = new Date(e.ts);
-        const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
-        return (
-          <div key={i} className="flex gap-2 py-2 border-b border-white/[0.02] last:border-0">
-            <span className="text-[10px] text-gray-600 font-medium w-[52px] shrink-0">{timeStr}</span>
-            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${DEVICE_COLORS[e.device] || "bg-gray-500"}`} />
-            <span className="text-[11px] text-gray-400 leading-relaxed">{e.reason}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════ */
-/* ═══ INLINE SLIDER CONTROLS ═══════════════════ */
-/* ═══════════════════════════════════════════════ */
-
-function InlineSlider({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  formatValue,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  formatValue: (v: number) => string;
-  onChange: (v: number) => void;
-}) {
-  const pct = ((value - min) / (max - min)) * 100;
-  return (
-    <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-white/[0.04]">
-      <span className="text-[11px] text-gray-500 shrink-0">{label}</span>
-      <div className="flex items-center gap-2 flex-1 justify-end">
-        <div className="relative w-[120px] h-[4px] bg-[#1a1f2e] rounded-full">
-          <div className="h-full rounded-full bg-yellow-400/60" style={{ width: `${pct}%` }} />
-          <input
-            type="range" min={min} max={max} step={step} value={value}
-            onChange={e => onChange(Number(e.target.value))}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-[14px] h-[14px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none"
-            style={{ left: `calc(${pct}% - 7px)` }}
-          />
-        </div>
-        <span className="text-[12px] font-semibold text-gray-200 tabular-nums min-w-[36px] text-right">{formatValue(value)}</span>
-      </div>
-    </div>
-  );
-}
-
-function InlineRangeSlider({
-  label,
-  low,
-  high,
-  min,
-  max,
-  step = 1,
-  formatValue,
-  onChangeLow,
-  onChangeHigh,
-}: {
-  label: string;
-  low: number;
-  high: number;
-  min: number;
-  max: number;
-  step?: number;
-  formatValue: (lo: number, hi: number) => string;
-  onChangeLow: (v: number) => void;
-  onChangeHigh: (v: number) => void;
-}) {
-  const range = max - min;
-  const loPct = ((low - min) / range) * 100;
-  const hiPct = ((high - min) / range) * 100;
-  return (
-    <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-white/[0.04]">
-      <span className="text-[11px] text-gray-500 shrink-0">{label}</span>
-      <div className="flex items-center gap-2 flex-1 justify-end">
-        <div className="relative w-[120px] h-[4px] bg-[#1a1f2e] rounded-full">
-          {/* Filled range between low and high */}
-          <div
-            className="absolute h-full rounded-full bg-yellow-400/60"
-            style={{ left: `${loPct}%`, width: `${hiPct - loPct}%` }}
-          />
-          {/* Low thumb - invisible input overlay */}
-          <input
-            type="range" min={min} max={max} step={step} value={low}
-            onChange={e => {
-              const v = Number(e.target.value);
-              if (v < high) onChangeLow(v);
-            }}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-          />
-          {/* High thumb - invisible input overlay */}
-          <input
-            type="range" min={min} max={max} step={step} value={high}
-            onChange={e => {
-              const v = Number(e.target.value);
-              if (v > low) onChangeHigh(v);
-            }}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-          />
-          {/* Visual thumb dots */}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-[12px] h-[12px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none z-30"
-            style={{ left: `calc(${loPct}% - 6px)` }}
-          />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-[12px] h-[12px] bg-white rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none z-30"
-            style={{ left: `calc(${hiPct}% - 6px)` }}
-          />
-        </div>
-        <span className="text-[12px] font-semibold text-gray-200 tabular-nums min-w-[60px] text-right">{formatValue(low, high)}</span>
-      </div>
     </div>
   );
 }
@@ -669,114 +418,28 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
   const realtime = useMemo(() => realtimeSuggestions(summary, daily), [summary, daily]);
   const hasDevices = user?.nest_connected || user?.smartcar_connected;
 
-  // ─── Optimizer state ───
-  const [optState, setOptState] = useState<OptimizerState | null>(null);
+  // Fetch optimizer plan for forecast chart
   const [plan, setPlan] = useState<OptimizerPlan | null>(null);
-  const [logEntries, setLogEntries] = useState<OptimizerLogEntry[]>([]);
-  const [autoMode, setAutoMode] = useState(true);
-  const [toggling, setToggling] = useState(false);
 
-  // Fetch optimizer data
-  const fetchOptimizerData = useCallback(async () => {
+  const fetchPlan = useCallback(async () => {
     try {
-      const [stateRes, planRes, logRes] = await Promise.all([
-        api.getOptimizerState(),
-        api.getOptimizerPlan(),
-        api.getOptimizerLog(24),
-      ]);
-      setOptState(stateRes);
-      setAutoMode(stateRes.auto_mode);
+      const planRes = await api.getOptimizerPlan();
       setPlan(planRes.plan);
-      setLogEntries(logRes.entries);
     } catch {
       // Silently fail — optimizer may not be running yet
     }
   }, []);
 
   useEffect(() => {
-    fetchOptimizerData();
-    const interval = setInterval(fetchOptimizerData, 60000); // Refresh every 60s
+    fetchPlan();
+    const interval = setInterval(fetchPlan, 60000);
     return () => clearInterval(interval);
-  }, [fetchOptimizerData]);
-
-  // Update optimizer controls (debounced save to backend)
-  const updateControl = useCallback(async (updates: Partial<OptimizerState>) => {
-    // Optimistic local update
-    setOptState(prev => prev ? { ...prev, ...updates } : prev);
-    try {
-      await api.updateOptimizerState(updates as Record<string, unknown>);
-    } catch {
-      // Revert on error by refetching
-      fetchOptimizerData();
-    }
-  }, [fetchOptimizerData]);
-
-  // Toggle auto mode
-  async function toggleAutoMode() {
-    if (toggling) return;
-    setToggling(true);
-    const newMode = !autoMode;
-    setAutoMode(newMode);
-
-    try {
-      if (newMode) {
-        await api.updateOptimizerState({ auto_mode: true, disabled_until: null });
-        // Trigger immediate optimization
-        await api.triggerOptimizer();
-        await fetchOptimizerData();
-      } else {
-        // Default: disable until tomorrow 9 AM
-        const tomorrow9am = new Date();
-        tomorrow9am.setDate(tomorrow9am.getDate() + 1);
-        tomorrow9am.setHours(9, 0, 0, 0);
-        await api.updateOptimizerState({
-          auto_mode: false,
-          disabled_until: tomorrow9am.toISOString(),
-        });
-      }
-    } catch {
-      setAutoMode(!newMode); // Revert on error
-    } finally {
-      setToggling(false);
-    }
-  }
-
-  // ─── Build schedule lines from plan for device cards ───
-  let pwSchedule: string | undefined;
-  let nestSchedule: string | undefined;
-  let evSchedule: string | undefined;
-
-  if (plan && autoMode) {
-    // Find first PW action
-    const pwCharge = plan.hours.find(h => h.pw_action === "charge");
-    const pwDischarge = plan.hours.find(h => h.pw_action === "discharge");
-    if (pwCharge && pwDischarge) {
-      pwSchedule = `Charging → discharge at <strong class="text-gray-300">${fmtHour(pwDischarge.hour)}</strong> for peak`;
-    } else if (pwDischarge) {
-      pwSchedule = `Discharging at <strong class="text-gray-300">${fmtHour(pwDischarge.hour)}</strong>`;
-    }
-
-    // Find HVAC actions
-    const precool = plan.hours.find(h => h.hvac_action === "precool");
-    const eco = plan.hours.find(h => h.hvac_action === "eco");
-    if (precool && eco) {
-      nestSchedule = `Pre-cool to <strong class="text-gray-300">${precool.hvac_setpoint_f}°F at ${fmtHour(precool.hour)}</strong> → eco at ${fmtHour(eco.hour)}`;
-    } else if (precool) {
-      nestSchedule = `Pre-cool to <strong class="text-gray-300">${precool.hvac_setpoint_f}°F at ${fmtHour(precool.hour)}</strong>`;
-    }
-
-    // Find EV actions
-    const evCharge = plan.hours.find(h => h.ev_action === "charge");
-    if (evCharge) {
-      const evEnd = plan.hours.filter(h => h.ev_action === "charge").pop();
-      evSchedule = `Charge <strong class="text-gray-300">${fmtHour(evCharge.hour)}–${fmtHour((evEnd?.hour ?? evCharge.hour) + 1)}</strong> from solar`;
-    }
-  }
+  }, [fetchPlan]);
 
   return (
     <div className="space-y-5">
 
-      {/* ═══ ENERGY FORECAST (shared — both modes) ═══ */}
+      {/* ═══ 1. DAILY PREDICTION CHART ═══ */}
       <section>
         <SectionLabel icon={<Sun size={12} className="text-yellow-400" />}>
           Energy Forecast
@@ -784,126 +447,39 @@ export default function OptimizeTab({ summary, daily, alerts: _alerts }: Props) 
         <EnergyForecastChart plan={plan} />
       </section>
 
-      {/* ═══ AUTO MODE TOGGLE ═══ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <button onClick={toggleAutoMode} disabled={toggling}
-            className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${
-              autoMode ? "bg-yellow-400 shadow-[0_0_16px_rgba(234,179,8,0.15)]" : "bg-gray-700"
-            }`}>
-            <div className={`absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${autoMode ? "translate-x-5" : ""}`} />
-          </button>
-          <div>
-            <div className="text-sm font-semibold">Auto Mode</div>
-            <div className="text-[10px] text-gray-500">
-              {autoMode ? "Optimizing your energy" : "Paused — manual control"}
-            </div>
+      {/* ═══ 2. RECOMMENDATIONS ═══ */}
+      {realtime.length > 0 && (
+        <section>
+          <SectionLabel icon={<Lightbulb size={12} className="text-yellow-400" />}>
+            Recommendations
+          </SectionLabel>
+          <div className="space-y-2.5">
+            {realtime.map(s => <SuggestionCard key={s.id} s={s} />)}
           </div>
-        </div>
-      </div>
-
-      {/* ═══ AUTO MODE CONTENT ═══ */}
-      {autoMode && (
-        <>
-          {/* Devices (with schedule footers + inline controls) */}
-          {hasDevices && (
-            <section>
-              <SectionLabel icon={<Battery size={12} className="text-gray-400" />}>
-                Devices
-              </SectionLabel>
-              <div className="space-y-2.5">
-                <PowerwallCard
-                  summary={summary}
-                  scheduleLine={pwSchedule}
-                  reservePct={optState?.pw_reserve_pct}
-                  onReserveChange={v => updateControl({ pw_reserve_pct: v })}
-                />
-                <NestCard
-                  scheduleLine={nestSchedule}
-                  readOnly
-                  comfortMin={optState?.comfort_min_f}
-                  comfortMax={optState?.comfort_max_f}
-                  onComfortMinChange={v => updateControl({ comfort_min_f: v })}
-                  onComfortMaxChange={v => updateControl({ comfort_max_f: v })}
-                />
-                <BMWCard
-                  scheduleLine={evSchedule}
-                  evMinPct={optState?.ev_min_pct}
-                  evMaxPct={optState?.ev_max_pct}
-                  onEvMinChange={v => updateControl({ ev_min_pct: v })}
-                  onEvMaxChange={v => updateControl({ ev_max_pct: v })}
-                />
-              </div>
-            </section>
-          )}
-
-          {/* Activity Log */}
-          <section>
-            <SectionLabel icon={<Activity size={12} className="text-gray-400" />}>
-              Activity
-            </SectionLabel>
-            <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-              <ActivityLog entries={logEntries} />
-            </div>
-          </section>
-
-          {/* This Week */}
-          {plan && (
-            <section>
-              <SectionLabel icon={<Zap size={12} className="text-gray-400" />}>
-                This Week
-              </SectionLabel>
-              <div className="bg-[#111827] rounded-xl p-3.5 border border-white/[0.04] relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-gray-400">Automations saved</span>
-                  <span className="text-sm font-bold text-green-400">~${plan.total_savings_est.toFixed(2)}</span>
-                </div>
-              </div>
-            </section>
-          )}
-        </>
+        </section>
       )}
 
-      {/* ═══ MANUAL MODE CONTENT ═══ */}
-      {!autoMode && (
-        <>
-          {/* Right Now */}
-          {realtime.length > 0 && (
-            <section>
-              <SectionLabel icon={<Zap size={12} className="text-yellow-400" />}>
-                Right Now
-              </SectionLabel>
-              <div className="space-y-2.5">
-                {realtime.map(s => <SuggestionCard key={s.id} s={s} />)}
-              </div>
-            </section>
-          )}
+      {/* ═══ 3. DEVICE CONTROLS ═══ */}
+      {hasDevices && (
+        <section>
+          <SectionLabel icon={<Battery size={12} className="text-gray-400" />}>
+            Devices
+          </SectionLabel>
+          <div className="space-y-2.5">
+            <PowerwallCard summary={summary} />
+            <NestCard />
+            <BMWCard />
+          </div>
+        </section>
+      )}
 
-          {/* Devices (with controls, no schedule) */}
-          {hasDevices && (
-            <section>
-              <SectionLabel icon={<Battery size={12} className="text-gray-400" />}>
-                Devices
-              </SectionLabel>
-              <div className="space-y-2.5">
-                <PowerwallCard summary={summary} />
-                <NestCard />
-                <BMWCard />
-              </div>
-            </section>
-          )}
-
-          {/* Empty state */}
-          {!hasDevices && realtime.length === 0 && (
-            <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.04] text-center">
-              <Lightbulb size={24} className="text-yellow-400/60 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">No recommendations right now.</p>
-              <p className="text-xs text-gray-600 mt-1">Connect your devices in Settings to get started.</p>
-            </div>
-          )}
-        </>
+      {/* Empty state */}
+      {!hasDevices && realtime.length === 0 && (
+        <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.04] text-center">
+          <Lightbulb size={24} className="text-yellow-400/60 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">No recommendations right now.</p>
+          <p className="text-xs text-gray-600 mt-1">Connect your devices in Settings to get started.</p>
+        </div>
       )}
     </div>
   );
