@@ -59,30 +59,10 @@ async def lifespan(app: FastAPI):
     ]:
         await pool.execute(col_sql)
 
-    # Optimizer tables
-    await pool.execute("""
-        CREATE TABLE IF NOT EXISTS optimizer_log (
-            id SERIAL PRIMARY KEY,
-            account_id UUID REFERENCES accounts(id),
-            ts TIMESTAMPTZ NOT NULL,
-            action TEXT NOT NULL,
-            device TEXT NOT NULL,
-            reason TEXT NOT NULL,
-            details JSONB DEFAULT '{}',
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-    """)
+    # Optimizer state — stores the hourly forecast plan (advisory only)
     await pool.execute("""
         CREATE TABLE IF NOT EXISTS optimizer_state (
             account_id UUID PRIMARY KEY REFERENCES accounts(id),
-            auto_mode BOOLEAN DEFAULT TRUE,
-            disabled_until TIMESTAMPTZ,
-            pw_reserve_pct INT DEFAULT 20,
-            comfort_min_f INT DEFAULT 68,
-            comfort_max_f INT DEFAULT 78,
-            ev_min_pct INT DEFAULT 60,
-            ev_max_pct INT DEFAULT 90,
-            device_overrides JSONB DEFAULT '{}',
             current_plan JSONB,
             updated_at TIMESTAMPTZ DEFAULT NOW()
         )
