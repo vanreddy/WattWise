@@ -274,15 +274,21 @@ async def tesla_oauth_start(request: Request, user: dict = Depends(get_current_u
             detail="Set your Tesla email first (included during registration)",
         )
 
-    # Always mint a fresh auth URL. "Reconnect" means "give me a new session" —
-    # not "check if the current one happens to work". The old already_connected
-    # short-circuit also had a token-persistence bug (refresh during check was
-    # only saved in memory), so both problems go away by dropping the check.
-    loader, dumper = _make_cache_callbacks(account_id)
-    with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
+    # Always mint a fresh auth URL. teslapy's authorization_url() silently
+    # returns None if self.authorized is True — even for stale tokens — so
+    # we pass a no-op loader that reports an empty cache. The real DB-backed
+    # cache is untouched; /tesla/complete uses the real loader/dumper.
+    with teslapy.Tesla(
+        tesla_email,
+        cache_loader=lambda: {},
+        cache_dumper=lambda _cache: None,
+    ) as tesla:
         state = tesla.new_state()
         code_verifier = tesla.new_code_verifier()
         url = tesla.authorization_url(state=state, code_verifier=code_verifier)
+
+    if not url:
+        raise HTTPException(status_code=500, detail="Failed to generate Tesla auth URL")
 
     return {
         "authorization_url": url,

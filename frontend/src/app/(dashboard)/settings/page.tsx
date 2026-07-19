@@ -136,7 +136,7 @@ export default function SettingsPage() {
     setTeslaLoading(true);
     try {
       const data = await startTeslaAuth();
-      if ("authorization_url" in data) {
+      if ("authorization_url" in data && data.authorization_url) {
         setTeslaAuthUrl(data.authorization_url);
         setTeslaState(data.state);
         setTeslaCodeVerifier(data.code_verifier);
@@ -145,6 +145,8 @@ export default function SettingsPage() {
         // because the call happens after an await. The "waiting" UI below
         // always renders a clickable link as a fallback.
         window.open(data.authorization_url, "_blank");
+      } else {
+        throw new Error("Backend did not return a Tesla auth URL — try again.");
       }
     } catch (err) {
       setTeslaError(err instanceof Error ? err.message : "Failed to start Tesla auth");
