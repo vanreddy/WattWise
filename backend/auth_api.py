@@ -274,17 +274,12 @@ async def tesla_oauth_start(request: Request, user: dict = Depends(get_current_u
             detail="Set your Tesla email first (included during registration)",
         )
 
-    # Create TeslaPy client and generate auth URL
+    # Always mint a fresh auth URL. "Reconnect" means "give me a new session" —
+    # not "check if the current one happens to work". The old already_connected
+    # short-circuit also had a token-persistence bug (refresh during check was
+    # only saved in memory), so both problems go away by dropping the check.
     loader, dumper = _make_cache_callbacks(account_id)
     with teslapy.Tesla(tesla_email, cache_loader=loader, cache_dumper=dumper) as tesla:
-        if tesla.authorized:
-            # Verify the token actually works (it might be expired)
-            try:
-                tesla.battery_list()  # quick API call to confirm token works
-                return {"status": "already_connected", "message": "Tesla is already connected"}
-            except Exception:
-                pass  # Token expired/invalid — proceed to re-auth
-
         state = tesla.new_state()
         code_verifier = tesla.new_code_verifier()
         url = tesla.authorization_url(state=state, code_verifier=code_verifier)

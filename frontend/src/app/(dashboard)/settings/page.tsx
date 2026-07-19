@@ -136,17 +136,15 @@ export default function SettingsPage() {
     setTeslaLoading(true);
     try {
       const data = await startTeslaAuth();
-      if ("status" in data && data.status === "already_connected") {
-        refreshUser?.();
-        setTeslaReauthPhase("idle");
-        return;
-      }
       if ("authorization_url" in data) {
         setTeslaAuthUrl(data.authorization_url);
         setTeslaState(data.state);
         setTeslaCodeVerifier(data.code_verifier);
-        window.open(data.authorization_url, "_blank");
         setTeslaReauthPhase("waiting");
+        // Try to open in new tab; popup blockers may swallow this silently
+        // because the call happens after an await. The "waiting" UI below
+        // always renders a clickable link as a fallback.
+        window.open(data.authorization_url, "_blank");
       }
     } catch (err) {
       setTeslaError(err instanceof Error ? err.message : "Failed to start Tesla auth");
@@ -386,34 +384,41 @@ export default function SettingsPage() {
 
           {teslaReauthPhase === "waiting" && (
             <div className="space-y-3">
-              <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 space-y-2">
-                <p className="text-sm text-gray-400">
-                  After signing into Tesla in the new tab, copy the full URL from your browser and paste it below.
+              <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 space-y-3">
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-yellow-400">Step 1:</span> Open the Tesla login page.
                 </p>
-                <p className="text-xs text-gray-600">
-                  It will look like: https://auth.tesla.com/void/callback?code=...
+                <a
+                  href={teslaAuthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full text-center bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 transition-all"
+                >
+                  Open Tesla Login →
+                </a>
+                <p className="text-xs text-gray-500">
+                  If a tab didn&apos;t open automatically, click the button above.
                 </p>
               </div>
-              <textarea
-                placeholder="Paste the redirect URL here..."
-                value={teslaRedirectUrl}
-                onChange={(e) => setTeslaRedirectUrl(e.target.value)}
-                rows={3}
-                className="w-full bg-gray-900/80 border border-gray-700/50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-yellow-500/70 resize-none"
-              />
-              <button
-                onClick={handleTeslaReauthComplete}
-                disabled={teslaLoading || !teslaRedirectUrl.trim()}
-                className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all"
-              >
-                {teslaLoading ? "Connecting..." : "Complete Reconnection"}
-              </button>
-              <button
-                onClick={() => window.open(teslaAuthUrl, "_blank")}
-                className="w-full text-gray-500 hover:text-gray-300 text-xs py-1"
-              >
-                Open Tesla login again
-              </button>
+              <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 space-y-2">
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-yellow-400">Step 2:</span> After signing in, copy the full URL from your browser (it will look like <code className="text-xs text-gray-500">https://auth.tesla.com/void/callback?code=…</code>) and paste it here:
+                </p>
+                <textarea
+                  placeholder="Paste the redirect URL here..."
+                  value={teslaRedirectUrl}
+                  onChange={(e) => setTeslaRedirectUrl(e.target.value)}
+                  rows={3}
+                  className="w-full bg-gray-900/80 border border-gray-700/50 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-yellow-500/70 resize-none"
+                />
+                <button
+                  onClick={handleTeslaReauthComplete}
+                  disabled={teslaLoading || !teslaRedirectUrl.trim()}
+                  className="w-full bg-yellow-500 text-gray-950 font-semibold rounded-xl py-2.5 text-sm hover:bg-yellow-400 disabled:opacity-50 transition-all"
+                >
+                  {teslaLoading ? "Connecting..." : "Complete Reconnection"}
+                </button>
+              </div>
             </div>
           )}
 
