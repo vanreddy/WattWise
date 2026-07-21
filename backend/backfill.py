@@ -280,8 +280,8 @@ async def backfill_account(
         await _save_cache_to_db(pool, account_id)
         progress["status"] = "done"
         await _save_progress_to_db(pool, account_id, progress)
-        logger.info("Backfill complete for %s: %d days (%d skipped, %d fetched)",
-                     acct_key, len(days_to_fetch), skipped_count, len(days_to_fetch) - skipped_count)
+        logger.info("Backfill complete for %s: %d days processed (%d skipped, %d fetched)",
+                     acct_key, fetched_count, skipped_count, fetched_count - skipped_count)
 
     except Exception as exc:
         logger.exception("Backfill failed for account %s", acct_key)
